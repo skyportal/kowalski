@@ -1,9 +1,12 @@
 from aiohttp import web
 from ast import literal_eval
+from bson.json_util import dumps
 import datetime
 import jwt
 from middlewares import auth_middleware, auth_required
-from utils import check_password_hash, generate_password_hash, load_config
+import numpy as np
+import os
+from utils import check_password_hash, compute_hash, generate_password_hash, load_config, radec_str2geojson
 
 
 config = load_config()
@@ -71,6 +74,9 @@ async def root_handler(request):
     return web.json_response({'status': 'success', 'message': 'greetings from Kowalski!'}, status=200)
 
 
+''' users api '''
+
+
 @routes.put('/api/users')
 @auth_required
 async def add_user(request):
@@ -111,7 +117,7 @@ async def add_user(request):
         return web.json_response({'status': 'error', 'message': 'must be admin to add users'}, status=403)
 
 
-@routes.delete('/users')
+@routes.delete('/api/users')
 @auth_required
 async def remove_user(request):
     """
@@ -140,7 +146,7 @@ async def remove_user(request):
         return web.json_response({'status': 'error', 'message': 'must be admin to delete users'}, status=403)
 
 
-@routes.post('/users')
+@routes.post('/api/users')
 @auth_required
 async def edit_user(request):
     """
@@ -191,4 +197,281 @@ async def edit_user(request):
     else:
         return web.json_response({'status': 'error', 'message': 'must be admin to edit users'}, status=403)
 
+
+''' queries api '''
+
+
+def parse_query(task, save: bool = False):
+    # save auxiliary stuff
+    kwargs = task.get('kwargs', dict())
+
+    # reduce!
+    task_reduced = {'user': task['user'], 'query': dict(), 'kwargs': kwargs}
+
+    prohibited_collections = ('users', 'stats', 'queries')
+
+    if task['query_type'] == 'estimated_document_count':
+        # specify task type:
+        task_reduced['query_type'] = 'estimated_document_count'
+
+        if task['user'] != config['server']['admin_username']:
+            if str(task['query']['catalog']) in prohibited_collections:
+                raise Exception('protected collection')
+
+        task_reduced['query']['catalog'] = task['query']['catalog']
+
+    elif task['query_type'] == 'find':
+        # specify task type:
+        task_reduced['query_type'] = 'find'
+
+        go_on = True
+
+        if task['user'] != config['server']['admin_username']:
+            if str(task['query']['catalog']) in prohibited_collections:
+                raise Exception('protected collection')
+
+        task_reduced['query']['catalog'] = task['query']['catalog']
+
+        # construct filter
+        _filter = task['query']['filter']
+        if isinstance(_filter, str):
+            # passed string? evaluate:
+            catalog_filter = literal_eval(_filter.strip())
+        elif isinstance(_filter, dict):
+            # passed dict?
+            catalog_filter = _filter
+        else:
+            raise ValueError('unsupported filter specification')
+
+        task_reduced['query']['filter'] = catalog_filter
+
+        # construct projection
+        if 'projection' in task['query']:
+            _projection = task['query']['projection']
+            if isinstance(_projection, str):
+                # passed string? evaluate:
+                catalog_projection = literal_eval(_projection.strip())
+            elif isinstance(_filter, dict):
+                # passed dict?
+                catalog_projection = _projection
+            else:
+                raise ValueError('Unsupported projection specification')
+        else:
+            catalog_projection = dict()
+
+        task_reduced['query']['projection'] = catalog_projection
+
+    elif task['query_type'] == 'find_one':
+        # specify task type:
+        task_reduced['query_type'] = 'find_one'
+
+        if task['user'] != config['server']['admin_username']:
+            if str(task['query']['catalog']) in prohibited_collections:
+                raise Exception('protected collection')
+
+        task_reduced['query']['catalog'] = task['query']['catalog']
+
+        # construct filter
+        _filter = task['query']['filter']
+        if isinstance(_filter, str):
+            # passed string? evaluate:
+            catalog_filter = literal_eval(_filter.strip())
+        elif isinstance(_filter, dict):
+            # passed dict?
+            catalog_filter = _filter
+        else:
+            raise ValueError('Unsupported filter specification')
+
+        task_reduced['query']['filter'] = catalog_filter
+
+    elif task['query_type'] == 'count_documents':
+        # specify task type:
+        task_reduced['query_type'] = 'count_documents'
+
+        if task['user'] != config['server']['admin_username']:
+            if str(task['query']['catalog']) in prohibited_collections:
+                raise Exception('protected collection')
+
+        task_reduced['query']['catalog'] = task['query']['catalog']
+
+        # construct filter
+        _filter = task['query']['filter']
+        if isinstance(_filter, str):
+            # passed string? evaluate:
+            catalog_filter = literal_eval(_filter.strip())
+        elif isinstance(_filter, dict):
+            # passed dict?
+            catalog_filter = _filter
+        else:
+            raise ValueError('Unsupported filter specification')
+
+        task_reduced['query']['filter'] = catalog_filter
+
+    elif task['query_type'] == 'aggregate':
+        # specify task type:
+        task_reduced['query_type'] = 'aggregate'
+
+        if task['user'] != config['server']['admin_username']:
+            if str(task['query']['catalog']) in prohibited_collections:
+                raise Exception('protected collection')
+
+        task_reduced['query']['catalog'] = task['query']['catalog']
+
+        # construct pipeline
+        _pipeline = task['query']['pipeline']
+        if isinstance(_pipeline, str):
+            # passed string? evaluate:
+            catalog_pipeline = literal_eval(_pipeline.strip())
+        elif isinstance(_pipeline, list) or isinstance(_pipeline, tuple):
+            # passed dict?
+            catalog_pipeline = _pipeline
+        else:
+            raise ValueError('Unsupported pipeline specification')
+
+        task_reduced['query']['pipeline'] = catalog_pipeline
+
+    elif task['query_type'] == 'cone_search':
+        # specify task type:
+        task_reduced['query_type'] = 'cone_search'
+        # cone search radius:
+        cone_search_radius = float(task['object_coordinates']['cone_search_radius'])
+        # convert to rad:
+        if task['object_coordinates']['cone_search_unit'] == 'arcsec':
+            cone_search_radius *= np.pi / 180.0 / 3600.
+        elif task['object_coordinates']['cone_search_unit'] == 'arcmin':
+            cone_search_radius *= np.pi / 180.0 / 60.
+        elif task['object_coordinates']['cone_search_unit'] == 'deg':
+            cone_search_radius *= np.pi / 180.0
+        elif task['object_coordinates']['cone_search_unit'] == 'rad':
+            cone_search_radius *= 1
+        else:
+            raise Exception('unknown cone search unit: must be in [arcsec, arcmin, deg, rad]')
+
+        if isinstance(task['object_coordinates']['radec'], str):
+            radec = task['object_coordinates']['radec'].strip()
+
+            # comb radecs for a single source as per Tom's request:
+            if radec[0] not in ('[', '(', '{'):
+                ra, dec = radec.split()
+                if ('s' in radec) or (':' in radec):
+                    radec = f"[('{ra}', '{dec}')]"
+                else:
+                    radec = f"[({ra}, {dec})]"
+
+            # print(task['object_coordinates']['radec'])
+            objects = literal_eval(radec)
+            # print(type(objects), isinstance(objects, dict), isinstance(objects, list))
+        elif isinstance(task['object_coordinates']['radec'], list) or \
+                isinstance(task['object_coordinates']['radec'], tuple) or \
+                isinstance(task['object_coordinates']['radec'], dict):
+            objects = task['object_coordinates']['radec']
+        else:
+            raise Exception('bad source coordinates')
+
+        # this could either be list/tuple [(ra1, dec1), (ra2, dec2), ..] or dict {'name': (ra1, dec1), ...}
+        if isinstance(objects, list) or isinstance(objects, tuple):
+            object_coordinates = objects
+            object_names = [str(obj_crd).replace('.', '_') for obj_crd in object_coordinates]
+        elif isinstance(objects, dict):
+            object_names, object_coordinates = zip(*objects.items())
+            object_names = list(map(str, object_names))
+            object_names = [on.replace('.', '_') for on in object_names]
+        else:
+            raise ValueError('Unsupported object coordinates specs')
+
+        # print(object_names, object_coordinates)
+
+        for catalog in task['catalogs']:
+
+            if task['user'] != config['server']['admin_username']:
+                if str(catalog) in prohibited_collections:
+                    raise Exception('protected collection')
+
+            task_reduced['query'][catalog] = dict()
+            # parse catalog query:
+            # construct filter
+            _filter = task['catalogs'][catalog]['filter']
+            if isinstance(_filter, str):
+                # passed string? evaluate:
+                catalog_query = literal_eval(_filter.strip())
+            elif isinstance(_filter, dict):
+                # passed dict?
+                catalog_query = _filter
+            else:
+                raise ValueError('unsupported filter specification')
+
+            # construct projection
+            _projection = task['catalogs'][catalog]['projection']
+            if isinstance(_projection, str):
+                # passed string? evaluate:
+                catalog_projection = literal_eval(_projection.strip())
+            elif isinstance(_filter, dict):
+                # passed dict?
+                catalog_projection = _projection
+            else:
+                raise ValueError('unsupported projection specification')
+
+            # parse coordinate list
+
+            if isinstance(_projection, str):
+                # passed string? evaluate:
+                catalog_projection = literal_eval(_projection.strip())
+            elif isinstance(_filter, dict):
+                # passed dict?
+                catalog_projection = _projection
+
+            for oi, obj_crd in enumerate(object_coordinates):
+                # convert ra/dec into GeoJSON-friendly format
+                _ra, _dec = radec_str2geojson(*obj_crd)
+                object_position_query = dict()
+                object_position_query['coordinates.radec_geojson'] = {
+                    '$geoWithin': {'$centerSphere': [[_ra, _dec], cone_search_radius]}}
+                # use stringified object coordinates as dict keys and merge dicts with cat/obj queries:
+                task_reduced['query'][catalog][object_names[oi]] = ({**object_position_query, **catalog_query},
+                                                                    {**catalog_projection})
+
+    elif task['query_type'] == 'info':
+
+        # specify task type:
+        task_reduced['query_type'] = 'info'
+        task_reduced['query'] = task['query']
+
+    if save:
+        task_hashable = dumps(task_reduced)
+        # compute hash for task. this is used as key in DB
+        task_hash = compute_hash(task_hashable)
+
+        # mark as enqueued in DB:
+        t_stamp = datetime.datetime.utcnow()
+        if 'query_expiration_interval' not in kwargs:
+            # default expiration interval:
+            t_expires = t_stamp + datetime.timedelta(days=int(config['misc']['query_expiration_interval']))
+        else:
+            # custom expiration interval:
+            t_expires = t_stamp + datetime.timedelta(days=int(kwargs['query_expiration_interval']))
+
+        # dump task_hashable to file, as potentially too big to store in mongo
+        # save task:
+        user_tmp_path = os.path.join(config['path']['path_queries'], task['user'])
+        # mkdir if necessary
+        if not os.path.exists(user_tmp_path):
+            os.makedirs(user_tmp_path)
+        task_file = os.path.join(user_tmp_path, f'{task_hash}.task.json')
+
+        with open(task_file, 'w') as f_task_file:
+            f_task_file.write(dumps(task))
+
+        task_doc = {'task_id': task_hash,
+                    'user': task['user'],
+                    'task': task_file,
+                    'result': None,
+                    'status': 'enqueued',
+                    'created': t_stamp,
+                    'expires': t_expires,
+                    'last_modified': t_stamp}
+
+        return task_hash, task_reduced, task_doc
+
+    else:
+        return '', task_reduced, {}
 
