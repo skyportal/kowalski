@@ -761,3 +761,47 @@ async def query(request):
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
 
 
+@routes.get('/api/queries/{task_id}')
+@auth_required
+async def query_grab(request):
+    """
+        Grab Query / result.
+
+    :return:
+    """
+
+    # get user:
+    user = request.user
+
+    # get query params
+    task_id = request.match_info['task_id']
+    _data = request.query
+
+    try:
+        part = _data.get('part', 'result')
+
+        _query = await request.app['mongo'].queries.find_one({'user': user,
+                                                              'task_id': {'$eq': task_id}}, {'status': 1})
+
+        if part == 'task':
+            task_file = os.path.join(config['path']['path_queries'], user, f'{task_id}.task.json')
+            async with aiofiles.open(task_file, 'r') as f_task_file:
+                return web.json_response(await f_task_file.read(), status=200)
+
+        elif part == 'result':
+            if query['status'] == 'enqueued':
+                return web.json_response({'status': 'success', 'message': f'query not finished yet'}, status=200)
+
+            task_result_file = os.path.join(config['path']['path_queries'], user, f'{task_id}.result.json')
+
+            async with aiofiles.open(task_result_file, 'r') as f_task_result_file:
+                return web.json_response(await f_task_result_file.read(), status=200)
+
+        else:
+            return web.json_response({'status': 'error', 'message': 'part not recognized'}, status=500)
+
+    except Exception as _e:
+        print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
+        _err = traceback.format_exc()
+        print(_err)
+        return web.json_response({'message': f'failure: {_err}'}, status=500)
