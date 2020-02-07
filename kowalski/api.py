@@ -1,3 +1,4 @@
+import aiofiles
 from aiohttp import web
 from ast import literal_eval
 from bson.json_util import dumps
@@ -6,6 +7,7 @@ import jwt
 from middlewares import auth_middleware, auth_required
 import numpy as np
 import os
+import traceback
 from utils import check_password_hash, compute_hash, generate_password_hash, load_config, radec_str2geojson
 
 
@@ -474,4 +476,237 @@ def parse_query(task, save: bool = False):
 
     else:
         return '', task_reduced, {}
+
+
+async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = False):
+
+    db = mongo
+
+    if save:
+        # mark query as enqueued:
+        await db.queries.insert_one(task_doc)
+
+    result = dict()
+    query_result = None
+
+    query = task_reduced
+
+    result['user'] = query.get('user')
+    result['kwargs'] = query.get('kwargs', dict())
+
+    # by default, long-running queries will be killed after config['misc']['max_time_ms'] ms
+    max_time_ms = int(result['kwargs'].get('max_time_ms', config['misc']['max_time_ms']))
+    assert max_time_ms >= 1, 'bad max_time_ms, must be int>=1'
+
+    try:
+
+        # cone search:
+        if query['query_type'] == 'cone_search':
+
+            known_kwargs = ('skip', 'hint', 'limit', 'sort')
+            kwargs = {kk: vv for kk, vv in query['kwargs'].items() if kk in known_kwargs}
+            kwargs['comment'] = str(query['user'])
+
+            # iterate over catalogs as they represent
+            query_result = dict()
+            for catalog in query['query']:
+                query_result[catalog] = dict()
+                # iterate over objects:
+                for obj in query['query'][catalog]:
+                    # project?
+                    if len(query['query'][catalog][obj][1]) > 0:
+                        _select = db[catalog].find(query['query'][catalog][obj][0],
+                                                   query['query'][catalog][obj][1],
+                                                   max_time_ms=max_time_ms, **kwargs)
+                    # return the whole documents by default
+                    else:
+                        _select = db[catalog].find(query['query'][catalog][obj][0],
+                                                   max_time_ms=max_time_ms, **kwargs)
+                    # mongodb does not allow having dots in field names -> replace with underscores
+                    query_result[catalog][obj.replace('.', '_')] = await _select.to_list(length=None)
+
+        # convenience general search subtypes:
+        elif query['query_type'] == 'find':
+            # print(query)
+
+            known_kwargs = ('skip', 'hint', 'limit', 'sort')
+            kwargs = {kk: vv for kk, vv in query['kwargs'].items() if kk in known_kwargs}
+            kwargs['comment'] = str(query['user'])
+
+            # project?
+            if len(query['query']['projection']) > 0:
+
+                _select = db[query['query']['catalog']].find(query['query']['filter'],
+                                                             query['query']['projection'],
+                                                             max_time_ms=max_time_ms, **kwargs)
+            # return the whole documents by default
+            else:
+                _select = db[query['query']['catalog']].find(query['query']['filter'],
+                                                             max_time_ms=max_time_ms, **kwargs)
+
+            # todo: replace with inspect.iscoroutinefunction(object)?
+            if isinstance(_select, int) or isinstance(_select, float) or isinstance(_select, tuple) or \
+                    isinstance(_select, list) or isinstance(_select, dict) or (_select is None):
+                query_result = _select
+            else:
+                query_result = await _select.to_list(length=None)
+
+        elif query['query_type'] == 'find_one':
+            # print(query)
+
+            known_kwargs = ('skip', 'hint', 'limit', 'sort')
+            kwargs = {kk: vv for kk, vv in query['kwargs'].items() if kk in known_kwargs}
+            kwargs['comment'] = str(query['user'])
+
+            _select = db[query['query']['catalog']].find_one(query['query']['filter'],
+                                                             max_time_ms=max_time_ms)
+
+            query_result = await _select
+
+        elif query['query_type'] == 'count_documents':
+
+            known_kwargs = ('skip', 'hint', 'limit')
+            kwargs = {kk: vv for kk, vv in query['kwargs'].items() if kk in known_kwargs}
+            kwargs['comment'] = str(query['user'])
+
+            _select = db[query['query']['catalog']].count_documents(query['query']['filter'],
+                                                                    maxTimeMS=max_time_ms)
+
+            query_result = await _select
+
+        elif query['query_type'] == 'estimated_document_count':
+
+            known_kwargs = ('maxTimeMS', )
+            kwargs = {kk: vv for kk, vv in query['kwargs'].items() if kk in known_kwargs}
+            kwargs['comment'] = str(query['user'])
+
+            _select = db[query['query']['catalog']].estimated_document_count(query['query']['filter'],
+                                                                             maxTimeMS=max_time_ms)
+
+            query_result = await _select
+
+        elif query['query_type'] == 'aggregate':
+
+            known_kwargs = ('allowDiskUse', 'maxTimeMS', 'batchSize')
+            kwargs = {kk: vv for kk, vv in query['kwargs'].items() if kk in known_kwargs}
+            kwargs['comment'] = str(query['user'])
+
+            _select = db[query['query']['catalog']].aggregate(query['query']['pipeline'],
+                                                              allowDiskUse=True,
+                                                              maxTimeMS=max_time_ms)
+
+            query_result = await _select.to_list(length=None)
+
+        elif query['query_type'] == 'info':
+            # collection/catalog info
+
+            if query['query']['command'] == 'catalog_names':
+
+                # get available catalog names
+                catalogs = await db.list_collection_names()
+                # exclude system collections
+                catalogs_system = (config['database']['collection_users'],
+                                   config['database']['collection_queries'],
+                                   config['database']['collection_stats'])
+
+                query_result = [c for c in sorted(catalogs)[::-1] if c not in catalogs_system]
+
+            elif query['query']['command'] == 'catalog_info':
+
+                catalog = query['query']['catalog']
+
+                stats = await db.command('collstats', catalog)
+
+                query_result = stats
+
+            elif query['query']['command'] == 'index_info':
+
+                catalog = query['query']['catalog']
+
+                stats = await db[catalog].index_information()
+
+                query_result = stats
+
+            elif query['query']['command'] == 'db_info':
+
+                stats = await db.command('dbstats')
+                query_result = stats
+
+        # success!
+        result['status'] = 'success'
+
+        if not save:
+            # dump result back
+            result['data'] = query_result
+
+        else:
+            # save task result:
+            user_tmp_path = os.path.join(config['path']['path_queries'], query['user'])
+            # print(user_tmp_path)
+            # mkdir if necessary
+            if not os.path.exists(user_tmp_path):
+                os.makedirs(user_tmp_path)
+            task_result_file = os.path.join(user_tmp_path, f'{task_hash}.result.json')
+
+            # save location in db:
+            result['result'] = task_result_file
+
+            async with aiofiles.open(task_result_file, 'w') as f_task_result_file:
+                task_result = dumps(query_result)
+                await f_task_result_file.write(task_result)
+
+        # print(task_hash, result)
+
+        # db book-keeping:
+        if save:
+            # mark query as done:
+            await db.queries.update_one({'user': query['user'], 'task_id': task_hash},
+                                        {'$set': {'status': result['status'],
+                                                  'last_modified': datetime.datetime.utcnow(),
+                                                  'result': result['result']}}
+                                        )
+
+        # return task_hash, dumps(result)
+        return task_hash, result
+
+    except Exception as e:
+        print(f'{datetime.datetime.now()} got error: {str(e)}')
+        _err = traceback.format_exc()
+        print(_err)
+
+        # book-keeping:
+        if save:
+            # save task result with error message:
+            user_tmp_path = os.path.join(config['path']['path_queries'], query['user'])
+            # print(user_tmp_path)
+            # mkdir if necessary
+            if not os.path.exists(user_tmp_path):
+                os.makedirs(user_tmp_path)
+            task_result_file = os.path.join(user_tmp_path, f'{task_hash}.result.json')
+
+            # save location in db:
+            # result['user'] = query['user']
+            result['status'] = 'error'
+
+            query_result = dict()
+            query_result['msg'] = _err
+
+            async with aiofiles.open(task_result_file, 'w') as f_task_result_file:
+                task_result = dumps(query_result)
+                await f_task_result_file.write(task_result)
+
+            # mark query as failed:
+            await db.queries.update_one({'user': query['user'], 'task_id': task_hash},
+                                        {'$set': {'status': result['status'],
+                                                  'last_modified': datetime.datetime.utcnow(),
+                                                  'result': None}}
+                                        )
+
+        else:
+            result['status'] = 'error'
+            result['msg'] = _err
+
+            return task_hash, result
+
+        raise Exception('query failed badly')
 
