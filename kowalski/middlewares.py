@@ -18,7 +18,7 @@ async def auth_middleware(request, handler):
             payload = jwt.decode(jwt_token, request.app['JWT']['JWT_SECRET'],
                                  algorithms=[request.app['JWT']['JWT_ALGORITHM']])
         except (jwt.DecodeError, jwt.ExpiredSignatureError):
-            return web.json_response({'status': 'error', 'message': 'Token is invalid'}, status=400)
+            return web.json_response({'status': 'error', 'message': 'token is invalid'}, status=400)
 
         request.user = payload['user_id']
 
@@ -35,7 +35,7 @@ def auth_required(func):
     """
     def wrapper(request):
         if not request.user:
-            return web.json_response({'status': 'error', 'message': 'Auth required'}, status=401)
+            return web.json_response({'status': 'error', 'message': 'auth required'}, status=401)
         return func(request)
     return wrapper
 

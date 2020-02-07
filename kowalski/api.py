@@ -82,8 +82,9 @@ async def add_user(request):
 
     if request.user == config['server']['admin_username']:
         try:
-            username = _data.get('user', None)
-            password = _data.get('password', None)
+            username = _data.get('user', '')
+            password = _data.get('password', '')
+            email = _data.get('email', '')
             permissions = _data.get('permissions', '{}')
 
             if len(username) == 0 or len(password) == 0:
@@ -96,81 +97,71 @@ async def add_user(request):
             # add user to coll_usr collection:
             await request.app['mongo'].users.insert_one(
                 {'_id': username,
+                 'email': email,
                  'password': generate_password_hash(password),
                  'permissions': literal_eval(str(permissions)),
                  'last_modified': datetime.datetime.now()}
             )
 
-            return web.json_response({'message': 'success'}, status=200)
+            return web.json_response({'status': 'success', 'message': f'added user {username}'}, status=200)
 
         except Exception as _e:
-            print(f'Got error: {str(_e)}')
-            _err = traceback.format_exc()
-            print(_err)
-            return web.json_response({'message': f'Failed to add user: {_err}'}, status=500)
+            return web.json_response({'status': 'error', 'message': f'failed to add user: {_e}'}, status=500)
     else:
-        return web.json_response({'message': '403 Forbidden'}, status=403)
+        return web.json_response({'status': 'error', 'message': 'must be admin to add users'}, status=403)
 
 
 @routes.delete('/users')
-@login_required
+@auth_required
 async def remove_user(request):
     """
-        Remove user from DB
+        Remove user
     :return:
     """
-    # get session:
-    session = await get_session(request)
-
     _data = await request.json()
-    # print(_data)
 
-    if session['user_id'] == config['server']['admin_username']:
+    if request.user == config['server']['admin_username']:
         try:
-            # get username from request
-            username = _data['user'] if 'user' in _data else None
+            username = _data.get('user', None)
             if username == config['server']['admin_username']:
-                return web.json_response({'message': 'Cannot remove the superuser!'}, status=500)
+                return web.json_response({'status': 'error', 'message': 'cannot remove the superuser!'}, status=500)
 
             # try to remove the user:
-            await request.app['mongo'].users.delete_one({'_id': username})
+            if username is not None:
+                await request.app['mongo'].users.delete_one({'_id': username})
 
-            return web.json_response({'message': 'success'}, status=200)
+            return web.json_response({'status': 'success',
+                                      'message': f'successfully removed user {username}'}, status=200)
 
         except Exception as _e:
-            print(f'Got error: {str(_e)}')
-            _err = traceback.format_exc()
-            print(_err)
-            return web.json_response({'message': f'Failed to remove user: {_err}'}, status=500)
+            return web.json_response({'status': 'error',
+                                      'message': f'failed to remove user: {_e}'}, status=500)
     else:
-        return web.json_response({'message': '403 Forbidden'}, status=403)
+        return web.json_response({'status': 'error', 'message': 'must be admin to delete users'}, status=403)
 
 
 @routes.post('/users')
-@login_required
+@auth_required
 async def edit_user(request):
     """
         Edit user info
     :return:
     """
-    # get session:
-    session = await get_session(request)
-
     _data = await request.json()
-    # print(_data)
 
-    if session['user_id'] == config['server']['admin_username']:
+    if request.user == config['server']['admin_username']:
         try:
-            _id = _data['_user'] if '_user' in _data else None
-            username = _data['edit-user'] if 'edit-user' in _data else None
-            password = _data['edit-password'] if 'edit-password' in _data else None
-            # permissions = _data['edit-permissions'] if 'edit-permissions' in _data else '{}'
+            _id = _data.get('_user', None)
+            username = _data.get('edit-user', '')
+            password = _data.get('edit-password', '')
 
             if _id == config['server']['admin_username'] and username != config['server']['admin_username']:
-                return web.json_response({'message': 'Cannot change the admin username!'}, status=500)
+                return web.json_response({'status': 'error',
+                                          'message': 'cannot change the admin username!'}, status=500)
 
             if len(username) == 0:
-                return web.json_response({'message': 'username must be set'}, status=500)
+                return web.json_response({'status': 'error',
+                                          'message': 'username must be set'}, status=500)
 
             # change username:
             if _id != username:
@@ -191,12 +182,13 @@ async def edit_user(request):
                     }
                 )
 
-            return web.json_response({'message': 'success'}, status=200)
+            return web.json_response({'status': 'success',
+                                      'message': f'successfully edited user {_id}'}, status=200)
 
         except Exception as _e:
-            print(f'Got error: {str(_e)}')
-            _err = traceback.format_exc()
-            print(_err)
-            return web.json_response({'message': f'Failed to remove user: {_err}'}, status=500)
+            return web.json_response({'status': 'error',
+                                      'message': f'failed to edit user: {_e}'}, status=500)
     else:
-        return web.json_response({'message': '403 Forbidden'}, status=403)
+        return web.json_response({'status': 'error', 'message': 'must be admin to edit users'}, status=403)
+
+
