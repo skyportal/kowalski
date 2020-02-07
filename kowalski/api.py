@@ -1,5 +1,6 @@
 import aiofiles
 from aiohttp import web
+import asyncio
 from ast import literal_eval
 from bson.json_util import dumps
 import datetime
@@ -634,6 +635,7 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
 
         # success!
         result['status'] = 'success'
+        result['message'] = 'query successfully executed'
 
         if not save:
             # dump result back
@@ -687,12 +689,10 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
             # save location in db:
             # result['user'] = query['user']
             result['status'] = 'error'
-
-            query_result = dict()
-            query_result['msg'] = _err
+            result['message'] = _err
 
             async with aiofiles.open(task_result_file, 'w') as f_task_result_file:
-                task_result = dumps(query_result)
+                task_result = dumps(result)
                 await f_task_result_file.write(task_result)
 
             # mark query as failed:
@@ -704,9 +704,60 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
 
         else:
             result['status'] = 'error'
-            result['msg'] = _err
+            result['message'] = _err
 
             return task_hash, result
 
         raise Exception('query failed badly')
+
+
+@routes.post('/api/queries')
+@auth_required
+async def query(request):
+    """
+        Query Kowalski
+
+    :return:
+    """
+    try:
+        try:
+            _query = await request.json()
+        except Exception as _e:
+            print(f'{datetime.datetime.utcnow()} Cannot extract json() from request, trying post(): {str(_e)}')
+            _query = await request.post()
+
+        # parse query
+        known_query_types = ('cone_search',
+                             'find', 'find_one', 'aggregate', 'count_documents', 'estimated_document_count',
+                             'info')
+
+        assert _query['query_type'] in known_query_types, \
+            f'query_type {_query["query_type"]} not in {str(known_query_types)}'
+
+        _query['user'] = request.user
+
+        # by default, [unless enqueue_only is requested]
+        # all queries are not registered in the db and the task/results are not stored on disk as json files
+        # giving a significant execution speed up. this behaviour can be overridden.
+        save = bool(_query.get('kwargs', dict()).get('save', False))
+
+        task_hash, task_reduced, task_doc = parse_query(_query, save=save)
+
+        # schedule query execution:
+        if not save:
+            # only schedule query execution. store query and results, return query id to user
+            asyncio.create_task(execute_query(request.app['mongo'], task_hash, task_reduced, task_doc, save))
+            return web.json_response({'status': 'success', 'query_id': task_hash, 'message': 'query enqueued'},
+                                     status=200, dumps=dumps)
+        else:
+            task_hash, result = await execute_query(request.app['mongo'], task_hash, task_reduced, task_doc, save)
+
+            return web.json_response(result, status=200, dumps=dumps)
+
+    except Exception as _e:
+        print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
+        _err = traceback.format_exc()
+        print(_err)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
+
 
