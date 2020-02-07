@@ -4,6 +4,8 @@ import datetime
 import hashlib
 import json
 from motor.motor_asyncio import AsyncIOMotorClient
+from numba import jit
+import numpy as np
 import os
 import secrets
 import string
@@ -30,6 +32,14 @@ def load_config(path='/app', config_file='config.json', secrets_file='secrets.js
             config[k] = secrets.get(k, {})
 
     return config
+
+
+def time_stamp():
+    """
+
+    :return: UTC time -> string
+    """
+    return datetime.datetime.utcnow().strftime('%Y%m%d_%H:%M:%S')
 
 
 def generate_password_hash(password, salt_rounds=12):
@@ -164,3 +174,156 @@ alphabet = string.ascii_lowercase + string.digits
 
 def uid(length: int = 6, prefix: str = ''):
     return prefix + ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+@jit
+def deg2hms(x):
+    """Transform degrees to *hours:minutes:seconds* strings.
+
+    Parameters
+    ----------
+    x : float
+        The degree value c [0, 360) to be written as a sexagesimal string.
+
+    Returns
+    -------
+    out : str
+        The input angle written as a sexagesimal string, in the
+        form, hours:minutes:seconds.
+
+    """
+    assert 0.0 <= x < 360.0, 'Bad RA value in degrees'
+    # ac = Angle(x, unit='degree')
+    # hms = str(ac.to_string(unit='hour', sep=':', pad=True))
+    # print(str(hms))
+    _h = np.floor(x * 12.0 / 180.)
+    _m = np.floor((x * 12.0 / 180. - _h) * 60.0)
+    _s = ((x * 12.0 / 180. - _h) * 60.0 - _m) * 60.0
+    hms = '{:02.0f}:{:02.0f}:{:07.4f}'.format(_h, _m, _s)
+    # print(hms)
+    return hms
+
+
+@jit
+def deg2dms(x):
+    """Transform degrees to *degrees:arcminutes:arcseconds* strings.
+
+    Parameters
+    ----------
+    x : float
+        The degree value c [-90, 90] to be converted.
+
+    Returns
+    -------
+    out : str
+        The input angle as a string, written as degrees:minutes:seconds.
+
+    """
+    assert -90.0 <= x <= 90.0, 'Bad Dec value in degrees'
+    # ac = Angle(x, unit='degree')
+    # dms = str(ac.to_string(unit='degree', sep=':', pad=True))
+    # print(dms)
+    _d = np.floor(abs(x)) * np.sign(x)
+    _m = np.floor(np.abs(x - _d) * 60.0)
+    _s = np.abs(np.abs(x - _d) * 60.0 - _m) * 60.0
+    dms = '{:02.0f}:{:02.0f}:{:06.3f}'.format(_d, _m, _s)
+    # print(dms)
+    return dms
+
+
+@jit
+def great_circle_distance(ra1_deg, dec1_deg, ra2_deg, dec2_deg):
+    """
+        Distance between two points on the sphere
+    :param ra1_deg:
+    :param dec1_deg:
+    :param ra2_deg:
+    :param dec2_deg:
+    :return: distance in degrees
+    """
+    # this is orders of magnitude faster than astropy.coordinates.Skycoord.separation
+    DEGRA = np.pi / 180.0
+    ra1, dec1, ra2, dec2 = ra1_deg * DEGRA, dec1_deg * DEGRA, ra2_deg * DEGRA, dec2_deg * DEGRA
+    delta_ra = np.abs(ra2 - ra1)
+    distance = np.arctan2(np.sqrt((np.cos(dec2) * np.sin(delta_ra)) ** 2
+                                  + (np.cos(dec1) * np.sin(dec2) - np.sin(dec1) * np.cos(dec2) * np.cos(
+        delta_ra)) ** 2),
+                          np.sin(dec1) * np.sin(dec2) + np.cos(dec1) * np.cos(dec2) * np.cos(delta_ra))
+
+    return distance * 180.0 / np.pi
+
+
+@jit
+def in_ellipse(alpha, delta0, alpha1, delta01, d0, axis_ratio, PA0):
+    """
+        Check if a given point (alpha, delta0)
+        is within an ellipse specified by
+        center (alpha1, delta01), maj_ax (d0), axis ratio and positional angle
+        All angles are in decimal degrees
+        Adapted from q3c: https://github.com/segasai/q3c/blob/master/q3cube.c
+    :param alpha:
+    :param delta0:
+    :param alpha1:
+    :param delta01:
+    :param d0:
+    :param axis_ratio:
+    :param PA0:
+    :return:
+    """
+    DEGRA = np.pi / 180.0
+
+    # convert degrees to radians
+    d_alpha = (alpha1 - alpha) * DEGRA
+    delta1 = delta01 * DEGRA
+    delta = delta0 * DEGRA
+    PA = PA0 * DEGRA
+    d = d0 * DEGRA
+    e = np.sqrt(1.0 - axis_ratio * axis_ratio)
+
+    t1 = np.cos(d_alpha)
+    t22 = np.sin(d_alpha)
+    t3 = np.cos(delta1)
+    t32 = np.sin(delta1)
+    t6 = np.cos(delta)
+    t26 = np.sin(delta)
+    t9 = np.cos(d)
+    t55 = np.sin(d)
+
+    if (t3 * t6 * t1 + t32 * t26) < 0:
+        return False
+
+    t2 = t1 * t1
+
+    t4 = t3 * t3
+    t5 = t2 * t4
+
+    t7 = t6 * t6
+    t8 = t5 * t7
+
+    t10 = t9 * t9
+    t11 = t7 * t10
+    t13 = np.cos(PA)
+    t14 = t13 * t13
+    t15 = t14 * t10
+    t18 = t7 * t14
+    t19 = t18 * t10
+
+    t24 = np.sin(PA)
+
+    t31 = t1 * t3
+
+    t36 = 2.0 * t31 * t32 * t26 * t6
+    t37 = t31 * t32
+    t38 = t26 * t6
+    t45 = t4 * t10
+
+    t56 = t55 * t55
+    t57 = t4 * t7
+    t60 = -t8 + t5 * t11 + 2.0 * t5 * t15 - t5 * t19 - \
+          2.0 * t1 * t4 * t22 * t10 * t24 * t13 * t26 - t36 + \
+          2.0 * t37 * t38 * t10 - 2.0 * t37 * t38 * t15 - t45 * t14 - t45 * t2 + \
+          2.0 * t22 * t3 * t32 * t6 * t24 * t10 * t13 - t56 + t7 - t11 + t4 - t57 + t57 * t10 + t19 - t18 * t45
+    t61 = e * e
+    t63 = t60 * t61 + t8 + t57 - t4 - t7 + t56 + t36
+
+    return t63 > 0
