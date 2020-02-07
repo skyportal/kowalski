@@ -8,6 +8,8 @@ import jwt
 from middlewares import auth_middleware, auth_required
 import numpy as np
 import os
+import pathlib
+import shutil
 import traceback
 from utils import check_password_hash, compute_hash, generate_password_hash, load_config, radec_str2geojson
 
@@ -765,7 +767,7 @@ async def query(request):
 @auth_required
 async def query_grab(request):
     """
-        Grab Query / result.
+        Grab query / result.
 
     :return:
     """
@@ -804,4 +806,43 @@ async def query_grab(request):
         print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
         _err = traceback.format_exc()
         print(_err)
-        return web.json_response({'message': f'failure: {_err}'}, status=500)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
+
+
+@routes.delete('/api/queries/{task_id}')
+@auth_required
+async def query_delete(request):
+    """
+        Delete Query from DB programmatically.
+
+    :return:
+    """
+
+    # get user:
+    user = request.user
+
+    # get query params
+    task_id = request.match_info['task_id']
+
+    try:
+        if task_id != 'all':
+            await request.app['mongo'].queries.delete_one({'user': user, 'task_id': {'$eq': task_id}})
+
+            # remove files containing task and result
+            for p in pathlib.Path(os.path.join(config['path']['path_queries'], user)).glob(f'{task_id}*'):
+                p.unlink()
+
+        else:
+            await request.app['mongo'].queries.delete_many({'user': user})
+
+            # remove all files containing task and result
+            if os.path.exists(os.path.join(config['path']['path_queries'], user)):
+                shutil.rmtree(os.path.join(config['path']['path_queries'], user))
+
+        return web.json_response({'status': 'success', 'message': f'removed query: {task_id}'}, status=200)
+
+    except Exception as _e:
+        print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
+        _err = traceback.format_exc()
+        print(_err)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
