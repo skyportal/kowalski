@@ -1,0 +1,158 @@
+{
+  "server": {
+    "logo": "Kowalski",
+    "environment": "production",
+    "host": "0.0.0.0",
+    "port": "4000"
+  },
+
+  "path": {
+    "path_app": "/app",
+    "path_docs": "/app/docs",
+    "path_ml_models": "/app/models/",
+    "path_logs": "/data/logs/",
+    "path_data": "/data",
+    "path_alerts": "/data/alerts",
+    "path_queries": "/data/queries",
+    "path_tess": "/data/tess",
+    "path_tmp": "/_tmp"
+  },
+
+  "database": {
+    "max_pool_size": 2000,
+    "host": "kowalski_mongo_1",
+    "port": 27017,
+    "db": "kowalski",
+    "collection_users": "users",
+    "collection_queries": "queries"
+  },
+
+  "kafka": {
+    "default.topic.config": {
+      "auto.offset.reset": "earliest"
+    },
+    "group": "kowalski.caltech.edu"
+  },
+
+  "kafka-topics": {
+      "cmd": "/kafka_2.11-2.2.0/bin/kafka-topics.sh"
+    },
+
+  "ml_models": {
+    "braai": {
+      "version":  "d6_m9"
+    }
+  },
+
+  "xmatch": {
+    "cone_search_radius": 5,
+    "cone_search_unit": "arcsec",
+    "catalogs": {
+      "2MASS_PSC": {
+        "filter": {},
+        "projection": {
+          "_id": 1,
+          "coordinates.radec_str": 1,
+          "j_m": 1,
+          "h_m": 1,
+          "k_m": 1
+        }
+      },
+
+      "AllWISE": {
+        "filter": {},
+        "projection": {
+          "_id": 1,
+          "coordinates.radec_str": 1,
+          "w1mpro": 1,
+          "w1sigmpro": 1,
+          "w2mpro": 1,
+          "w2sigmpro": 1,
+          "w3mpro": 1,
+          "w3sigmpro": 1,
+          "w4mpro": 1,
+          "w4sigmpro": 1,
+          "ph_qual": 1
+        }
+      },
+
+      "IPHAS_DR2": {
+        "filter": {},
+        "projection": {
+          "_id": 0,
+          "name": 1,
+          "coordinates.radec_str": 1,
+          "r": 1,
+          "rErr": 1,
+          "i": 1,
+          "iErr": 1,
+          "ha": 1,
+          "haErr": 1
+        }
+      },
+
+      "Gaia_DR2": {
+        "filter": {},
+        "projection": {
+          "_id": 1,
+          "coordinates.radec_str": 1,
+          "parallax": 1,
+          "parallax_error": 1,
+          "phot_g_mean_mag": 1,
+          "phot_bp_mean_mag": 1,
+          "phot_rp_mean_mag": 1
+        }
+      },
+
+      "Gaia_DR2_WD": {
+          "filter": {},
+          "projection": {
+            "_id": 1,
+            "coordinates.radec_str": 1,
+            "White_dwarf_name": 1,
+            "Pwd": 1,
+            "Pwd_correction": 1,
+            "SDSS_name": 1,
+            "Teff": 1,
+            "eTeff": 1
+          }
+        },
+
+      "LAMOST_DR5_v3": {
+        "filter": {},
+        "projection": {
+          "_id": 1,
+          "coordinates.radec_str": 1,
+          "mjd": 1,
+          "snru": 1,
+          "snrg": 1,
+          "snrr": 1,
+          "snri": 1,
+          "snrz": 1,
+          "objtype": 1,
+          "class": 1,
+          "subclass":  1
+        }
+      },
+
+      "PS1_DR1": {
+        "filter": {},
+        "projection": {
+          "_id": 1, "coordinates.radec_str": 1,
+          "gMeanPSFMag": 1, "gMeanPSFMagErr": 1,
+          "rMeanPSFMag": 1, "rMeanPSFMagErr": 1,
+          "iMeanPSFMag": 1, "iMeanPSFMagErr": 1,
+          "zMeanPSFMag": 1, "zMeanPSFMagErr": 1,
+          "yMeanPSFMag": 1, "yMeanPSFMagErr": 1
+        }
+      }
+    }
+  },
+
+  "misc": {
+    "supported_penquins_versions": ["2.0.0", "2.0.1", "2.0.2"],
+    "query_expiration_interval": 5,
+    "max_time_ms": 300000,
+    "logging_level": "debug"
+  }
+}

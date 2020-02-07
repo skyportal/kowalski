@@ -5,6 +5,8 @@ import hashlib
 import json
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import secrets
+import string
 import traceback
 
 
@@ -155,3 +157,10 @@ def compute_hash(_task):
     hsh = ht.hexdigest()
 
     return hsh
+
+
+alphabet = string.ascii_lowercase + string.digits
+
+
+def uid(length: int = 6, prefix: str = ''):
+    return prefix + ''.join(secrets.choice(alphabet) for _ in range(length))

@@ -1,0 +1,36 @@
+{
+  "server": {
+    "logo": "Kowalski",
+    "environment": "production",
+    "host": "0.0.0.0",
+    "port": "4000"
+  },
+
+  "path": {
+    "path_app": "/app",
+    "path_docs": "/app/docs",
+    "path_ml_models": "/app/models/",
+    "path_logs": "/data/logs/",
+    "path_data": "/data",
+    "path_alerts": "/data/alerts",
+    "path_queries": "/data/queries",
+    "path_tess": "/data/tess",
+    "path_tmp": "/_tmp"
+  },
+
+  "database": {
+    "max_pool_size": 2000,
+    "host": "kowalski_mongo_1",
+    "port": 27017,
+    "db": "kowalski",
+    "collection_users": "users",
+    "collection_queries": "queries"
+  },
+
+  "misc": {
+    "supported_penquins_versions": ["2.0.0", "2.0.1", "2.0.2"],
+    "query_expiration_interval": 5,
+    "max_time_ms": 300000,
+    "logging_level": "debug"
+  }
+}

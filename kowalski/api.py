@@ -1,22 +1,34 @@
 import aiofiles
 from aiohttp import web
+from astropy.io import fits
 import asyncio
 from ast import literal_eval
-from bson.json_util import dumps
+from bson.json_util import dumps, loads
 import datetime
+import gzip
+import io
 import jwt
+from matplotlib.colors import LogNorm
+import matplotlib.pyplot as plt
 from middlewares import auth_middleware, auth_required
+from motor.motor_asyncio import AsyncIOMotorClient
+from multidict import MultiDict
 import numpy as np
 import os
 import pathlib
 import shutil
 import traceback
-from utils import check_password_hash, compute_hash, generate_password_hash, load_config, radec_str2geojson
+from utils import add_admin, check_password_hash, compute_hash, generate_password_hash, \
+    init_db, load_config, radec_str2geojson, uid
+import uvloop
 
 
-config = load_config()
+config = load_config(config_file='config_api.json')
 
 routes = web.RouteTableDef()
+
+
+''' authentication and authorization '''
 
 
 @routes.post('/api/auth')
@@ -33,15 +45,17 @@ async def auth(request):
 
     # must contain 'username' and 'password'
     if ('username' not in post_data) or (len(post_data['username']) == 0):
-        return web.json_response({'status': 'error', 'message': 'Missing "username"'}, status=400)
+        return web.json_response({'status': 'error', 'message': 'missing username'}, status=400)
     if ('password' not in post_data) or (len(post_data['password']) == 0):
-        return web.json_response({'status': 'error', 'message': 'Missing "password"'}, status=400)
+        return web.json_response({'status': 'error', 'message': 'missing password'}, status=400)
 
     # connecting from penquins: check penquins version
     if 'penquins.__version__' in post_data:
         penquins_version = post_data['penquins.__version__']
         if penquins_version not in config['misc']['supported_penquins_versions']:
-            return web.json_response({'status': 'error', 'message': 'Unsupported version of penquins.'}, status=400)
+            return web.json_response({'status': 'error',
+                                      'message': 'unsupported version of penquins: '
+                                                 f'{post_data["penquins.__version__"]}'}, status=400)
 
     username = str(post_data['username'])
     password = str(post_data['password'])
@@ -203,7 +217,7 @@ async def edit_user(request):
         return web.json_response({'status': 'error', 'message': 'must be admin to edit users'}, status=403)
 
 
-''' queries api '''
+''' query apis '''
 
 
 def parse_query(task, save: bool = False):
@@ -213,7 +227,7 @@ def parse_query(task, save: bool = False):
     # reduce!
     task_reduced = {'user': task['user'], 'query': dict(), 'kwargs': kwargs}
 
-    prohibited_collections = ('users', 'stats', 'queries')
+    prohibited_collections = ('users', 'queries')
 
     if task['query_type'] == 'estimated_document_count':
         # specify task type:
@@ -609,8 +623,7 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
                 catalogs = await db.list_collection_names()
                 # exclude system collections
                 catalogs_system = (config['database']['collection_users'],
-                                   config['database']['collection_queries'],
-                                   config['database']['collection_stats'])
+                                   config['database']['collection_queries'])
 
                 query_result = [c for c in sorted(catalogs)[::-1] if c not in catalogs_system]
 
@@ -846,3 +859,304 @@ async def query_delete(request):
         _err = traceback.format_exc()
         print(_err)
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
+
+
+''' lab apis '''
+
+
+@routes.get('/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}')
+@auth_required
+async def ztf_alert_get_cutout_handler(request):
+    """
+        Serve cutouts as fits or png
+    :param request:
+    :return:
+    """
+    candid = int(request.match_info['candid'])
+    cutout = request.match_info['cutout'].capitalize()
+    file_format = request.match_info['file_format']
+
+    assert cutout in ['Science', 'Template', 'Difference']
+    assert file_format in ['fits', 'png']
+
+    alert = await request.app['mongo']['ZTF_alerts'].find_one({'candid': candid},
+                                                              {f'cutout{cutout}': 1},
+                                                              max_time_ms=60000)
+
+    cutout_data = loads(dumps([alert[f'cutout{cutout}']['stampData']]))[0]
+
+    # unzipped fits name
+    fits_name = pathlib.Path(alert[f"cutout{cutout}"]["fileName"]).with_suffix('')
+
+    # unzip and flip about y axis on the server side
+    with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
+        with fits.open(io.BytesIO(f.read())) as hdu:
+            header = hdu[0].header
+            data_flipped_y = np.flipud(hdu[0].data)
+
+    if file_format == 'fits':
+        hdu = fits.PrimaryHDU(data_flipped_y, header=header)
+        # hdu = fits.PrimaryHDU(data_flipped_y)
+        hdul = fits.HDUList([hdu])
+
+        stamp_fits = io.BytesIO()
+        hdul.writeto(fileobj=stamp_fits)
+
+        return web.Response(body=stamp_fits.getvalue(), content_type='image/fits',
+                            headers=MultiDict({'Content-Disposition': f'Attachment;filename={fits_name}'}), )
+
+    if file_format == 'png':
+        buff = io.BytesIO()
+        plt.close('all')
+        fig = plt.figure()
+        fig.set_size_inches(4, 4, forward=False)
+        ax = plt.Axes(fig, [0., 0., 1., 1.])
+        ax.set_axis_off()
+        fig.add_axes(ax)
+
+        # remove nans:
+        img = np.array(data_flipped_y)
+        img = np.nan_to_num(img)
+
+        if cutout != 'Difference':
+            # img += np.min(img)
+            img[img <= 0] = np.median(img)
+            # plt.imshow(img, cmap='gray', norm=LogNorm(), origin='lower')
+            plt.imshow(img, cmap=plt.cm.bone, norm=LogNorm(), origin='lower')
+        else:
+            # plt.imshow(img, cmap='gray', origin='lower')
+            plt.imshow(img, cmap=plt.cm.bone, origin='lower')
+        plt.savefig(buff, dpi=42)
+
+        buff.seek(0)
+        plt.close('all')
+        return web.Response(body=buff, content_type='image/png')
+
+
+@routes.get('/lab/zuds-alerts/{candid}/cutout/{cutout}/{file_format}')
+@auth_required
+async def zuds_alert_get_cutout_handler(request):
+    """
+        Serve cutouts as fits or png
+    :param request:
+    :return:
+    """
+
+    candid = int(request.match_info['candid'])
+    cutout = request.match_info['cutout'].capitalize()
+    file_format = request.match_info['file_format']
+
+    assert cutout in ['Science', 'Template', 'Difference']
+    assert file_format in ['fits', 'png']
+
+    alert = await request.app['mongo']['ZUDS_alerts'].find_one({'candid': candid},
+                                                               {f'cutout{cutout}': 1},
+                                                               max_time_ms=60000)
+
+    cutout_data = loads(dumps([alert[f'cutout{cutout}']]))[0]
+
+    # unzipped fits name
+    fits_name = f"{candid}.cutout{cutout}.fits"
+
+    # unzip and flip about y axis on the server side
+    with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
+        with fits.open(io.BytesIO(f.read())) as hdu:
+            header = hdu[0].header
+            # no need to flip it since Danny does that on his end
+            # data_flipped_y = np.flipud(hdu[0].data)
+            data_flipped_y = hdu[0].data
+
+    if file_format == 'fits':
+        hdu = fits.PrimaryHDU(data_flipped_y, header=header)
+        # hdu = fits.PrimaryHDU(data_flipped_y)
+        hdul = fits.HDUList([hdu])
+
+        stamp_fits = io.BytesIO()
+        hdul.writeto(fileobj=stamp_fits)
+
+        return web.Response(body=stamp_fits.getvalue(), content_type='image/fits',
+                            headers=MultiDict({'Content-Disposition': f'Attachment;filename={fits_name}'}), )
+
+    if file_format == 'png':
+        buff = io.BytesIO()
+        plt.close('all')
+        fig = plt.figure()
+        fig.set_size_inches(4, 4, forward=False)
+        ax = plt.Axes(fig, [0., 0., 1., 1.])
+        ax.set_axis_off()
+        fig.add_axes(ax)
+
+        # remove nans:
+        img = np.array(data_flipped_y)
+        img = np.nan_to_num(img)
+
+        if cutout != 'Difference':
+            # img += np.min(img)
+            img[img <= 0] = np.median(img)
+            # plt.imshow(img, cmap='gray', norm=LogNorm(), origin='lower')
+            plt.imshow(img, cmap=plt.cm.bone, norm=LogNorm(), origin='lower')
+        else:
+            # plt.imshow(img, cmap='gray', origin='lower')
+            plt.imshow(img, cmap=plt.cm.bone, origin='lower')
+        plt.savefig(buff, dpi=42)
+
+        buff.seek(0)
+        plt.close('all')
+        return web.Response(body=buff, content_type='image/png')
+
+
+async def app_factory():
+    """
+        App Factory
+    :return:
+    """
+
+    # init db if necessary
+    await init_db(config=config)
+
+    # Database connection
+    client = AsyncIOMotorClient(f"mongodb://{config['database']['user']}:{config['database']['pwd']}@" +
+                                f"{config['database']['host']}:{config['database']['port']}/{config['database']['db']}",
+                                maxPoolSize=config['database']['max_pool_size'])
+    mongo = client[config['database']['db']]
+
+    # add site admin if necessary
+    await add_admin(mongo, config=config)
+
+    # init app with auth middleware
+    app = web.Application(middlewares=[auth_middleware])
+
+    # store mongo connection
+    app['mongo'] = mongo
+
+    # mark all enqueued tasks failed on startup
+    await app['mongo'].queries.update_many({'status': 'enqueued'},
+                                           {'$set': {'status': 'error', 'last_modified': datetime.datetime.utcnow()}})
+
+    # graciously close mongo client on shutdown
+    async def close_mongo(_app):
+        _app['mongo'].client.close()
+
+    app.on_cleanup.append(close_mongo)
+
+    # set up JWT for user authentication/authorization
+    app['JWT'] = {'JWT_SECRET': config['server']['JWT_SECRET_KEY'],
+                  'JWT_ALGORITHM': 'HS256',
+                  'JWT_EXP_DELTA_SECONDS': 30 * 86400 * 3}
+
+    # route table
+    app.add_routes(routes)
+
+    return app
+
+
+''' Tests '''
+
+
+class TestAPIs(object):
+    # python -m pytest -s server.py
+    # python -m pytest server.py
+
+    # test user management API for admin
+    async def test_users(self, aiohttp_client):
+        client = await aiohttp_client(await app_factory())
+
+        # check JWT authorization
+        auth = await client.post(f'/auth',
+                                 json={"username": config['server']['admin_username'],
+                                       "password": config['server']['admin_password']})
+        assert auth.status == 200
+        # print(await auth.text())
+        # print(await auth.json())
+        credentials = await auth.json()
+        assert 'token' in credentials
+
+        access_token = credentials['token']
+
+        headers = {'Authorization': access_token}
+
+        # adding a user
+        resp = await client.put('/users', json={'user': 'test_user', 'password': uid(6)}, headers=headers)
+        assert resp.status == 200
+        # text = await resp.text()
+        # text = await resp.json()
+
+        # editing user credentials
+        resp = await client.post('/users', json={'_user': 'test_user',
+                                                 'edit-user': 'test_user',
+                                                 'edit-password': uid(6)}, headers=headers)
+        assert resp.status == 200
+        resp = await client.post('/users', json={'_user': 'test_user',
+                                                 'edit-user': 'test_user_edited',
+                                                 'edit-password': ''}, headers=headers)
+        assert resp.status == 200
+
+        # deleting a user
+        resp = await client.delete('/users', json={'user': 'test_user_edited'}, headers=headers)
+        assert resp.status == 200
+
+    # test programmatic query API
+    async def test_query(self, aiohttp_client):
+        client = await aiohttp_client(await app_factory())
+
+        # check JWT authorization
+        auth = await client.post(f'/auth',
+                                 json={"username": config['server']['admin_username'],
+                                       "password": config['server']['admin_password']})
+        assert auth.status == 200
+        # print(await auth.text())
+        # print(await auth.json())
+        credentials = await auth.json()
+        assert credentials['status'] == 'success'
+        assert 'token' in credentials
+
+        access_token = credentials['token']
+
+        headers = {'Authorization': access_token}
+
+        collection = 'ZTF_alerts'
+
+        # check query without book-keeping
+        qu = {"query_type": "find_one",
+              "query": {
+                  "catalog": collection,
+                  "filter": {},
+              },
+              "kwargs": {"save": False}
+              }
+        # print(qu)
+        resp = await client.put('/query', json=qu, headers=headers, timeout=1)
+        assert resp.status == 200
+        result = await resp.json()
+        assert result['status'] == 'success'
+
+        # check query with book-keeping
+        qu = {"query_type": "find_one",
+              "query": {
+                  "catalog": collection,
+                  "filter": {},
+              },
+              "kwargs": {"save": True, "_id": uid(32)}
+              }
+        # print(qu)
+        resp = await client.put('/query', json=qu, headers=headers, timeout=0.15)
+        assert resp.status == 200
+        result = await resp.json()
+        # print(result)
+        assert result['status'] == 'success'
+
+        # remove enqueued query
+        resp = await client.delete('/query', json={'task_id': result['query_id']}, headers=headers, timeout=1)
+        assert resp.status == 200
+        result = await resp.json()
+        assert result['status'] == 'success'
+
+        # todo: check multiple query types
+
+
+uvloop.install()
+
+
+if __name__ == '__main__':
+
+    web.run_app(app_factory(), port=config['server']['port'])
