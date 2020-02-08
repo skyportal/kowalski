@@ -16,6 +16,9 @@ services:
       - data:/data
     expose:
       - "4000"
+    # fixme:
+    ports:
+      - "4000:4000"
     links:
       - mongo:kowalski-mongo
     restart: always

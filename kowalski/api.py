@@ -38,48 +38,52 @@ async def auth(request):
         todo: swagger!
     """
     try:
-        post_data = await request.json()
-    except Exception as _e:
-        # print(f'Cannot extract json() from request, trying post(): {str(_e)}')
-        post_data = await request.post()
+        try:
+            post_data = await request.json()
+        except Exception as _e:
+            # print(f'Cannot extract json() from request, trying post(): {str(_e)}')
+            post_data = await request.post()
 
-    # must contain 'username' and 'password'
-    if ('username' not in post_data) or (len(post_data['username']) == 0):
-        return web.json_response({'status': 'error', 'message': 'missing username'}, status=400)
-    if ('password' not in post_data) or (len(post_data['password']) == 0):
-        return web.json_response({'status': 'error', 'message': 'missing password'}, status=400)
+        # must contain 'username' and 'password'
+        if ('username' not in post_data) or (len(post_data['username']) == 0):
+            return web.json_response({'status': 'error', 'message': 'missing username'}, status=400)
+        if ('password' not in post_data) or (len(post_data['password']) == 0):
+            return web.json_response({'status': 'error', 'message': 'missing password'}, status=400)
 
-    # connecting from penquins: check penquins version
-    if 'penquins.__version__' in post_data:
-        penquins_version = post_data['penquins.__version__']
-        if penquins_version not in config['misc']['supported_penquins_versions']:
-            return web.json_response({'status': 'error',
-                                      'message': 'unsupported version of penquins: '
-                                                 f'{post_data["penquins.__version__"]}'}, status=400)
+        # connecting from penquins: check penquins version
+        if 'penquins.__version__' in post_data:
+            penquins_version = post_data['penquins.__version__']
+            if penquins_version not in config['misc']['supported_penquins_versions']:
+                return web.json_response({'status': 'error',
+                                          'message': 'unsupported version of penquins: '
+                                                     f'{post_data["penquins.__version__"]}'}, status=400)
 
-    username = str(post_data['username'])
-    password = str(post_data['password'])
+        username = str(post_data['username'])
+        password = str(post_data['password'])
 
-    try:
-        # user exists and passwords match?
-        select = await request.app['mongo'].users.find_one({'_id': username})
-        if check_password_hash(select['password'], password):
-            payload = {
-                'user_id': username,
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(
-                    seconds=request.app['JWT']['JWT_EXP_DELTA_SECONDS'])
-            }
-            jwt_token = jwt.encode(payload,
-                                   request.app['JWT']['JWT_SECRET'],
-                                   request.app['JWT']['JWT_ALGORITHM'])
+        try:
+            # user exists and passwords match?
+            select = await request.app['mongo'].users.find_one({'_id': username})
+            if check_password_hash(select['password'], password):
+                payload = {
+                    'user_id': username,
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(
+                        seconds=request.app['JWT']['JWT_EXP_DELTA_SECONDS'])
+                }
+                jwt_token = jwt.encode(payload,
+                                       request.app['JWT']['JWT_SECRET'],
+                                       request.app['JWT']['JWT_ALGORITHM'])
 
-            return web.json_response({'status': 'success', 'token': jwt_token.decode('utf-8')})
+                return web.json_response({'status': 'success', 'token': jwt_token.decode('utf-8')})
 
-        else:
-            return web.json_response({'status': 'error', 'message': 'Wrong credentials'}, status=401)
+            else:
+                return web.json_response({'status': 'error', 'message': 'wrong credentials'}, status=401)
+
+        except Exception as e:
+            return web.json_response({'status': 'error', 'message': 'wrong credentials'}, status=401)
 
     except Exception as e:
-        return web.json_response({'status': 'error', 'message': 'Wrong credentials'}, status=401)
+        return web.json_response({'status': 'error', 'message': f'auth failed {e}'}, status=500)
 
 
 @routes.get('/', name='root')
@@ -742,9 +746,8 @@ async def query(request):
             _query = await request.post()
 
         # parse query
-        known_query_types = ('cone_search',
-                             'find', 'find_one', 'aggregate', 'count_documents', 'estimated_document_count',
-                             'info')
+        known_query_types = ('cone_search', 'count_documents', 'estimated_document_count',
+                             'find', 'find_one', 'aggregate', 'info')
 
         assert _query['query_type'] in known_query_types, \
             f'query_type {_query["query_type"]} not in {str(known_query_types)}'
@@ -754,20 +757,20 @@ async def query(request):
         # by default, [unless enqueue_only is requested]
         # all queries are not registered in the db and the task/results are not stored on disk as json files
         # giving a significant execution speed up. this behaviour can be overridden.
-        save = bool(_query.get('kwargs', dict()).get('save', False))
+        save = _query.get('kwargs', dict()).get('save', False)
 
         task_hash, task_reduced, task_doc = parse_query(_query, save=save)
 
-        # schedule query execution:
+        # execute query:
         if not save:
+            task_hash, result = await execute_query(request.app['mongo'], task_hash, task_reduced, task_doc, save)
+
+            return web.json_response(result, status=200, dumps=dumps)
+        else:
             # only schedule query execution. store query and results, return query id to user
             asyncio.create_task(execute_query(request.app['mongo'], task_hash, task_reduced, task_doc, save))
             return web.json_response({'status': 'success', 'query_id': task_hash, 'message': 'query enqueued'},
                                      status=200, dumps=dumps)
-        else:
-            task_hash, result = await execute_query(request.app['mongo'], task_hash, task_reduced, task_doc, save)
-
-            return web.json_response(result, status=200, dumps=dumps)
 
     except Exception as _e:
         print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
