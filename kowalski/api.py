@@ -864,6 +864,42 @@ async def query_delete(request):
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
 
 
+''' filters apis '''
+
+
+@routes.get('/api/filters/{filter_id}')
+@auth_required
+async def filter_get(request):
+    """
+        todo: Retrieve user-defined filter by id
+    :param request:
+    :return:
+    """
+    pass
+
+
+@routes.post('/api/filters')
+@auth_required
+async def filter_post(request):
+    """
+        todo: Save user user-defined filter assigning unique id
+    :param request:
+    :return:
+    """
+    pass
+
+
+@routes.delete('/api/filters/{filter_id}')
+@auth_required
+async def filter_delete(request):
+    """
+        todo?: Delete user-defined filter by id
+    :param request:
+    :return:
+    """
+    pass
+
+
 ''' lab apis '''
 
 
