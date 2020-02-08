@@ -1,4 +1,5 @@
 FROM python:3.7
+#FROM python:3.7-slim
 
 RUN apt-get update
 
@@ -25,6 +26,5 @@ COPY kowalski/api.py /app/
 #RUN python -m pytest -s api.py
 
 # run container
-#CMD /usr/local/bin/supervisord -n -c supervisord.conf
-#CMD cron && crontab /etc/cron.d/fetch-cron && /bin/bash
-CMD python api.py
+CMD /usr/local/bin/supervisord -n -c supervisord_api.conf
+#CMD python api.py
