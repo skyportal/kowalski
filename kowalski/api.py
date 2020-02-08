@@ -1065,7 +1065,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # check JWT authorization
-        auth = await client.post(f'/auth',
+        auth = await client.post(f'/api/auth',
                                  json={"username": config['server']['admin_username'],
                                        "password": config['server']['admin_password']})
         assert auth.status == 200
@@ -1079,23 +1079,23 @@ class TestAPIs(object):
         headers = {'Authorization': access_token}
 
         # adding a user
-        resp = await client.put('/users', json={'user': 'test_user', 'password': uid(6)}, headers=headers)
+        resp = await client.put('/api/users', json={'user': 'test_user', 'password': uid(6)}, headers=headers)
         assert resp.status == 200
         # text = await resp.text()
         # text = await resp.json()
 
         # editing user credentials
-        resp = await client.post('/users', json={'_user': 'test_user',
-                                                 'edit-user': 'test_user',
-                                                 'edit-password': uid(6)}, headers=headers)
+        resp = await client.post('/api/users', json={'_user': 'test_user',
+                                                     'edit-user': 'test_user',
+                                                     'edit-password': uid(6)}, headers=headers)
         assert resp.status == 200
-        resp = await client.post('/users', json={'_user': 'test_user',
-                                                 'edit-user': 'test_user_edited',
-                                                 'edit-password': ''}, headers=headers)
+        resp = await client.post('/api/users', json={'_user': 'test_user',
+                                                     'edit-user': 'test_user_edited',
+                                                     'edit-password': ''}, headers=headers)
         assert resp.status == 200
 
         # deleting a user
-        resp = await client.delete('/users', json={'user': 'test_user_edited'}, headers=headers)
+        resp = await client.delete('/api/users', json={'user': 'test_user_edited'}, headers=headers)
         assert resp.status == 200
 
     # test programmatic query API
@@ -1103,7 +1103,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # check JWT authorization
-        auth = await client.post(f'/auth',
+        auth = await client.post(f'/api/auth',
                                  json={"username": config['server']['admin_username'],
                                        "password": config['server']['admin_password']})
         assert auth.status == 200
@@ -1128,7 +1128,7 @@ class TestAPIs(object):
               "kwargs": {"save": False}
               }
         # print(qu)
-        resp = await client.put('/query', json=qu, headers=headers, timeout=1)
+        resp = await client.put('/api/queries', json=qu, headers=headers, timeout=1)
         assert resp.status == 200
         result = await resp.json()
         assert result['status'] == 'success'
@@ -1142,14 +1142,14 @@ class TestAPIs(object):
               "kwargs": {"save": True, "_id": uid(32)}
               }
         # print(qu)
-        resp = await client.put('/query', json=qu, headers=headers, timeout=0.15)
+        resp = await client.put('/api/queries', json=qu, headers=headers, timeout=0.15)
         assert resp.status == 200
         result = await resp.json()
         # print(result)
         assert result['status'] == 'success'
 
         # remove enqueued query
-        resp = await client.delete('/query', json={'task_id': result['query_id']}, headers=headers, timeout=1)
+        resp = await client.delete('/api/queries', json={'task_id': result['query_id']}, headers=headers, timeout=1)
         assert resp.status == 200
         result = await resp.json()
         assert result['status'] == 'success'
