@@ -1,7 +1,6 @@
 import argparse
 from ast import literal_eval
 from astropy.io import fits
-import avro.schema
 from bson.json_util import dumps
 import confluent_kafka
 from copy import deepcopy
@@ -9,7 +8,6 @@ import datetime
 import fastavro
 import gzip
 import io
-import json
 import multiprocessing
 import numpy as np
 import os
@@ -223,6 +221,8 @@ class AlertConsumer(object):
                 traceback.print_exc()
                 print(e)
                 continue
+
+        # todo: user-defined alert filters
 
     def connect_to_db(self):
         """
@@ -456,6 +456,10 @@ class AlertConsumer(object):
                                 print(time_stamp(), str(e))
                                 _err = traceback.format_exc()
                                 print(time_stamp(), str(_err))
+
+                    # todo: execute user-defined alert filters
+
+                    # todo: submit to SkyPortal
 
     def decodeMessage(self, msg):
         """Decode Avro message according to a schema.
@@ -700,7 +704,7 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest',
         conf['group.id'] = os.environ['HOSTNAME'] if 'HOSTNAME' in os.environ else 'kowalski.caltech.edu'
 
     # make it unique:
-    conf['group.id'] = '{:s}_{:s}'.format(conf['group.id'], datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f'))
+    conf['group.id'] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
 
     # date string:
     datestr = topic.split('_')[1]
@@ -762,8 +766,8 @@ def main(_obs_date=None, _save_packets=True):
                 print(time_stamp(), topics_tonight)
 
             if False:
-                # for testing
-                topics_tonight = ['ztf_20180604_programid3']
+                # use for testing
+                topics_tonight = ['ztf_20200202_programid2']
 
             for t in topics_tonight:
                 if t not in topics_on_watch:

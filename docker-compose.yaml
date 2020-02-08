@@ -25,17 +25,17 @@ services:
     depends_on:
       - mongo
 
-#  ingester:
-#    build:
-#      context: .
-#      dockerfile: ingester.Dockerfile
-#    volumes:
-#      - data:/data
-#    links:
-#      - mongo:kowalski-mongo
-#    restart: always
-#    depends_on:
-#      - mongo
+  ingester:
+    build:
+      context: .
+      dockerfile: ingester.Dockerfile
+    volumes:
+      - data:/data
+    links:
+      - mongo:kowalski-mongo
+    restart: always
+    depends_on:
+      - mongo
 
   mongo:
     image: mongo
