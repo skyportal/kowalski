@@ -1,0 +1,37 @@
+version: '3.3'
+
+volumes:
+  mongodb:
+  data:
+
+services:
+
+  # todo: traefik 2.0
+
+  api:
+    build:
+      context: .
+      dockerfile: api.Dockerfile
+    volumes:
+      - data:/data
+    expose:
+      - "4000"
+    links:
+      - mongo:kowalski-mongo
+    restart: always
+    depends_on:
+      - mongo
+
+  mongo:
+    image: mongo
+    expose:
+      - "27017"
+    # fixme:
+    ports:
+      - "27023:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=mongoadmin
+      - MONGO_INITDB_ROOT_PASSWORD=mongoadminsecret
+    volumes:
+      - mongodb:/data/db
+    restart: always
