@@ -22,4 +22,4 @@ RUN pip install -r /app/requirements_api.txt --no-cache-dir && python generate_s
 # run container
 #CMD /usr/local/bin/supervisord -n -c supervisord.conf
 #CMD cron && crontab /etc/cron.d/fetch-cron && /bin/bash
-CMD /bin/bash
+CMD python api.py
