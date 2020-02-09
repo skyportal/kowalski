@@ -24,6 +24,7 @@
     "port": 27017,
     "db": "kowalski",
     "collection_users": "users",
+    "collection_filters": "filters",
     "collection_queries": "queries"
   },
 

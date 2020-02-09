@@ -231,7 +231,7 @@ def parse_query(task, save: bool = False):
     # reduce!
     task_reduced = {'user': task['user'], 'query': dict(), 'kwargs': kwargs}
 
-    prohibited_collections = ('users', 'queries')
+    prohibited_collections = ('users', 'filters', 'queries')
 
     if task['query_type'] == 'estimated_document_count':
         # specify task type:
@@ -883,6 +883,8 @@ async def filter_get(request):
 async def filter_post(request):
     """
         todo: Save user user-defined filter assigning unique id
+        store as serialized extended json string, use literal_eval to convert to dict at execution
+        https://www.npmjs.com/package/bson
     :param request:
     :return:
     """

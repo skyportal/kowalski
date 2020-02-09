@@ -163,7 +163,7 @@ class AlertConsumer(object):
         self.consumer.subscribe([topic], on_assign=on_assign)
         # self.consumer.subscribe([topic])
 
-        # MongoDB:
+        # MongoDB: todo: -> config
         self.config = config
         self.collection_alerts = 'ZTF_alerts'
         self.collection_alerts_aux = 'ZTF_alerts_aux'
