@@ -1,52 +1,15 @@
 version: '3.3'
 
-volumes:
-  mongodb:
-  data:
-
 services:
 
-  # todo: traefik 2.0
-
-  api:
+  kafka:
     build:
       context: .
-      dockerfile: api.Dockerfile
+      dockerfile: kafka-producer.Dockerfile
     volumes:
-      - data:/data
+      - ./data:/data
     expose:
-      - "4000"
-    # fixme:
+      - "9092"
     ports:
-      - "4000:4000"
-    links:
-      - mongo:kowalski-mongo
-    restart: always
-    depends_on:
-      - mongo
-
-  ingester:
-    build:
-      context: .
-      dockerfile: ingester.Dockerfile
-    volumes:
-      - data:/data
-    links:
-      - mongo:kowalski-mongo
-    restart: always
-    depends_on:
-      - mongo
-
-  mongo:
-    image: mongo
-    expose:
-      - "27017"
-    # fixme:
-    ports:
-      - "27023:27017"
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=mongoadmin
-      - MONGO_INITDB_ROOT_PASSWORD=mongoadminsecret
-    volumes:
-      - mongodb:/data/db
+      - "9092:9092"
     restart: always
