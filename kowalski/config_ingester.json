@@ -15,7 +15,8 @@
     "path_alerts": "/data/alerts",
     "path_queries": "/data/queries",
     "path_tess": "/data/tess",
-    "path_tmp": "/_tmp"
+    "path_tmp": "/_tmp",
+    "path_kafka": "/kafka_2.11-2.2.0"
   },
 
   "database": {
@@ -34,10 +35,6 @@
     },
     "group": "kowalski.caltech.edu"
   },
-
-  "kafka-topics": {
-      "cmd": "/kafka_2.11-2.2.0/bin/kafka-topics.sh"
-    },
 
   "ml_models": {
     "braai": {

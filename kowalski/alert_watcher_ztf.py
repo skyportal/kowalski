@@ -165,8 +165,14 @@ class AlertConsumer(object):
 
         # MongoDB: todo: -> config
         self.config = config
+
         self.collection_alerts = 'ZTF_alerts'
         self.collection_alerts_aux = 'ZTF_alerts_aux'
+
+        if 'test' in topic:
+            # got test data?
+            self.collection_alerts = self.collection_alerts + '_test'
+            self.collection_alerts_aux = self.collection_alerts_aux + '_test'
 
         self.db = None
         self.connect_to_db()
@@ -748,8 +754,8 @@ def main(_obs_date=None, _save_packets=True):
         try:
             if True:
                 # get kafka topic names with kafka-topics command
-                kafka_cmd = [config['kafka-topics']['cmd'],
-                             '--zookeeper', config['kafka-topics']['zookeeper'], '-list']
+                kafka_cmd = [os.path.join(config['path']['kafka'], 'bin', 'kafka-topics.sh'),
+                             '--zookeeper', config['kafka']['zookeeper'], '-list']
                 # print(kafka_cmd)
 
                 topics = subprocess.run(kafka_cmd, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')[:-1]
