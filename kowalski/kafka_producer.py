@@ -35,8 +35,9 @@ def main():
                         "--partitions", "1", "--topic", topic_name]
     p_create_topic = subprocess.run(cmd_create_topic)
 
-    path_alerts = pathlib.Path('/data/ztf_alerts/20200202')
-    for p in path_alerts.glob('')
+    path_alerts = pathlib.Path('/data/ztf_alerts/20200202/')
+    for p in path_alerts.glob('*.avro'):
+        pass
 
 
 if __name__ == '__main__':
