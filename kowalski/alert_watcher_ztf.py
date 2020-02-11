@@ -754,8 +754,8 @@ def main(_obs_date=None, _save_packets=True):
         try:
             if True:
                 # get kafka topic names with kafka-topics command
-                kafka_cmd = [os.path.join(config['path']['kafka'], 'bin', 'kafka-topics.sh'),
-                             '--zookeeper', config['kafka']['zookeeper'], '-list']
+                kafka_cmd = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
+                             '--zookeeper', config['path_kafka']['zookeeper'], '-list']
                 # print(kafka_cmd)
 
                 topics = subprocess.run(kafka_cmd, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')[:-1]
