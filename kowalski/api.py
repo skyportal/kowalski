@@ -79,11 +79,11 @@ async def auth(request):
             else:
                 return web.json_response({'status': 'error', 'message': 'wrong credentials'}, status=401)
 
-        except Exception as e:
-            return web.json_response({'status': 'error', 'message': 'wrong credentials'}, status=401)
+        except Exception as _e:
+            return web.json_response({'status': 'error', 'message': f'wrong credentials: {str(_e)}'}, status=401)
 
-    except Exception as e:
-        return web.json_response({'status': 'error', 'message': f'auth failed {e}'}, status=500)
+    except Exception as _e:
+        return web.json_response({'status': 'error', 'message': f'auth failed: {str(_e)}'}, status=500)
 
 
 @routes.get('/', name='root')
@@ -246,8 +246,6 @@ def parse_query(task, save: bool = False):
     elif task['query_type'] == 'find':
         # specify task type:
         task_reduced['query_type'] = 'find'
-
-        go_on = True
 
         if task['user'] != config['server']['admin_username']:
             if str(task['query']['catalog']) in prohibited_collections:
@@ -510,10 +508,10 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
     result = dict()
     query_result = None
 
-    query = task_reduced
+    _query = task_reduced
 
-    result['user'] = query.get('user')
-    result['kwargs'] = query.get('kwargs', dict())
+    result['user'] = _query.get('user')
+    result['kwargs'] = _query.get('kwargs', dict())
 
     # by default, long-running queries will be killed after config['misc']['max_time_ms'] ms
     max_time_ms = int(result['kwargs'].get('max_time_ms', config['misc']['max_time_ms']))
@@ -522,48 +520,48 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
     try:
 
         # cone search:
-        if query['query_type'] == 'cone_search':
+        if _query['query_type'] == 'cone_search':
 
             known_kwargs = ('skip', 'hint', 'limit', 'sort')
-            kwargs = {kk: vv for kk, vv in query['kwargs'].items() if kk in known_kwargs}
-            kwargs['comment'] = str(query['user'])
+            kwargs = {kk: vv for kk, vv in _query['kwargs'].items() if kk in known_kwargs}
+            kwargs['comment'] = str(_query['user'])
 
             # iterate over catalogs as they represent
             query_result = dict()
-            for catalog in query['query']:
+            for catalog in _query['query']:
                 query_result[catalog] = dict()
                 # iterate over objects:
-                for obj in query['query'][catalog]:
+                for obj in _query['query'][catalog]:
                     # project?
-                    if len(query['query'][catalog][obj][1]) > 0:
-                        _select = db[catalog].find(query['query'][catalog][obj][0],
-                                                   query['query'][catalog][obj][1],
+                    if len(_query['query'][catalog][obj][1]) > 0:
+                        _select = db[catalog].find(_query['query'][catalog][obj][0],
+                                                   _query['query'][catalog][obj][1],
                                                    max_time_ms=max_time_ms, **kwargs)
                     # return the whole documents by default
                     else:
-                        _select = db[catalog].find(query['query'][catalog][obj][0],
+                        _select = db[catalog].find(_query['query'][catalog][obj][0],
                                                    max_time_ms=max_time_ms, **kwargs)
                     # mongodb does not allow having dots in field names -> replace with underscores
                     query_result[catalog][obj.replace('.', '_')] = await _select.to_list(length=None)
 
         # convenience general search subtypes:
-        elif query['query_type'] == 'find':
+        elif _query['query_type'] == 'find':
             # print(query)
 
             known_kwargs = ('skip', 'hint', 'limit', 'sort')
-            kwargs = {kk: vv for kk, vv in query['kwargs'].items() if kk in known_kwargs}
-            kwargs['comment'] = str(query['user'])
+            kwargs = {kk: vv for kk, vv in _query['kwargs'].items() if kk in known_kwargs}
+            kwargs['comment'] = str(_query['user'])
 
             # project?
-            if len(query['query']['projection']) > 0:
+            if len(_query['query']['projection']) > 0:
 
-                _select = db[query['query']['catalog']].find(query['query']['filter'],
-                                                             query['query']['projection'],
-                                                             max_time_ms=max_time_ms, **kwargs)
+                _select = db[_query['query']['catalog']].find(_query['query']['filter'],
+                                                              _query['query']['projection'],
+                                                              max_time_ms=max_time_ms, **kwargs)
             # return the whole documents by default
             else:
-                _select = db[query['query']['catalog']].find(query['query']['filter'],
-                                                             max_time_ms=max_time_ms, **kwargs)
+                _select = db[_query['query']['catalog']].find(_query['query']['filter'],
+                                                              max_time_ms=max_time_ms, **kwargs)
 
             # todo: replace with inspect.iscoroutinefunction(object)?
             if isinstance(_select, int) or isinstance(_select, float) or isinstance(_select, tuple) or \
@@ -572,56 +570,56 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
             else:
                 query_result = await _select.to_list(length=None)
 
-        elif query['query_type'] == 'find_one':
+        elif _query['query_type'] == 'find_one':
             # print(query)
 
             known_kwargs = ('skip', 'hint', 'limit', 'sort')
-            kwargs = {kk: vv for kk, vv in query['kwargs'].items() if kk in known_kwargs}
-            kwargs['comment'] = str(query['user'])
+            kwargs = {kk: vv for kk, vv in _query['kwargs'].items() if kk in known_kwargs}
+            kwargs['comment'] = str(_query['user'])
 
-            _select = db[query['query']['catalog']].find_one(query['query']['filter'],
-                                                             max_time_ms=max_time_ms)
+            _select = db[_query['query']['catalog']].find_one(_query['query']['filter'],
+                                                              max_time_ms=max_time_ms)
 
             query_result = await _select
 
-        elif query['query_type'] == 'count_documents':
+        elif _query['query_type'] == 'count_documents':
 
             known_kwargs = ('skip', 'hint', 'limit')
-            kwargs = {kk: vv for kk, vv in query['kwargs'].items() if kk in known_kwargs}
-            kwargs['comment'] = str(query['user'])
+            kwargs = {kk: vv for kk, vv in _query['kwargs'].items() if kk in known_kwargs}
+            kwargs['comment'] = str(_query['user'])
 
-            _select = db[query['query']['catalog']].count_documents(query['query']['filter'],
-                                                                    maxTimeMS=max_time_ms)
+            _select = db[_query['query']['catalog']].count_documents(_query['query']['filter'],
+                                                                     maxTimeMS=max_time_ms)
 
             query_result = await _select
 
-        elif query['query_type'] == 'estimated_document_count':
+        elif _query['query_type'] == 'estimated_document_count':
 
             known_kwargs = ('maxTimeMS', )
-            kwargs = {kk: vv for kk, vv in query['kwargs'].items() if kk in known_kwargs}
-            kwargs['comment'] = str(query['user'])
+            kwargs = {kk: vv for kk, vv in _query['kwargs'].items() if kk in known_kwargs}
+            kwargs['comment'] = str(_query['user'])
 
-            _select = db[query['query']['catalog']].estimated_document_count(query['query']['filter'],
-                                                                             maxTimeMS=max_time_ms)
+            _select = db[_query['query']['catalog']].estimated_document_count(_query['query']['filter'],
+                                                                              maxTimeMS=max_time_ms)
 
             query_result = await _select
 
-        elif query['query_type'] == 'aggregate':
+        elif _query['query_type'] == 'aggregate':
 
             known_kwargs = ('allowDiskUse', 'maxTimeMS', 'batchSize')
-            kwargs = {kk: vv for kk, vv in query['kwargs'].items() if kk in known_kwargs}
-            kwargs['comment'] = str(query['user'])
+            kwargs = {kk: vv for kk, vv in _query['kwargs'].items() if kk in known_kwargs}
+            kwargs['comment'] = str(_query['user'])
 
-            _select = db[query['query']['catalog']].aggregate(query['query']['pipeline'],
-                                                              allowDiskUse=True,
-                                                              maxTimeMS=max_time_ms)
+            _select = db[_query['query']['catalog']].aggregate(_query['query']['pipeline'],
+                                                               allowDiskUse=True,
+                                                               maxTimeMS=max_time_ms)
 
             query_result = await _select.to_list(length=None)
 
-        elif query['query_type'] == 'info':
+        elif _query['query_type'] == 'info':
             # collection/catalog info
 
-            if query['query']['command'] == 'catalog_names':
+            if _query['query']['command'] == 'catalog_names':
 
                 # get available catalog names
                 catalogs = await db.list_collection_names()
@@ -631,23 +629,23 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
 
                 query_result = [c for c in sorted(catalogs)[::-1] if c not in catalogs_system]
 
-            elif query['query']['command'] == 'catalog_info':
+            elif _query['query']['command'] == 'catalog_info':
 
-                catalog = query['query']['catalog']
+                catalog = _query['query']['catalog']
 
                 stats = await db.command('collstats', catalog)
 
                 query_result = stats
 
-            elif query['query']['command'] == 'index_info':
+            elif _query['query']['command'] == 'index_info':
 
-                catalog = query['query']['catalog']
+                catalog = _query['query']['catalog']
 
                 stats = await db[catalog].index_information()
 
                 query_result = stats
 
-            elif query['query']['command'] == 'db_info':
+            elif _query['query']['command'] == 'db_info':
 
                 stats = await db.command('dbstats')
                 query_result = stats
@@ -662,7 +660,7 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
 
         else:
             # save task result:
-            user_tmp_path = os.path.join(config['path']['path_queries'], query['user'])
+            user_tmp_path = os.path.join(config['path']['path_queries'], _query['user'])
             # print(user_tmp_path)
             # mkdir if necessary
             if not os.path.exists(user_tmp_path):
@@ -681,7 +679,7 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
         # db book-keeping:
         if save:
             # mark query as done:
-            await db.queries.update_one({'user': query['user'], 'task_id': task_hash},
+            await db.queries.update_one({'user': _query['user'], 'task_id': task_hash},
                                         {'$set': {'status': result['status'],
                                                   'last_modified': datetime.datetime.utcnow(),
                                                   'result': result['result']}}
@@ -698,7 +696,7 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
         # book-keeping:
         if save:
             # save task result with error message:
-            user_tmp_path = os.path.join(config['path']['path_queries'], query['user'])
+            user_tmp_path = os.path.join(config['path']['path_queries'], _query['user'])
             # print(user_tmp_path)
             # mkdir if necessary
             if not os.path.exists(user_tmp_path):
@@ -715,7 +713,7 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
                 await f_task_result_file.write(task_result)
 
             # mark query as failed:
-            await db.queries.update_one({'user': query['user'], 'task_id': task_hash},
+            await db.queries.update_one({'user': _query['user'], 'task_id': task_hash},
                                         {'$set': {'status': result['status'],
                                                   'last_modified': datetime.datetime.utcnow(),
                                                   'result': None}}
@@ -884,6 +882,7 @@ async def filter_post(request):
     """
         todo: Save user user-defined filter assigning unique id
         store as serialized extended json string, use literal_eval to convert to dict at execution
+        run a simple sanity check before saving
         https://www.npmjs.com/package/bson
     :param request:
     :return:
@@ -1103,13 +1102,13 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # check JWT authorization
-        auth = await client.post(f'/api/auth',
-                                 json={"username": config['server']['admin_username'],
-                                       "password": config['server']['admin_password']})
-        assert auth.status == 200
+        _auth = await client.post(f'/api/auth',
+                                  json={"username": config['server']['admin_username'],
+                                        "password": config['server']['admin_password']})
+        assert _auth.status == 200
         # print(await auth.text())
         # print(await auth.json())
-        credentials = await auth.json()
+        credentials = await _auth.json()
         assert 'token' in credentials
 
         access_token = credentials['token']
@@ -1141,13 +1140,13 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # check JWT authorization
-        auth = await client.post(f'/api/auth',
-                                 json={"username": config['server']['admin_username'],
-                                       "password": config['server']['admin_password']})
-        assert auth.status == 200
+        _auth = await client.post(f'/api/auth',
+                                  json={"username": config['server']['admin_username'],
+                                        "password": config['server']['admin_password']})
+        assert _auth.status == 200
         # print(await auth.text())
         # print(await auth.json())
-        credentials = await auth.json()
+        credentials = await _auth.json()
         assert credentials['status'] == 'success'
         assert 'token' in credentials
 

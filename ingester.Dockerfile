@@ -2,8 +2,11 @@ FROM python:3.7
 #FROM python:3.7-slim
 
 # Install vim, git, cron, and jdk
-RUN apt-get update && apt-get -y install apt-file && apt-file update && apt-get -y install vim && \
-    apt-get -y install git && apt-get install -y default-jdk
+#RUN apt-get update && apt-get -y install apt-file && apt-file update && apt-get -y install vim && \
+#    apt-get -y install git && apt-get install -y default-jdk
+
+# Install jdk
+RUN apt-get update && apt-get install -y default-jdk
 
 # place to keep our app and the data:
 RUN mkdir -p /app /data /data/logs /_tmp /kafka
