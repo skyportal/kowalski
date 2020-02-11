@@ -13,6 +13,15 @@ from utils import load_config
 config = load_config(config_file='config_ingester.json')
 
 
+def delivery_report(err, msg):
+    """ Called once for each message produced to indicate delivery result.
+        Triggered by poll() or flush(). """
+    if err is not None:
+        print(f'Message delivery failed: {err}')
+    else:
+        print(f'Message delivered to {msg.topic()} [{msg.partition()}]')
+
+
 def main():
 
     if not os.path.exists(config['path']['path_logs']):
@@ -43,7 +52,8 @@ def main():
 
     # get kafka topic names with kafka-topics command
     cmd_topics = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
-                  '--zookeeper', "localhost:2181", '-list']
+                  '--zookeeper', config['kafka']['zookeeper.test'],
+                  '-list']
     # print(kafka_cmd)
 
     topics = subprocess.run(cmd_topics, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')[:-1]
@@ -53,14 +63,33 @@ def main():
     topic_name = f'ztf_{datetime.datetime.utcnow().strftime("%Y%m%d")}_programid1_test'
     if topic_name not in topics:
         cmd_create_topic = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
-                            "--create", "--bootstrap-server", "localhost:9092", "--replication-factor", "1",
-                            "--partitions", "1", "--topic", topic_name]
+                            "--create",
+                            "--bootstrap-server", config['kafka']['bootstrap.test.servers'],
+                            "--replication-factor", "1",
+                            "--partitions", "1",
+                            "--topic", topic_name]
         with open(os.path.join(config['path']['path_logs'], 'create_topic.stdout'), 'w') as stdout_create_topic:
             p_create_topic = subprocess.run(cmd_create_topic, stdout=stdout_create_topic, stderr=subprocess.STDOUT)
 
+    # spin up Kafka producer
+    producer = Producer({'bootstrap.servers': config['kafka']['bootstrap.test.servers']})
+
     path_alerts = pathlib.Path('/data/ztf_alerts/20200202/')
     for p in path_alerts.glob('*.avro'):
-        print(p)
+        with open(str(p), 'rb') as data:
+            # Trigger any available delivery report callbacks from previous produce() calls
+            producer.poll(0)
+
+            print(f'Pushing {p}')
+
+            # Asynchronously produce a message, the delivery report callback
+            # will be triggered from poll() above, or flush() below, when the message has
+            # been successfully delivered or failed permanently.
+            producer.produce('mytopic', data.read(), callback=delivery_report)
+
+            # Wait for any outstanding messages to be delivered and delivery report
+            # callbacks to be triggered.
+    producer.flush()
 
 
 if __name__ == '__main__':

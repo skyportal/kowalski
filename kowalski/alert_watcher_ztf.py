@@ -745,46 +745,47 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest',
             sys.exit()
 
 
-def main(_obs_date=None, _save_packets=True):
+def main(obs_date=None, save_packets=True, test=False):
 
     topics_on_watch = dict()
 
     while True:
 
         try:
-            if True:
-                # get kafka topic names with kafka-topics command
+            # get kafka topic names with kafka-topics command
+            if not test:
                 kafka_cmd = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
-                             '--zookeeper', config['path_kafka']['zookeeper'], '-list']
-                # print(kafka_cmd)
+                             '--zookeeper', config['kafka']['zookeeper'], '-list']
+            else:
+                kafka_cmd = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
+                             '--zookeeper', config['kafka']['zookeeper.test'], '-list']
+            # print(kafka_cmd)
 
-                topics = subprocess.run(kafka_cmd, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')[:-1]
-                # print(topics)
+            topics = subprocess.run(kafka_cmd, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')[:-1]
+            # print(topics)
 
-                if _obs_date is None:
-                    datestr = datetime.datetime.utcnow().strftime('%Y%m%d')
-                else:
-                    datestr = _obs_date
-                # as of 20180403 naming convention is ztf_%Y%m%d_programidN
-                # topics_tonight = [t for t in topics if (datestr in t) and ('programid' in t)]
-                # exclude ZUDS, ingest separately
-                topics_tonight = [t for t in topics if (datestr in t) and ('programid' in t) and ('zuds' not in t)]
-                print(time_stamp(), topics_tonight)
-
-            if False:
-                # use for testing
-                topics_tonight = ['ztf_20200202_programid2']
+            if obs_date is None:
+                datestr = datetime.datetime.utcnow().strftime('%Y%m%d')
+            else:
+                datestr = obs_date
+            # as of 20180403 naming convention is ztf_%Y%m%d_programidN
+            # topics_tonight = [t for t in topics if (datestr in t) and ('programid' in t)]
+            # exclude ZUDS, ingest separately
+            topics_tonight = [t for t in topics if (datestr in t) and ('programid' in t) and ('zuds' not in t)]
+            print(time_stamp(), topics_tonight)
 
             for t in topics_tonight:
                 if t not in topics_on_watch:
                     print(time_stamp(), f'starting listener thread for {t}')
                     offset_reset = config['kafka']['default.topic.config']['auto.offset.reset']
-                    bootstrap_servers = config['kafka']['bootstrap.servers']
+                    if not test:
+                        bootstrap_servers = config['kafka']['bootstrap.servers']
+                    else:
+                        bootstrap_servers = config['kafka']['bootstrap.test.servers']
                     group = '{:s}'.format(config['kafka']['group'])
                     # print(group)
                     path_alerts = config['path']['path_alerts']
                     path_tess = config['path']['path_tess']
-                    save_packets = _save_packets
                     topics_on_watch[t] = multiprocessing.Process(target=listener,
                                                                  args=(t, bootstrap_servers,
                                                                        offset_reset, group,
@@ -812,7 +813,7 @@ def main(_obs_date=None, _save_packets=True):
             _err = traceback.format_exc()
             print(time_stamp(), str(_err))
 
-        if _obs_date is None:
+        if obs_date is None:
             time.sleep(300)
 
 
@@ -820,10 +821,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Fetch AVRO packets from Kafka streams and ingest them into DB')
     parser.add_argument('--obsdate', help='observing date')
     parser.add_argument('--noio', help='reduce i/o - do not save packets', action='store_true')
+    parser.add_argument('--test', help='listen to the test stream', action='store_true')
 
     args = parser.parse_args()
-    obs_date = args.obsdate
-    save = False if args.noio else True
     # print(obs_date)
 
-    main(_obs_date=obs_date, _save_packets=save)
+    main(obs_date=args.obsdate,
+         save_packets=not args.noio,
+         test=args.test)
