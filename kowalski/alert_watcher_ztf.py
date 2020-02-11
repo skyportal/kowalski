@@ -169,10 +169,10 @@ class AlertConsumer(object):
         self.collection_alerts = 'ZTF_alerts'
         self.collection_alerts_aux = 'ZTF_alerts_aux'
 
-        if 'test' in topic:
-            # got test data?
-            self.collection_alerts = self.collection_alerts + '_test'
-            self.collection_alerts_aux = self.collection_alerts_aux + '_test'
+        # if 'test' in topic:
+        #     # got test data?
+        #     self.collection_alerts = self.collection_alerts + '_test'
+        #     self.collection_alerts_aux = self.collection_alerts_aux + '_test'
 
         self.db = None
         self.connect_to_db()

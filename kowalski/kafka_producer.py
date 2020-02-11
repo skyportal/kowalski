@@ -1,6 +1,8 @@
 import argparse
+from confluent_kafka import Producer
 import datetime
 import os
+import pathlib
 import subprocess
 
 from utils import load_config
@@ -31,6 +33,10 @@ def main():
     cmd_create_topic = [os.path.join(config['path']['kafka'], 'bin', 'kafka-topics.sh'),
                         "--create", "--bootstrap-server", "localhost:9092", "--replication-factor", "1",
                         "--partitions", "1", "--topic", topic_name]
+    p_create_topic = subprocess.run(cmd_create_topic)
+
+    path_alerts = pathlib.Path('/data/ztf_alerts/20200202')
+    for p in path_alerts.glob('')
 
 
 if __name__ == '__main__':
