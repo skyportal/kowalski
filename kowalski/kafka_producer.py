@@ -85,7 +85,7 @@ def main():
             # Asynchronously produce a message, the delivery report callback
             # will be triggered from poll() above, or flush() below, when the message has
             # been successfully delivered or failed permanently.
-            producer.produce('mytopic', data.read(), callback=delivery_report)
+            producer.produce(topic_name, data.read(), callback=delivery_report)
 
             # Wait for any outstanding messages to be delivered and delivery report
             # callbacks to be triggered.

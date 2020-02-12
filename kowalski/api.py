@@ -1309,7 +1309,7 @@ class TestAPIs(object):
         assert result['message'] == 'query successfully executed'
         assert 'data' in result
 
-    # todo: test raising errors
+    # test raising errors
 
     async def test_query_unauthorized(self, aiohttp_client):
         """
