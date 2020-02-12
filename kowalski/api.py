@@ -80,10 +80,16 @@ async def auth(request):
                 return web.json_response({'status': 'error', 'message': 'wrong credentials'}, status=401)
 
         except Exception as _e:
-            return web.json_response({'status': 'error', 'message': f'wrong credentials: {str(_e)}'}, status=401)
+            # print(f'{datetime.datetime.now()} got error: {str(_e)}')
+            # _err = traceback.format_exc()
+            # print(_err)
+            return web.json_response({'status': 'error', 'message': 'wrong credentials'}, status=401)
 
     except Exception as _e:
-        return web.json_response({'status': 'error', 'message': f'auth failed: {str(_e)}'}, status=500)
+        # print(f'{datetime.datetime.now()} got error: {str(_e)}')
+        # _err = traceback.format_exc()
+        # print(_err)
+        return web.json_response({'status': 'error', 'message': 'auth failed'}, status=500)
 
 
 @routes.get('/', name='root')
@@ -1113,6 +1119,22 @@ class TestAPIs(object):
         credentials = await _auth.json()
         assert 'token' in credentials
 
+    async def test_auth_error(self, aiohttp_client):
+        """
+            Test authorization with invalid credentials: /api/auth
+        :param aiohttp_client:
+        :return:
+        """
+        client = await aiohttp_client(await app_factory())
+
+        _auth = await client.post(f'/api/auth', json={"username": "noname", "password": "nopass"})
+        assert _auth.status == 401
+
+        credentials = await _auth.json()
+        # print(credentials)
+        assert credentials['status'] == 'error'
+        assert credentials['message'] == 'wrong credentials'
+
     async def test_users(self, aiohttp_client):
         """
             Test user management: /api/users
@@ -1286,6 +1308,29 @@ class TestAPIs(object):
         assert result['status'] == 'success'
         assert result['message'] == 'query successfully executed'
         assert 'data' in result
+
+    # todo: test raising errors
+
+    async def test_query_unauthorized(self, aiohttp_client):
+        """
+            Test an unauthorized query: /api/queries
+        :param aiohttp_client:
+        :return:
+        """
+        client = await aiohttp_client(await app_factory())
+
+        headers = {'Authorization': 'no_token'}
+
+        # check catalog_names info
+        qu = {"query_type": "info", "query": {"command": "catalog_names"}}
+        # print(qu)
+        resp = await client.post('/api/queries', json=qu, headers=headers, timeout=5)
+        # print(resp)
+        assert resp.status == 400
+        result = await resp.json()
+        # print(result)
+        assert result['status'] == 'error'
+        assert result['message'] == 'token is invalid'
 
 
 uvloop.install()
