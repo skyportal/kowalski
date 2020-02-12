@@ -30,7 +30,7 @@ services:
       context: .
       dockerfile: ingester.Dockerfile
 #    entrypoint: supervisord -n -c supervisord_ingester.conf
-    entrypoint: python alert_watcher_ztf.py --test
+#    entrypoint: python alert_watcher_ztf.py --test
     volumes:
       - data:/data
     links:
