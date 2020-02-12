@@ -16,8 +16,11 @@ ADD http://apache.claz.org/kafka/2.2.0/kafka_2.11-2.2.0.tgz /kafka
 #ADD http://apache.claz.org/kafka/2.4.0/kafka_2.12-2.4.0.tgz /kafka
 RUN tar -xzf /kafka/kafka_2.11-2.2.0.tgz
 
+# ML models:
+ADD https://github.com/dmitryduev/kowalski/raw/master/kowalski/models/braai_d6_m9.h5 /app/models/
+
 # copy over the test alerts
-COPY data/ztf_alerts/ /data/ztf_alerts/
+COPY data/ztf_alerts/ /app/data/ztf_alerts/
 
 # copy over the secrets and the code
 COPY ["secrets.json", "kowalski/*_ingester.*", "kowalski/utils.py",\

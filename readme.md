@@ -1,9 +1,16 @@
-Run `docker-compose` to start the service:
+Run `docker-compose` to fire up Kowalski:
 ```bash
 docker-compose up --build -d
 ```
 
-Build and run the Kafka producer for testing:
+Shut down Kowalski:
+```bash
+docker-compose down
+```
+
+---
+
+Build and run a dedicated container for the Kafka producer (for testing):
 ```bash
 docker build --rm -t kafka_producer:latest -f kafka-producer.Dockerfile .
 docker run -it --rm --name kafka_producer -p 2181:2181 -p 9092:9092 kafka_producer:latest

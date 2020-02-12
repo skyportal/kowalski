@@ -178,8 +178,8 @@ class AlertConsumer(object):
         for m in config['ml_models']:
             try:
                 m_v = config["ml_models"][m]["version"]
-                self.ml_models[m] = {'model': load_model(f'{config["path"]["path_ml_models"]}/{m}_{m_v}.h5'),
-                                     'version': m_v}
+                mf = os.path.join(config["path"]["path_ml_models"], f'{m}_{m_v}.h5')
+                self.ml_models[m] = {'model': load_model(mf), 'version': m_v}
             except Exception as e:
                 print(time_stamp(), f'Error loading ML model {m}: {str(e)}')
                 _err = traceback.format_exc()
@@ -703,7 +703,7 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest',
             sys.exit()
 
 
-def main(obs_date=None, save_packets=True, test=False):
+def ingester(obs_date=None, save_packets=True, test=False):
 
     topics_on_watch = dict()
 
@@ -789,6 +789,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main(obs_date=args.obsdate,
-         save_packets=not args.noio,
-         test=args.test)
+    ingester(obs_date=args.obsdate,
+             save_packets=not args.noio,
+             test=args.test)

@@ -5,6 +5,7 @@ import pathlib
 import subprocess
 import time
 
+from alert_watcher_ztf import ingester
 from utils import load_config
 
 
@@ -70,7 +71,8 @@ class TestIngester(object):
         print(topics)
 
         # create a test ZTF topic for the current UTC date
-        topic_name = f'ztf_{datetime.datetime.utcnow().strftime("%Y%m%d")}_programid1_test'
+        date = datetime.datetime.utcnow().strftime("%Y%m%d")
+        topic_name = f'ztf_{date}_programid1_test'
         if topic_name not in topics:
             cmd_create_topic = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
                                 "--create",
@@ -84,7 +86,7 @@ class TestIngester(object):
         # spin up Kafka producer
         producer = Producer({'bootstrap.servers': config['kafka']['bootstrap.test.servers']})
 
-        path_alerts = pathlib.Path('/data/ztf_alerts/20200202/')
+        path_alerts = pathlib.Path('/app/data/ztf_alerts/20200202/')
         for p in path_alerts.glob('*.avro'):
             with open(str(p), 'rb') as data:
                 # Trigger any available delivery report callbacks from previous produce() calls
@@ -101,4 +103,10 @@ class TestIngester(object):
                 # callbacks to be triggered.
         producer.flush()
 
-        # todo: shut down Kafka server and ZooKeeper
+        # digest and ingest
+        ingester(obs_date=date, save_packets=False, test=True)
+
+        # shut down Kafka server and ZooKeeper
+        time.sleep(10)
+        p_zookeeper.kill()
+        p_kafka_server.kill()
