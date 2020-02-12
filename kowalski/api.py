@@ -1201,7 +1201,13 @@ class TestAPIs(object):
         result = await resp.json()
         assert result['status'] == 'success'
 
-    # test multiple query types without book-keeping (the default and almost exclusively used scenario)
+    # todo: test multiple query types without book-keeping (the default and almost exclusively used scenario):
+    #  - find_one
+    #  - find
+    #  - info
+    #  - count_documents
+    #  - estimated_document_count
+    #  - aggregate
 
     async def test_query_find_one(self, aiohttp_client):
         """
@@ -1240,11 +1246,46 @@ class TestAPIs(object):
         resp = await client.post('/api/queries', json=qu, headers=headers, timeout=5)
         assert resp.status == 200
         result = await resp.json()
+        # print(result)
         assert result['status'] == 'success'
         assert result['message'] == 'query successfully executed'
         assert 'data' in result
 
-        print(result)
+    async def test_query_info(self, aiohttp_client):
+        """
+            Test {"query_type": "info", ...}: /api/queries
+        :param aiohttp_client:
+        :return:
+        """
+        client = await aiohttp_client(await app_factory())
+
+        # authorize
+        _auth = await client.post(f'/api/auth',
+                                  json={"username": config['server']['admin_username'],
+                                        "password": config['server']['admin_password']})
+        assert _auth.status == 200
+        # print(await auth.text())
+        # print(await auth.json())
+        credentials = await _auth.json()
+        assert credentials['status'] == 'success'
+        assert 'token' in credentials
+
+        access_token = credentials['token']
+
+        headers = {'Authorization': access_token}
+
+        collection = 'ZTF_alerts'
+
+        # check catalog_names info
+        qu = {"query_type": "info", "query": {"command": "catalog_names"}}
+        # print(qu)
+        resp = await client.post('/api/queries', json=qu, headers=headers, timeout=5)
+        assert resp.status == 200
+        result = await resp.json()
+        # print(result)
+        assert result['status'] == 'success'
+        assert result['message'] == 'query successfully executed'
+        assert 'data' in result
 
 
 uvloop.install()
