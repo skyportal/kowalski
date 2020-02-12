@@ -12,6 +12,7 @@ services:
     build:
       context: .
       dockerfile: api.Dockerfile
+#    entrypoint: python -m pytest -s test_api.py
     volumes:
       - data:/data
     expose:
@@ -30,7 +31,7 @@ services:
       context: .
       dockerfile: ingester.Dockerfile
 #    entrypoint: supervisord -n -c supervisord_ingester.conf
-#    entrypoint: python alert_watcher_ztf.py --test
+#    entrypoint: python -m pytest -s test_ingester.py
     volumes:
       - data:/data
     links:

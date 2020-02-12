@@ -19,7 +19,7 @@ import pathlib
 import shutil
 import traceback
 from utils import add_admin, check_password_hash, compute_hash, generate_password_hash, \
-    init_db, load_config, radec_str2geojson, uid
+    init_db, load_config, radec_str2geojson
 import uvloop
 
 
