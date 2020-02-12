@@ -19,6 +19,13 @@
     "path_kafka": "/kafka_2.11-2.2.0"
   },
 
+  "kafka": {
+    "default.topic.config": {
+      "auto.offset.reset": "earliest"
+    },
+    "group": "kowalski"
+  },
+
   "database": {
     "max_pool_size": 2000,
     "host": "kowalski_mongo_1",
@@ -26,14 +33,48 @@
     "db": "kowalski",
     "collection_users": "users",
     "collection_filters": "filters",
-    "collection_queries": "queries"
+    "collection_queries": "queries",
+    "collection_alerts_ztf":  "ZTF_alerts",
+    "collection_alerts_ztf_aux":  "ZTF_alerts_aux",
+    "collection_alerts_zuds":  "ZUDS_alerts",
+    "collection_alerts_zuds_aux":  "ZUDS_alerts_aux"
   },
 
-  "kafka": {
-    "default.topic.config": {
-      "auto.offset.reset": "earliest"
-    },
-    "group": "kowalski.caltech.edu"
+  "indexes": {
+    "ZTF_alerts": {
+      "radec_candid": [["coordinates.radec_geojson", "2dsphere"],
+                       ["candid", -1]],
+      "radec_objectId": [["coordinates.radec_geojson", "2dsphere"],
+                         ["objectId", -1]],
+      "objectId": [["objectId", -1]],
+      "candid": [["candid", -1]],
+      "pid": [["candidate.pid", 1]],
+      "objectId_pid": [["objectId", -1],
+                       ["candidate.pid", 1]],
+      "pdiffimfilename": [["candidate.pdiffimfilename", 1]],
+      "jd_programid_programpi": [["candidate.jd", 1],
+                                 ["candidate.programid", 1],
+                                 ["candidate.programpi", 1]],
+      "jd_braai_candid": [["candidate.jd", -1],
+                          ["classifications.braai", -1],
+                          ["candid", -1]],
+      "jd_drb_candid": [["candidate.jd", -1],
+                        ["candidate.drb", -1],
+                        ["candid", -1]],
+      "jd_braai_magpsf_isdiffpos_ndethist": [["candidate.jd", 1],
+                                             ["classifications.braai", 1],
+                                             ["candidate.magpsf", 1],
+                                             ["candidate.isdiffpos", 1],
+                                             ["candidate.ndethist", 1]],
+      "jd_field_drb_ndethhist_magpsf_isdiffpos_objectId": [["candidate.jd", 1],
+                                                           ["candidate.field", 1],
+                                                           ["candidate.rb", 1],
+                                                           ["candidate.drb", 1],
+                                                           ["candidate.ndethist", 1],
+                                                           ["candidate.magpsf", 1],
+                                                           ["candidate.isdiffpos", 1],
+                                                           ["objectId", -1]]
+    }
   },
 
   "ml_models": {

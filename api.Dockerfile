@@ -9,7 +9,7 @@ RUN mkdir -p /app /data /data/logs /_tmp
 # copy over the secrets and the code
 #COPY ["secrets.json", "kowalski/*_api.*", "kowalski/generate_secrets.py",\
 #      "kowalski/middlewares.py", "kowalski/utils.py", "kowalski/api.py",\
-#      "tests/test_api.py",
+#      "tests/test_api.py",\
 #      "/app/"]
 COPY ["secrets.json", "kowalski/*_api.*", "kowalski/generate_secrets.py",\
       "kowalski/middlewares.py", "kowalski/utils.py",\

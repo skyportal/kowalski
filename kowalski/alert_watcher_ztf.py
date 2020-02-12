@@ -103,10 +103,8 @@ class EopError(AlertError):
         The Kafka message result from consumer.poll().
     """
     def __init__(self, msg):
-        message = 'topic:%s, partition:%d, status:end, ' \
-                  'offset:%d, key:%s, time:%.3f\n' \
-                  % (msg.topic(), msg.partition(),
-                     msg.offset(), str(msg.key()), time.time())
+        message = f'{time_stamp()}, topic:{msg.topic()}, partition:{msg.partition()}, '\
+                  f'status:end, offset:{msg.offset()}, key:{str(msg.key())}\n'
         self.message = message
 
     def __str__(self):
@@ -142,8 +140,8 @@ class AlertConsumer(object):
                     print(time_stamp(), 'all partitions got disconnected, killing thread')
                     sys.exit()
                 else:
-                    print(time_stamp(), '{:s}: disconnected from partition.'.format(_self.topic),
-                          'total:', self.num_disconnected_partitions)
+                    print(time_stamp(), f'{_self.topic}: disconnected from partition.',
+                          'total:', _self.num_disconnected_partitions)
 
         # 'error_cb': error_cb
         kwargs['error_cb'] = error_cb
@@ -156,64 +154,24 @@ class AlertConsumer(object):
             for part in partitions:
                 # -2 stands for beginning and -1 for end
                 part.offset = -2
-                # keep number of partitions. when reaching  end of last partition, kill thread and start from beginning
+                # keep number of partitions. when reaching end of last partition, kill thread and start from beginning
                 _self.num_partitions += 1
                 print(consumer.get_watermark_offsets(part))
 
         self.consumer.subscribe([topic], on_assign=on_assign)
-        # self.consumer.subscribe([topic])
 
-        # MongoDB: todo: -> config
         self.config = config
 
-        self.collection_alerts = 'ZTF_alerts'
-        self.collection_alerts_aux = 'ZTF_alerts_aux'
-
-        # if 'test' in topic:
-        #     # got test data?
-        #     self.collection_alerts = self.collection_alerts + '_test'
-        #     self.collection_alerts_aux = self.collection_alerts_aux + '_test'
+        # MongoDB collections to store the alerts:
+        self.collection_alerts = self.config['database']['collection_alerts_ztf']
+        self.collection_alerts_aux = self.config['database']['collection_alerts_ztf_aux']
 
         self.db = None
         self.connect_to_db()
 
-        # create indexes todo: -> config
-        self.db['db'][self.collection_alerts].create_index([('coordinates.radec_geojson', '2dsphere'),
-                                                            ('candid', pymongo.DESCENDING)], background=True)
-        self.db['db'][self.collection_alerts].create_index([('coordinates.radec_geojson', '2dsphere'),
-                                                            ('objectId', pymongo.DESCENDING)], background=True)
-        self.db['db'][self.collection_alerts].create_index([('objectId', pymongo.ASCENDING)], background=True)
-        self.db['db'][self.collection_alerts].create_index([('candid', pymongo.ASCENDING)], background=True)
-        self.db['db'][self.collection_alerts].create_index([('candidate.pid', pymongo.ASCENDING)], background=True)
-        self.db['db'][self.collection_alerts].create_index([('objectId', pymongo.DESCENDING),
-                                                            ('candidate.pid', pymongo.ASCENDING)], background=True)
-        self.db['db'][self.collection_alerts].create_index([('candidate.pdiffimfilename', pymongo.ASCENDING)],
-                                                           background=True)
-        self.db['db'][self.collection_alerts].create_index([('candidate.jd', pymongo.ASCENDING),
-                                                            ('candidate.programid', pymongo.ASCENDING),
-                                                            ('candidate.programpi', pymongo.ASCENDING)],
-                                                           background=True)
-        self.db['db'][self.collection_alerts].create_index([('candidate.jd', pymongo.DESCENDING),
-                                                            ('classifications.braai', pymongo.DESCENDING),
-                                                            ('candid', pymongo.DESCENDING)],
-                                                           background=True)
-        self.db['db'][self.collection_alerts].create_index([('candidate.jd', 1),
-                                                            ('classifications.braai', 1),
-                                                            ('candidate.magpsf', 1),
-                                                            ('candidate.isdiffpos', 1),
-                                                            ('candidate.ndethist', 1)],
-                                                           name='jd__braai__magpsf__isdiffpos__ndethist',
-                                                           background=True)
-        self.db['db'][self.collection_alerts].create_index([('candidate.jd', 1),
-                                                            ('candidate.field', 1),
-                                                            ('candidate.rb', 1),
-                                                            ('candidate.drb', 1),
-                                                            ('candidate.ndethist', 1),
-                                                            ('candidate.magpsf', 1),
-                                                            ('candidate.isdiffpos', 1),
-                                                            ('objectId', 1)],
-                                                           name='jd_field_rb_drb_braai_ndethhist_magpsf_isdiffpos',
-                                                           background=True)
+        # create indexes
+        for index in self.config['indexes'][self.collection_alerts]:
+            self.db['db'][self.collection_alerts].create_index(index, background=True)
 
         # ML models:
         self.ml_models = dict()
@@ -223,32 +181,31 @@ class AlertConsumer(object):
                 self.ml_models[m] = {'model': load_model(f'{config["path"]["path_ml_models"]}/{m}_{m_v}.h5'),
                                      'version': m_v}
             except Exception as e:
-                print(time_stamp(), f'Error loading ML model {m}')
-                traceback.print_exc()
-                print(e)
+                print(time_stamp(), f'Error loading ML model {m}: {str(e)}')
+                _err = traceback.format_exc()
+                print(_err)
                 continue
 
-        # todo: user-defined alert filters
+        # todo: load user-defined alert filters
+        self.filters = dict()
 
     def connect_to_db(self):
         """
-            Connect to mongo
+            Connect to mongodb
         :return:
         """
 
-        _config = self.config
-
         try:
             # there's only one instance of DB, it's too big to be replicated
-            _client = pymongo.MongoClient(host=_config['database']['host'],
-                                          port=_config['database']['port'], connect=False)
+            _client = pymongo.MongoClient(host=self.config['database']['host'],
+                                          port=self.config['database']['port'], connect=False)
             # grab main database:
-            _db = _client[_config['database']['db']]
+            _db = _client[self.config['database']['db']]
         except Exception as _e:
             raise ConnectionRefusedError
         try:
             # authenticate
-            _db.authenticate(_config['database']['user'], _config['database']['pwd'])
+            _db.authenticate(self.config['database']['user'], self.config['database']['pwd'])
         except Exception as _e:
             raise ConnectionRefusedError
 
@@ -363,9 +320,7 @@ class AlertConsumer(object):
             print(time_stamp(), 'Caught error: msg is None')
 
         if msg.error():
-            print('Caught error:', msg.error())
-            # if msg.value() is not None:
-            #     print(time_stamp(), msg.value())
+            print(time_stamp(), 'Caught error:', msg.error())
             raise EopError(msg)
 
         elif msg is not None:
@@ -395,8 +350,6 @@ class AlertConsumer(object):
 
                     # ingest decoded avro packet into db
                     alert, prv_candidates = self.alert_mongify(record)
-
-                    # alert filters:
 
                     # ML models:
                     scores = alert_filter__ml(record, ml_models=self.ml_models)
@@ -544,7 +497,8 @@ def make_triplet(alert, to_tpu: bool = False):
 
 
 def alert_filter__ml(alert, ml_models: dict = None):
-    """Filter to apply to each alert.
+    """
+        Execute ML models
     """
 
     scores = dict()
@@ -579,7 +533,8 @@ else:
 
 
 def alert_filter__xmatch(db, alert):
-    """Filter to apply to each alert.
+    """
+        Cross-match alerts
     """
 
     xmatches = dict()
@@ -689,7 +644,8 @@ def alert_filter__xmatch_clu(database, alert, size_margin=3, clu_version='CLU_20
 
 
 def listener(topic, bootstrap_servers='', offset_reset='earliest',
-             group=None, path_alerts=None, path_tess=None, save_packets=True):
+             group=None, path_alerts=None, path_tess=None, save_packets=True,
+             test=False):
     """
         Listen to a topic
     :param topic:
@@ -697,6 +653,9 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest',
     :param offset_reset:
     :param group:
     :param path_alerts:
+    :param path_tess:
+    :param save_packets:
+    :param test: when testing, terminate once reached end of partition
     :return:
     """
 
@@ -707,7 +666,7 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest',
     if group is not None:
         conf['group.id'] = group
     else:
-        conf['group.id'] = os.environ['HOSTNAME'] if 'HOSTNAME' in os.environ else 'kowalski.caltech.edu'
+        conf['group.id'] = os.environ.get('HOSTNAME', 'kowalski')
 
     # make it unique:
     conf['group.id'] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
@@ -726,16 +685,15 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest',
 
         except EopError as e:
             # Write when reaching end of partition
-            # sys.stderr.write(e.message)
             print(time_stamp(), e.message)
+            if test:
+                # when testing, terminate once reached end of partition:
+                sys.exit()
         except IndexError:
-            # sys.stderr.write('%% Data cannot be decoded\n')
             print(time_stamp(), '%% Data cannot be decoded\n')
         except UnicodeDecodeError:
-            # sys.stderr.write('%% Unexpected data format received\n')
             print(time_stamp(), '%% Unexpected data format received\n')
         except KeyboardInterrupt:
-            # sys.stderr.write('%% Aborted by user\n')
             print(time_stamp(), '%% Aborted by user\n')
             sys.exit()
         except Exception as e:
@@ -790,7 +748,7 @@ def main(obs_date=None, save_packets=True, test=False):
                                                                  args=(t, bootstrap_servers,
                                                                        offset_reset, group,
                                                                        path_alerts, path_tess,
-                                                                       save_packets))
+                                                                       save_packets, test))
                     topics_on_watch[t].daemon = True
                     topics_on_watch[t].start()
 
@@ -808,6 +766,12 @@ def main(obs_date=None, save_packets=True, test=False):
                         print(time_stamp(), 'Failed to perform health check', str(_e))
                         pass
 
+            if test:
+                # when testing, wait for topic listeners to exit, then sys.exit
+                for t in topics_on_watch:
+                    topics_on_watch[t].join()
+                sys.exit()
+
         except Exception as e:
             print(time_stamp(), str(e))
             _err = traceback.format_exc()
@@ -824,7 +788,6 @@ if __name__ == '__main__':
     parser.add_argument('--test', help='listen to the test stream', action='store_true')
 
     args = parser.parse_args()
-    # print(obs_date)
 
     main(obs_date=args.obsdate,
          save_packets=not args.noio,

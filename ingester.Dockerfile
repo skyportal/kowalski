@@ -19,6 +19,7 @@ RUN tar -xzf /kafka/kafka_2.11-2.2.0.tgz
 # copy over the secrets and the code
 #COPY ["secrets.json", "kowalski/*_ingester.*", "kowalski/utils.py",\
 #      "kowalski/alert_watcher_ztf.py",\
+#      "tests/test_ingester.py",\
 #      "/app/"]
 COPY ["secrets.json", "kowalski/*_ingester.*", "kowalski/utils.py",\
       "/app/"]
@@ -32,7 +33,7 @@ RUN pip install -r /app/requirements_ingester.txt --no-cache-dir
 COPY kowalski/alert_watcher_ztf.py /app/
 
 # run tests
-#RUN python -m pytest -s alert_watcher_ztf.py
+#RUN python -m pytest -s test_ingester.py
 
 # run container
 CMD /usr/local/bin/supervisord -n -c supervisord_ingester.conf
