@@ -9,6 +9,7 @@ RUN mkdir -p /app /data /data/logs /_tmp
 # copy over the secrets and the code
 #COPY ["secrets.json", "kowalski/*_api.*", "kowalski/generate_secrets.py",\
 #      "kowalski/middlewares.py", "kowalski/utils.py", "kowalski/api.py",\
+#      "tests/test_api.py",
 #      "/app/"]
 COPY ["secrets.json", "kowalski/*_api.*", "kowalski/generate_secrets.py",\
       "kowalski/middlewares.py", "kowalski/utils.py",\
@@ -23,8 +24,8 @@ RUN pip install -r /app/requirements_api.txt --no-cache-dir && python generate_s
 COPY kowalski/api.py /app/
 
 # run tests
-#RUN python -m pytest -s api.py
+#RUN python -m pytest -s test_api.py
 
 # run container
-CMD /usr/local/bin/supervisord -n -c supervisord_api.conf
 #CMD python api.py
+CMD /usr/local/bin/supervisord -n -c supervisord_api.conf
