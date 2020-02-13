@@ -31,6 +31,11 @@ Create `secrets.json` with the secrets:
     "bootstrap.test.servers": "localhost:9092",
     "zookeeper.test": "localhost:2181"
   },
+  
+  "skyportal": {
+    "username": "kowalski",
+    "password": "password"
+  },
 
   "ztf_depot": {
     "username": "username",

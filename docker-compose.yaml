@@ -46,7 +46,7 @@ services:
       - "27017"
     # fixme:
     ports:
-      - "27023:27017"
+      - "27027:27017"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=mongoadmin
       - MONGO_INITDB_ROOT_PASSWORD=mongoadminsecret
