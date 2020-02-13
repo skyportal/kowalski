@@ -13,7 +13,7 @@ services:
       context: .
       dockerfile: api.Dockerfile
 #    entrypoint: python -m pytest -s test_api.py
-    image: kowalski_api:latest
+    image: dmitryduev/kowalski_api:latest
     volumes:
       - data:/data
     expose:
@@ -33,7 +33,7 @@ services:
       dockerfile: ingester.Dockerfile
 #    entrypoint: supervisord -n -c supervisord_ingester.conf
 #    entrypoint: python -m pytest -s test_ingester.py
-    image: kowalski_ingester:latest
+    image: dmitryduev/kowalski_ingester:latest
     volumes:
       - data:/data
     links:
