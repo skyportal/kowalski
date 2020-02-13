@@ -38,6 +38,8 @@ class TestIngester(object):
         if not os.path.exists(config['path']['path_logs']):
             os.makedirs(config['path']['path_logs'])
 
+        print(f'{time_stamp()}: Starting up ZooKeeper at localhost:2181')
+
         # start ZooKeeper in the background (using Popen and not run with shell=True for safety)
         cmd_zookeeper = [os.path.join(config['path']['path_kafka'], 'bin', 'zookeeper-server-start.sh'),
                          os.path.join(config['path']['path_kafka'], 'config', 'zookeeper.properties')]
@@ -48,6 +50,8 @@ class TestIngester(object):
 
         # take a nap while it fires up
         time.sleep(3)
+
+        print(f'{time_stamp()}: Starting up Kafka Server at localhost:9092')
 
         # start the Kafka server:
         cmd_kafka_server = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-server-start.sh'),
@@ -86,6 +90,8 @@ class TestIngester(object):
             time.sleep(1)
 
         if topic_name not in topics:
+            print(f'{time_stamp()}: Creating topic {topic_name}')
+
             cmd_create_topic = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
                                 "--create",
                                 "--bootstrap-server", config['kafka']['bootstrap.test.servers'],
@@ -94,6 +100,8 @@ class TestIngester(object):
                                 "--topic", topic_name]
             with open(os.path.join(config['path']['path_logs'], 'create_topic.stdout'), 'w') as stdout_create_topic:
                 p_create_topic = subprocess.run(cmd_create_topic, stdout=stdout_create_topic, stderr=subprocess.STDOUT)
+
+        print(f'{time_stamp()}: Starting up Kafka Producer')
 
         # spin up Kafka producer
         producer = Producer({'bootstrap.servers': config['kafka']['bootstrap.test.servers']})
@@ -115,9 +123,11 @@ class TestIngester(object):
                 # callbacks to be triggered.
         producer.flush()
 
+        print(f'{time_stamp()}: Starting up Ingester')
+
         # digest and ingest
         ingester(obs_date=date, save_packets=False, test=True)
-        print('All done!')
+        print(f'{time_stamp()}: All done!')
 
         # shut down Kafka server and ZooKeeper
         time.sleep(15)

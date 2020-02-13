@@ -33,6 +33,8 @@ Create `secrets.json` with the secrets:
   },
   
   "skyportal": {
+    "host": "0.0.0.0",
+    "port": 443,
     "username": "kowalski",
     "password": "password"
   },
