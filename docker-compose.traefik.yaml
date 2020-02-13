@@ -10,7 +10,7 @@ services:
     image: "traefik:2.1"
     container_name: "traefik"
     command:
-#      - "--api.insecure=true"
+      - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
@@ -26,7 +26,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
-#      - "8080:8080"
+      - "8080:8080"
     volumes:
       # Create a letsencrypt dir within the folder where the docker-compose file is
       - "./letsencrypt:/letsencrypt"
