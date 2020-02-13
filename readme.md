@@ -10,7 +10,7 @@ git clone https://github.com/dmitryduev/kowalski-dev.git kowalski
 cd kowalski
 ```
 
-Create `secrets.json` with the secrets:
+Create `secrets.json` with the secrets. Come up with strong passwords!
 ```json
 {
   "server" : {
@@ -50,18 +50,41 @@ Create `secrets.json` with the secrets:
     "password": "password"
   }
 }
-
 ```
+
+Copy `docker-compose.yaml` to e.g. `docker-compose.deploy.yaml` and change the environment variables for `mongo` 
+to match `admin_*` under `database` in `secrets.json`:
+```bash
+cp docker-compose.yaml docker-compose.deploy.yaml
+```
+
+### docker-compose
 
 Run `docker-compose` to fire up `kowalski`:
 ```bash
-docker-compose up --build -d
+docker-compose -f docker-compose.deploy.yaml up --build -d
 ```
 
 Shut down `kowalski`:
 ```bash
 docker-compose down
 ```
+
+### kubernetes
+
+Use [`kompose`](https://kompose.io/):
+
+To create services and deployments for k8s:
+```bash
+kompose -f docker-compose.deploy.yaml convert
+kubectl create -f ...
+```
+
+Alternatively, simply do:
+```bash
+kompose -f docker-compose.deploy.yaml up
+```
+
 
 ## Run tests
 
