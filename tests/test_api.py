@@ -179,7 +179,7 @@ class TestAPIs(object):
 
     async def test_query_find(self, aiohttp_client):
         """
-            Test {"query_type": "find_one", ...}: /api/queries
+            Test {"query_type": "find", ...}: /api/queries
         :param aiohttp_client:
         :return:
         """
@@ -219,6 +219,47 @@ class TestAPIs(object):
         assert 'data' in result
         # should always return a list, even if it's empty
         assert isinstance(result['data'], list)
+
+    async def test_query_aggregate(self, aiohttp_client):
+        """
+            Test {"query_type": "aggregate", ...}: /api/queries
+        :param aiohttp_client:
+        :return:
+        """
+        client = await aiohttp_client(await app_factory())
+
+        # authorize
+        _auth = await client.post(f'/api/auth',
+                                  json={"username": config['server']['admin_username'],
+                                        "password": config['server']['admin_password']})
+        assert _auth.status == 200
+        credentials = await _auth.json()
+        assert credentials['status'] == 'success'
+        assert 'token' in credentials
+
+        access_token = credentials['token']
+
+        headers = {'Authorization': access_token}
+
+        collection = 'ZTF_alerts'
+
+        # check query without book-keeping
+        qu = {"query_type": "aggregate",
+              "query": {
+                  "catalog": collection,
+                  "pipeline": [{'$match': {'candid': 1127561445515015011}},
+                               {"$project": {"_id": 0, "candid": 1}}],
+              },
+              "kwargs": {"max_time_ms": 2000}
+              }
+        # print(qu)
+        resp = await client.post('/api/queries', json=qu, headers=headers, timeout=5)
+        assert resp.status == 200
+        result = await resp.json()
+        # print(result)
+        assert result['status'] == 'success'
+        assert result['message'] == 'query successfully executed'
+        assert 'data' in result
 
     async def test_query_info(self, aiohttp_client):
         """
