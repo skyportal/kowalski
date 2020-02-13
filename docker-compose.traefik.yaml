@@ -50,7 +50,7 @@ services:
       - "traefik.enable=true"
       # The domain the service will respond to
       - "traefik.http.routers.api.rule=Host(`private.caltech.edu`)"
-      - "traefik.http.routers.api.loadbalancer.server.port=4000"
+      - "traefik.http.services.api.loadbalancer.server.port=4000"
       # Allow request only from the predefined entry point named "websecure"
       - "traefik.http.routers.api.entrypoints=websecure"
       # Uses the Host rule to define which certificate to issue
