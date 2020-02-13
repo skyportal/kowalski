@@ -1,5 +1,9 @@
 version: "3.3"
 
+volumes:
+  mongodb:
+  data:
+
 services:
 
   traefik:
@@ -27,3 +31,63 @@ services:
       # Create a letsencrypt dir within the folder where the docker-compose file is
       - "./letsencrypt:/letsencrypt"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  api:
+    build:
+      context: .
+      dockerfile: api.Dockerfile
+    #    entrypoint: python -m pytest -s test_api.py
+    image: dmitryduev/kowalski_api:latest
+    volumes:
+      - data:/data
+    expose:
+      - "4000"
+    # fixme: comment out ports if deploying behind traefik
+#    ports:
+#      - "4000:4000"
+    labels:
+      # Explicitly tell Traefik to expose this container
+      - "traefik.enable=true"
+      # The domain the service will respond to
+      - "traefik.http.routers.api.rule=Host(`private.caltech.edu`)"
+      - "traefik.http.routers.api.loadbalancer.server.port=4000"
+      # Allow request only from the predefined entry point named "websecure"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      # Uses the Host rule to define which certificate to issue
+      - "traefik.http.routers.api.tls.certresolver=myhttpchallenge"
+    links:
+      - mongo:kowalski-mongo
+    restart: always
+    depends_on:
+      - mongo
+
+    ingester:
+      build:
+        context: .
+        dockerfile: ingester.Dockerfile
+      #    entrypoint: supervisord -n -c supervisord_ingester.conf
+      #    entrypoint: python -m pytest -s test_ingester.py
+      image: dmitryduev/kowalski_ingester:latest
+      volumes:
+        - data:/data
+      links:
+        - mongo:kowalski-mongo
+      restart: always
+      depends_on:
+        - mongo
+
+    mongo:
+      image: mongo:latest
+      expose:
+        - "27017"
+      # fixme:
+      ports:
+        - "27027:27017"
+      environment:
+        - MONGO_INITDB_ROOT_USERNAME=mongoadmin
+        - MONGO_INITDB_ROOT_PASSWORD=mongoadminsecret
+      volumes:
+        - mongodb:/data/db
+      restart: always
+      depends_on:
+        - traefik
