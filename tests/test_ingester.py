@@ -83,6 +83,7 @@ class TestIngester(object):
                                           stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')[:-1]
             print(f'{time_stamp()}: {remove_topic}')
             print(f'{time_stamp()}: Removed topic: {topic_name}')
+            time.sleep(1)
 
         if topic_name not in topics:
             cmd_create_topic = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
