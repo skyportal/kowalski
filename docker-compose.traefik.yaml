@@ -61,31 +61,33 @@ services:
     depends_on:
       - mongo
 
-    ingester:
-      build:
-        context: .
-        dockerfile: ingester.Dockerfile
-      #    entrypoint: supervisord -n -c supervisord_ingester.conf
-      #    entrypoint: python -m pytest -s test_ingester.py
-      image: dmitryduev/kowalski_ingester:latest
-      volumes:
-        - data:/data
-      links:
-        - mongo:kowalski-mongo
-      restart: always
-      depends_on:
-        - mongo
+  ingester:
+    build:
+      context: .
+      dockerfile: ingester.Dockerfile
+    #    entrypoint: supervisord -n -c supervisord_ingester.conf
+    #    entrypoint: python -m pytest -s test_ingester.py
+    image: dmitryduev/kowalski_ingester:latest
+    volumes:
+      - data:/data
+    links:
+      - mongo:kowalski-mongo
+    restart: always
+    depends_on:
+      - mongo
 
-    mongo:
-      image: mongo:latest
-      expose:
-        - "27017"
-      # fixme:
-      ports:
-        - "27027:27017"
-      environment:
-        - MONGO_INITDB_ROOT_USERNAME=mongoadmin
-        - MONGO_INITDB_ROOT_PASSWORD=mongoadminsecret
-      volumes:
-        - mongodb:/data/db
-      restart: always
+  mongo:
+    image: mongo:latest
+    expose:
+      - "27017"
+    # fixme:
+    ports:
+      - "27027:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=mongoadmin
+      - MONGO_INITDB_ROOT_PASSWORD=mongoadminsecret
+    volumes:
+      - mongodb:/data/db
+    restart: always
+    depends_on:
+      - traefik
