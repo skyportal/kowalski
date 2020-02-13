@@ -572,8 +572,12 @@ cone_search_radius_clu *= np.pi / 180.0
 def alert_filter__xmatch_clu(database, alert, size_margin=3, clu_version='CLU_20190625'):
     """
         Filter to apply to each alert.
-        :param size_margin: multiply galaxy size by this much before looking for a match
-        :param clu_version: CLU catalog version
+
+    :param database:
+    :param alert:
+    :param size_margin: multiply galaxy size by this much before looking for a match
+    :param clu_version: CLU catalog version
+    :return:
     """
 
     xmatches = dict()
@@ -704,6 +708,14 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest',
 
 
 def ingester(obs_date=None, save_packets=True, test=False):
+    """
+        Watchdog for topic listeners
+
+    :param obs_date:
+    :param save_packets:
+    :param test:
+    :return:
+    """
 
     topics_on_watch = dict()
 

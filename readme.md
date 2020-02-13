@@ -65,14 +65,12 @@ docker-compose down
 
 Ingester:
 ```bash
-docker exec -it kowalski_ingester_1 /bin/bash
-python -m pytest -s test_ingester.py
+docker exec -it kowalski_ingester_1 python -m pytest -s test_ingester.py
 ```
 
 API:
 ```bash
-docker exec -it kowalski_api_1 /bin/bash
-python -m pytest -s test_api.py
+docker exec -it kowalski_api_1 python -m pytest -s test_api.py
 ```
 
 TODO: The first test ingests 11 (real!) test alerts. Try out a few queries:
