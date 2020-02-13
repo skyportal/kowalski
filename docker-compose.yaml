@@ -23,11 +23,12 @@ services:
       # Explicitly tell Traefik to expose this container
       - "traefik.enable=true"
       # The domain the service will respond to
-      - "traefik.http.routers.whoami.rule=Host(`private.caltech.edu`)"
+      - "traefik.http.routers.api.rule=Host(`private.caltech.edu`)"
+      - "traefik.http.routers.api.loadbalancer.server.port=4000"
       # Allow request only from the predefined entry point named "websecure"
-      - "traefik.http.routers.whoami.entrypoints=websecure"
+      - "traefik.http.routers.api.entrypoints=websecure"
       # Uses the Host rule to define which certificate to issue
-      - "traefik.http.routers.whoami.tls.certresolver=myhttpchallenge"
+      - "traefik.http.routers.api.tls.certresolver=myhttpchallenge"
     links:
       - mongo:kowalski-mongo
     restart: always
