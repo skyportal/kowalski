@@ -6,8 +6,6 @@ volumes:
 
 services:
 
-  # todo: traefik 2.0
-
   api:
     build:
       context: .
