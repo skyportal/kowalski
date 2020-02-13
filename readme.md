@@ -63,16 +63,16 @@ docker-compose down
 
 ## Run tests
 
-API:
-```bash
-docker exec -it kowalski_api_1 /bin/bash
-python -m pytest -s test_api.py
-```
-
 Ingester:
 ```bash
 docker exec -it kowalski_ingester_1 /bin/bash
 python -m pytest -s test_ingester.py
+```
+
+API:
+```bash
+docker exec -it kowalski_api_1 /bin/bash
+python -m pytest -s test_api.py
 ```
 
 ## Miscellaneous
