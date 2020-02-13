@@ -605,8 +605,7 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
             kwargs = {kk: vv for kk, vv in _query['kwargs'].items() if kk in known_kwargs}
             kwargs['comment'] = str(_query['user'])
 
-            _select = db[_query['query']['catalog']].estimated_document_count(_query['query']['filter'],
-                                                                              maxTimeMS=max_time_ms)
+            _select = db[_query['query']['catalog']].estimated_document_count(maxTimeMS=max_time_ms)
 
             query_result = await _select
 

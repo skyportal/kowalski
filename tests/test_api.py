@@ -211,6 +211,81 @@ class TestAPIs(object):
         assert result['message'] == 'query successfully executed'
         assert 'data' in result
 
+    async def test_query_count_documents(self, aiohttp_client):
+        """
+            Test {"query_type": "count_documents", ...}: /api/queries
+        :param aiohttp_client:
+        :return:
+        """
+        client = await aiohttp_client(await app_factory())
+
+        # authorize
+        _auth = await client.post(f'/api/auth',
+                                  json={"username": config['server']['admin_username'],
+                                        "password": config['server']['admin_password']})
+        assert _auth.status == 200
+        credentials = await _auth.json()
+        assert credentials['status'] == 'success'
+        assert 'token' in credentials
+
+        access_token = credentials['token']
+
+        headers = {'Authorization': access_token}
+
+        collection = 'ZTF_alerts'
+
+        # check catalog_names info
+        qu = {"query_type": "count_documents",
+              "query": {"catalog": collection,
+                        "filter": {"candid": {"$lt": 0}}
+                        }
+              }
+        # print(qu)
+        resp = await client.post('/api/queries', json=qu, headers=headers, timeout=5)
+        assert resp.status == 200
+        result = await resp.json()
+        # print(result)
+        assert result['status'] == 'success'
+        assert result['message'] == 'query successfully executed'
+        assert 'data' in result
+        assert result['data'] == 0
+
+    async def test_query_estimated_document_count(self, aiohttp_client):
+        """
+            Test {"query_type": "estimated_document_count", ...}: /api/queries
+        :param aiohttp_client:
+        :return:
+        """
+        client = await aiohttp_client(await app_factory())
+
+        # authorize
+        _auth = await client.post(f'/api/auth',
+                                  json={"username": config['server']['admin_username'],
+                                        "password": config['server']['admin_password']})
+        assert _auth.status == 200
+        credentials = await _auth.json()
+        assert credentials['status'] == 'success'
+        assert 'token' in credentials
+
+        access_token = credentials['token']
+
+        headers = {'Authorization': access_token}
+
+        collection = 'ZTF_alerts'
+
+        # check catalog_names info
+        qu = {"query_type": "estimated_document_count",
+              "query": {"catalog": collection, "filter": {"candid": {"$lt": 0}}}}
+        # print(qu)
+        resp = await client.post('/api/queries', json=qu, headers=headers, timeout=5)
+        assert resp.status == 200
+        result = await resp.json()
+        print(result)
+        assert result['status'] == 'success'
+        assert result['message'] == 'query successfully executed'
+        assert 'data' in result
+        # assert result['data'] == 0
+
     # test raising errors
 
     async def test_query_unauthorized(self, aiohttp_client):
