@@ -119,6 +119,6 @@ class TestIngester(object):
         print('All done!')
 
         # shut down Kafka server and ZooKeeper
-        time.sleep(5)
+        time.sleep(15)
         p_zookeeper.kill()
         p_kafka_server.kill()
