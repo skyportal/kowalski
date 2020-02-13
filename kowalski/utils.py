@@ -62,8 +62,8 @@ async def init_db(config, verbose=True):
     """
         Initialize db if necessary: create the sole non-admin user
     """
-    _client = AsyncIOMotorClient(username=config['database']['admin'],
-                                 password=config['database']['admin_pwd'],
+    _client = AsyncIOMotorClient(username=config['database']['admin_username'],
+                                 password=config['database']['admin_password'],
                                  host=config['database']['host'],
                                  port=config['database']['port'])
 
@@ -75,7 +75,7 @@ async def init_db(config, verbose=True):
     # print(user_ids)
 
     db_name = config['database']['db']
-    username = config['database']['user']
+    username = config['database']['username']
 
     # print(f'{db_name}.{username}')
     # print(user_ids)
@@ -83,8 +83,8 @@ async def init_db(config, verbose=True):
     _mongo = _client[db_name]
 
     if f'{db_name}.{username}' not in user_ids:
-        await _mongo.command('createUser', config['database']['user'],
-                             pwd=config['database']['pwd'], roles=['readWrite'])
+        await _mongo.command('createUser', config['database']['username'],
+                             pwd=config['database']['password'], roles=['readWrite'])
         if verbose:
             print('Successfully initialized db')
 

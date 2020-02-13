@@ -1061,7 +1061,7 @@ async def app_factory():
     await init_db(config=config)
 
     # Database connection
-    client = AsyncIOMotorClient(f"mongodb://{config['database']['user']}:{config['database']['pwd']}@" +
+    client = AsyncIOMotorClient(f"mongodb://{config['database']['username']}:{config['database']['password']}@" +
                                 f"{config['database']['host']}:{config['database']['port']}/{config['database']['db']}",
                                 maxPoolSize=config['database']['max_pool_size'])
     mongo = client[config['database']['db']]

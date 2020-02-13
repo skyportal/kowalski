@@ -205,7 +205,7 @@ class AlertConsumer(object):
             raise ConnectionRefusedError
         try:
             # authenticate
-            _db.authenticate(self.config['database']['user'], self.config['database']['pwd'])
+            _db.authenticate(self.config['database']['username'], self.config['database']['password'])
         except Exception as _e:
             raise ConnectionRefusedError
 
