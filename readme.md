@@ -65,7 +65,7 @@ docker-compose down
 
 API:
 ```bash
-docker exec -it kowalski_app_1 /bin/bash
+docker exec -it kowalski_api_1 /bin/bash
 python -m pytest -s test_api.py
 ```
 
