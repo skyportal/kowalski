@@ -72,7 +72,9 @@ docker-compose down
 
 ### kubernetes
 
-Use [`kompose`](https://kompose.io/):
+Use [`kompose`](https://kompose.io/). 
+It will try to upload images to your space on Docker Hub 
+so you need to replace `dmitryduev` with your docker username in `docker-compose.deploy.yaml`.
 
 To create services and deployments for k8s:
 ```bash
