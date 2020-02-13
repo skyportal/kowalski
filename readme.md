@@ -75,6 +75,43 @@ docker exec -it kowalski_api_1 /bin/bash
 python -m pytest -s test_api.py
 ```
 
+TODO: The first test ingests 11 (real!) test alerts. Try out a few queries:
+
+`/api/auth`
+
+Headers:
+```json
+{"Content-Type": "application/json"}
+```
+
+Body:
+```json
+{
+    "username": "admin",
+    "password": "admin"
+}
+```
+
+
+`/api/queries`
+
+Headers:
+```json
+{"Authorization": <TOKEN>, "Content-Type": "application/json"}
+```
+
+Body:
+```json
+{
+    "query_type": "find",
+    "query": {
+        "catalog": "ZTF_alerts",
+    	"filter": {"classifications.braai": {"$gt": 0.9}},
+    	"projection": {"_id": 0, "candid": 1, "classifications.braai": 1}
+    }
+}
+```
+
 ## Miscellaneous
 
 Build and run a dedicated container for the Kafka producer (for testing):
