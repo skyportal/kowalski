@@ -712,9 +712,11 @@ def ingester(obs_date=None, save_packets=True, test=False):
         try:
             # get kafka topic names with kafka-topics command
             if not test:
+                # Production Kafka stream at IPAC
                 kafka_cmd = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
                              '--zookeeper', config['kafka']['zookeeper'], '-list']
             else:
+                # Local test stream
                 kafka_cmd = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
                              '--zookeeper', config['kafka']['zookeeper.test'], '-list']
             # print(kafka_cmd)
@@ -727,10 +729,9 @@ def ingester(obs_date=None, save_packets=True, test=False):
             else:
                 datestr = obs_date
             # as of 20180403 naming convention is ztf_%Y%m%d_programidN
-            # topics_tonight = [t for t in topics if (datestr in t) and ('programid' in t)]
             # exclude ZUDS, ingest separately
             topics_tonight = [t for t in topics if (datestr in t) and ('programid' in t) and ('zuds' not in t)]
-            print(time_stamp(), topics_tonight)
+            print(f'{time_stamp()}: Topics: {topics_tonight}')
 
             for t in topics_tonight:
                 if t not in topics_on_watch:
@@ -767,10 +768,12 @@ def ingester(obs_date=None, save_packets=True, test=False):
                         pass
 
             if test:
-                # when testing, wait for topic listeners to exit, then sys.exit
+                # print('aloha')
+                time.sleep(10)
+                # when testing, wait for topic listeners to pull all the data, then break
                 for t in topics_on_watch:
-                    topics_on_watch[t].join()
-                sys.exit()
+                    topics_on_watch[t].kill()
+                break
 
         except Exception as e:
             print(time_stamp(), str(e))

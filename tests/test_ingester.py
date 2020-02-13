@@ -6,7 +6,7 @@ import subprocess
 import time
 
 from alert_watcher_ztf import ingester
-from utils import load_config
+from utils import load_config, time_stamp
 
 
 ''' load config and secrets '''
@@ -17,9 +17,9 @@ def delivery_report(err, msg):
     """ Called once for each message produced to indicate delivery result.
         Triggered by poll() or flush(). """
     if err is not None:
-        print(f'Message delivery failed: {err}')
+        print(f'{time_stamp()}: Message delivery failed: {err}')
     else:
-        print(f'Message delivered to {msg.topic()} [{msg.partition()}]')
+        print(f'{time_stamp()}: Message delivered to {msg.topic()} [{msg.partition()}]')
 
 
 class TestIngester(object):
@@ -65,14 +65,25 @@ class TestIngester(object):
         cmd_topics = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
                       '--zookeeper', config['kafka']['zookeeper.test'],
                       '-list']
-        # print(kafka_cmd)
 
         topics = subprocess.run(cmd_topics, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')[:-1]
-        print(topics)
+        print(f'{time_stamp()}: Found topics: {topics}')
 
         # create a test ZTF topic for the current UTC date
         date = datetime.datetime.utcnow().strftime("%Y%m%d")
         topic_name = f'ztf_{date}_programid1_test'
+
+        if topic_name in topics:
+            # topic previously created? remove first
+            cmd_remove_topic = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
+                                '--zookeeper', config['kafka']['zookeeper.test'],
+                                '--delete', '--topic', topic_name]
+            # print(kafka_cmd)
+            remove_topic = subprocess.run(cmd_remove_topic,
+                                          stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')[:-1]
+            print(f'{time_stamp()}: {remove_topic}')
+            print(f'{time_stamp()}: Removed topic: {topic_name}')
+
         if topic_name not in topics:
             cmd_create_topic = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
                                 "--create",
@@ -92,7 +103,7 @@ class TestIngester(object):
                 # Trigger any available delivery report callbacks from previous produce() calls
                 producer.poll(0)
 
-                print(f'Pushing {p}')
+                print(f'{time_stamp()}: Pushing {p}')
 
                 # Asynchronously produce a message, the delivery report callback
                 # will be triggered from poll() above, or flush() below, when the message has
@@ -105,8 +116,9 @@ class TestIngester(object):
 
         # digest and ingest
         ingester(obs_date=date, save_packets=False, test=True)
+        print('All done!')
 
         # shut down Kafka server and ZooKeeper
-        time.sleep(10)
+        time.sleep(5)
         p_zookeeper.kill()
         p_kafka_server.kill()

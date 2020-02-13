@@ -16,6 +16,9 @@ ADD http://apache.claz.org/kafka/2.2.0/kafka_2.11-2.2.0.tgz /kafka
 #ADD http://apache.claz.org/kafka/2.4.0/kafka_2.12-2.4.0.tgz /kafka
 RUN tar -xzf /kafka/kafka_2.11-2.2.0.tgz
 
+# Test Kafka server properties:
+COPY kowalski/server.properties /kafka_2.11-2.2.0/config/
+
 # ML models:
 ADD https://github.com/dmitryduev/kowalski/raw/master/kowalski/models/braai_d6_m9.h5 /app/models/
 
