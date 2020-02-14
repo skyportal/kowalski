@@ -12,11 +12,11 @@ async def auth_middleware(request, handler):
     :return:
     """
     request.user = None
-    # accept both "Authorization: Bearer <token>" and "Authorization: <token>" headers
     jwt_token = request.headers.get('authorization', None)
 
     if jwt_token:
         try:
+            # accept both "Authorization: Bearer <token>" and "Authorization: <token>" headers
             if 'bearer' in deepcopy(jwt_token).lower():
                 jwt_token = jwt_token.split()[1]
 
