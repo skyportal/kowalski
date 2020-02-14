@@ -1,4 +1,5 @@
 from aiohttp import web
+from copy import deepcopy
 import jwt
 
 
@@ -11,7 +12,10 @@ async def auth_middleware(request, handler):
     :return:
     """
     request.user = None
+    # accept both "Authorization: Bearer <token>" and "Authorization: <token>" headers
     jwt_token = request.headers.get('authorization', None)
+    if 'bearer' in deepcopy(jwt_token).lower():
+        jwt_token = jwt_token.split()[1]
 
     if jwt_token:
         try:
