@@ -169,7 +169,8 @@ This is implemented as an aggregation pipeline that first:
 - Removes the cutouts to reduce traffic
 - Joins the alert by its `objectId` with the corresponding entry in the `ZTF_alerts_aux` collection containing the 
 cross-matches and archival photometry
-The user-defined stages come after. In the example below, an alert gets selected if it has a high `drb` score and
+
+The user-defined stages come after that. In the example below, an alert gets selected if it has a high `drb` score and
 it has no match with the `CLU_20190625` catalog.
 
 ```json
