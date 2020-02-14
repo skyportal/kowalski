@@ -327,3 +327,32 @@ def in_ellipse(alpha, delta0, alpha1, delta01, d0, axis_ratio, PA0):
     t63 = t60 * t61 + t8 + t57 - t4 - t7 + t56 + t36
 
     return t63 > 0
+
+
+# Rotation matrix for the conversion : x_galactic = R * x_equatorial (J2000)
+# http://adsabs.harvard.edu/abs/1989A&A...218..325M
+RGE = np.array([[-0.054875539, -0.873437105, -0.483834992],
+                [+0.494109454, -0.444829594, +0.746982249],
+                [-0.867666136, -0.198076390, +0.455983795]])
+
+
+@jit
+def radec2lb(ra, dec):
+    """
+            Convert $R.A.$ and $Decl.$ into Galactic coordinates $l$ and $b$
+        ra [deg]
+        dec [deg]
+
+        return l [deg], b [deg]
+    """
+    ra_rad, dec_rad = np.deg2rad(ra), np.deg2rad(dec)
+    u = np.array([np.cos(ra_rad) * np.cos(dec_rad),
+                  np.sin(ra_rad) * np.cos(dec_rad),
+                  np.sin(dec_rad)])
+
+    ug = np.dot(RGE, u)
+
+    x, y, z = ug
+    l = np.arctan2(y, x)
+    b = np.arctan2(z, (x * x + y * y) ** .5)
+    return np.rad2deg(l), np.rad2deg(b)

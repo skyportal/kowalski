@@ -18,7 +18,7 @@ from tensorflow.keras.models import load_model
 import time
 import traceback
 
-from utils import deg2dms, deg2hms, great_circle_distance, in_ellipse, load_config, time_stamp
+from utils import deg2dms, deg2hms, great_circle_distance, in_ellipse, load_config, radec2lb, time_stamp
 
 
 ''' load config and secrets '''
@@ -279,6 +279,8 @@ class AlertConsumer(object):
         # placeholders for classifications
         doc['classifications'] = dict()
 
+        # Coordinates
+
         # GeoJSON for 2D indexing
         doc['coordinates'] = {}
         _ra = doc['candidate']['ra']
@@ -297,6 +299,11 @@ class AlertConsumer(object):
         # radians and degrees:
         # doc['coordinates']['radec_rad'] = [_ra * np.pi / 180.0, _dec * np.pi / 180.0]
         # doc['coordinates']['radec_deg'] = [_ra, _dec]
+
+        # Galactic coordinates l and b
+        l, b = radec2lb(doc['candidate']['ra'], doc['candidate']['dec'])
+        doc['coordinates']['l'] = l
+        doc['coordinates']['b'] = b
 
         prv_candidates = deepcopy(doc['prv_candidates'])
         doc.pop('prv_candidates', None)
