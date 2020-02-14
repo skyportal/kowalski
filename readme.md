@@ -117,6 +117,8 @@ API:
 docker exec -it kowalski_api_1 python -m pytest -s test_api.py
 ```
 
+---
+
 `TODO:` The first test ingests 11 (real!) test alerts. Try out a few queries:
 
 `/api/auth`
