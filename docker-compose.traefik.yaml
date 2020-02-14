@@ -25,13 +25,13 @@ services:
       - "--certificatesresolvers.myhttpchallenge.acme.storage=/letsencrypt/acme.json"
     labels:
       # middleware redirect
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      # global redirect to https
-      - "traefik.http.routers.http_catchall.rule=HostRegexp(`{any:.+}`)"
-      - "traefik.http.routers.http_catchall.entrypoints=web"
-      - "traefik.http.routers.http_catchall.middlewares=https_redirect"
       - "traefik.http.middlewares.https_redirect.redirectscheme.scheme=https"
       - "traefik.http.middlewares.https_redirect.redirectscheme.permanent=true"
+      # global redirect to https
+      - "traefik.http.routers.http_catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http_catchall.entrypoints=web"
+      - "traefik.http.routers.http_catchall.middlewares=https_redirect"
+
     ports:
       - "80:80"
       - "443:443"
