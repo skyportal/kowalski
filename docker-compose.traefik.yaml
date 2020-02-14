@@ -24,11 +24,11 @@ services:
       # Tell to store the certificate on a path under our volume
       - "--certificatesresolvers.myhttpchallenge.acme.storage=/letsencrypt/acme.json"
     labels:
-      - "traefik.http.routers.http_catchall.rule: HostRegexp(`{any:.+}`)"
-      - "traefik.http.routers.http_catchall.entrypoints: web"
-      - "traefik.http.routers.http_catchall.middlewares: https_redirect"
-      - "traefik.http.middlewares.https_redirect.redirectscheme.scheme: https"
-      - "traefik.http.middlewares.https_redirect.redirectscheme.permanent: true"
+      - "traefik.http.routers.http_catchall.rule=HostRegexp(`{any:.+}`)"
+      - "traefik.http.routers.http_catchall.entrypoints=web"
+      - "traefik.http.routers.http_catchall.middlewares=https_redirect"
+      - "traefik.http.middlewares.https_redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.https_redirect.redirectscheme.permanent=true"
     ports:
       - "80:80"
       - "443:443"
