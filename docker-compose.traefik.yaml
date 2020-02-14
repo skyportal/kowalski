@@ -23,14 +23,7 @@ services:
       - "--certificatesresolvers.myhttpchallenge.acme.email=kowalski@caltech.edu"
       # Tell to store the certificate on a path under our volume
       - "--certificatesresolvers.myhttpchallenge.acme.storage=/letsencrypt/acme.json"
-    labels:
-      # middleware redirect
-      - "traefik.http.middlewares.https_redirect.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.https_redirect.redirectscheme.permanent=true"
-      # global redirect to https
-      - "traefik.http.routers.http_catchall.rule=hostregexp(`{host:.+}`)"
-      - "traefik.http.routers.http_catchall.entrypoints=web"
-      - "traefik.http.routers.http_catchall.middlewares=https_redirect"
+#    labels:
 
     ports:
       - "80:80"
@@ -55,6 +48,13 @@ services:
 #    ports:
 #      - "4000:4000"
     labels:
+      # middleware redirect
+      - "traefik.http.middlewares.https_redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.https_redirect.redirectscheme.permanent=true"
+      # global redirect to https
+      - "traefik.http.routers.http_catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http_catchall.entrypoints=web"
+      - "traefik.http.routers.http_catchall.middlewares=https_redirect"
       # Explicitly tell Traefik to expose this container
       - "traefik.enable=true"
       # The domain the service will respond to
