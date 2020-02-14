@@ -176,6 +176,8 @@ cross-matches and archival photometry
 The user-defined stages come after that. In the example below, an alert gets selected if it has a high `drb` score and
 it has no match with the `CLU_20190625` catalog.
 
+`TODO:` Annotations as another pipeline stage.
+
 ```json
 {
     "query_type": "aggregate",
@@ -226,6 +228,12 @@ it has no match with the `CLU_20190625` catalog.
 	            		"$exists": false
 	            	}
             	}
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "objectId": 1
+                }
             }
         ]
     },
