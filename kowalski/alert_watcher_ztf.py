@@ -274,12 +274,12 @@ class AlertConsumer(object):
 
         doc = dict(alert)
 
-        # let mongo create a unique id
+        # let mongo create a unique _id
 
         # placeholders for classifications
         doc['classifications'] = dict()
 
-        # Coordinates
+        '''Coordinates:'''
 
         # GeoJSON for 2D indexing
         doc['coordinates'] = {}
@@ -424,6 +424,7 @@ class AlertConsumer(object):
                                 print(time_stamp(), str(_err))
 
                     # todo: execute user-defined alert filters
+                    #       make an API call or execute aggregation pipeline directly?
 
                     # todo: submit to SkyPortal
 

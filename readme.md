@@ -117,7 +117,7 @@ API:
 docker exec -it kowalski_api_1 python -m pytest -s test_api.py
 ```
 
-TODO: The first test ingests 11 (real!) test alerts. Try out a few queries:
+`TODO:` The first test ingests 11 (real!) test alerts. Try out a few queries:
 
 `/api/auth`
 
@@ -144,7 +144,7 @@ curl -d '{"username":"admin", "password":"admin"}' -H "Content-Type: application
 
 Headers:
 ```json
-{"Authorization": <TOKEN>, "Content-Type": "application/json"}
+{"Authorization": "Bearer <TOKEN>", "Content-Type": "application/json"}
 ```
 
 Body:
@@ -160,6 +160,78 @@ Body:
 ```
 
 ## Miscellaneous
+
+### Filtering for `fritz`
+
+`TODO:` Upon alert ingestion into the database, Kowalski can execute user-defined filters and report matches to `fritz`.
+This is implemented as an aggregation pipeline that first:
+- Selects the newly ingested alert from the `ZTF_alerts` collection by its `candid`
+- Removes the cutouts to reduce traffic
+- Joins the alert by its `objectId` with the corresponding entry in the `ZTF_alerts_aux` collection containing the 
+cross-matches and archival photometry
+The user-defined stages come after. In the example below, an alert gets selected if it has a high `drb` score and
+it has no match with the `CLU_20190625` catalog.
+
+```json
+{
+    "query_type": "aggregate",
+    "query": {
+        "catalog": "ZTF_alerts",
+        "pipeline": [
+            {
+                "$match": {
+                    "candid": 1127561440015015001
+                }
+            },
+            {
+                "$project": {
+                    "cutoutScience": 0,
+                    "cutoutTemplate": 0,
+                    "cutoutDifference": 0
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "ZTF_alerts_aux",
+                    "localField": "objectId",
+                    "foreignField": "_id",
+                    "as": "aux"
+                }
+            },
+            {
+                "$replaceRoot": {
+                    "newRoot": {
+                        "$mergeObjects": [
+                            {
+                                "$arrayElemAt": [
+                                    "$aux",
+                                    0
+                                ]
+                            },
+                            "$$ROOT"
+                        ]
+                    }
+                }
+            },
+            {
+            	"$match": {
+            		"candidate.drb": {
+            			"$gt": 0.9
+            		},
+            		"cross_matches.CLU_20190625.0": {
+	            		"$exists": false
+	            	}
+            	}
+            }
+        ]
+    },
+    "kwargs": {
+        "max_time_ms": 10
+    }
+}
+```
+
+### Kafka producer container
 
 Build and run a dedicated container for the Kafka producer (for testing):
 ```bash
