@@ -14,11 +14,12 @@ async def auth_middleware(request, handler):
     request.user = None
     # accept both "Authorization: Bearer <token>" and "Authorization: <token>" headers
     jwt_token = request.headers.get('authorization', None)
-    if 'bearer' in deepcopy(jwt_token).lower():
-        jwt_token = jwt_token.split()[1]
 
     if jwt_token:
         try:
+            if 'bearer' in deepcopy(jwt_token).lower():
+                jwt_token = jwt_token.split()[1]
+
             payload = jwt.decode(jwt_token, request.app['JWT']['JWT_SECRET'],
                                  algorithms=[request.app['JWT']['JWT_ALGORITHM']])
         except (jwt.DecodeError, jwt.ExpiredSignatureError):
