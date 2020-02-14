@@ -139,6 +139,7 @@ Using `curl`:
 curl -d '{"username":"admin", "password":"admin"}' -H "Content-Type: application/json" -X POST https://localhost:4000/api/auth
 ```
 
+---
 
 `/api/queries`
 
