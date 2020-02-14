@@ -58,24 +58,6 @@ to match `admin_*` under `database` in `secrets.json`:
 cp docker-compose.yaml docker-compose.deploy.yaml
 ```
 
-### Deploying behind `traefik` [optional]
-
-If you have a publicly accessible host allowing connections on port `443` and a DNS record with the domain 
-you want to expose pointing to this host, you can deploy `kowalski` behind [`traefik`](http://traefik.io), 
-which will act as the edge router -- it can do many things including load-balancing and 
-getting a TLS certificate from `letsencrypt`. 
-
-- In `docker-compose.traefik.yaml` replace `kowalski@caltech.edu` with your email.
-- In `docker-compose.deploy.yaml` replace `private.caltech.edu` with your domain.
-- In `docker-compose.deploy.yaml` comment out `ports` for the `api` service 
-unless you still want to expose port 4000 to the world.
-
-Spin up `traefik`:
-
-```bash
-docker-compose -f docker-compose.traefik.yaml up -d
-```
-
 ### docker-compose
 
 Run `docker-compose` to fire up `kowalski`:
@@ -86,6 +68,23 @@ docker-compose -f docker-compose.deploy.yaml up --build -d
 Shut down `kowalski`:
 ```bash
 docker-compose down
+```
+
+### docker-compose: deploying behind `traefik`
+
+If you have a publicly accessible host allowing connections on port `443` and a DNS record with the domain 
+you want to expose pointing to this host, you can deploy `kowalski` behind [`traefik`](http://traefik.io), 
+which will act as the edge router -- it can do many things including load-balancing and 
+getting a TLS certificate from `letsencrypt`. 
+
+In `docker-compose.traefik.yaml`:
+- Replace `kowalski@caltech.edu` with your email.
+- Replace `private.caltech.edu` with your domain.
+
+Spin up `kowalski` behind `traefik`:
+
+```bash
+docker-compose -f docker-compose.traefik.yaml up -d
 ```
 
 ### kubernetes
@@ -133,6 +132,11 @@ Body:
     "username": "admin",
     "password": "admin"
 }
+```
+
+Using `curl`:
+```bash
+curl -d '{"username":"admin", "password":"admin"}' -H "Content-Type: application/json" -X POST https://localhost:4000/api/auth
 ```
 
 
