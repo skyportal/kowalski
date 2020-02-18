@@ -170,8 +170,8 @@ class AlertConsumer(object):
         self.connect_to_db()
 
         # create indexes
-        for index in self.config['indexes'][self.collection_alerts]:
-            self.db['db'][self.collection_alerts].create_index(index, background=True)
+        for index_name, index in self.config['indexes'][self.collection_alerts].items():
+            self.db['db'][self.collection_alerts].create_index(index, name=index_name, background=True)
 
         # ML models:
         self.ml_models = dict()
