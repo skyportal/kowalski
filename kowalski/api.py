@@ -361,21 +361,21 @@ def parse_query(task, save: bool = False):
         # specify task type:
         task_reduced['query_type'] = 'cone_search'
         # cone search radius:
-        cone_search_radius = float(task['object_coordinates']['cone_search_radius'])
+        cone_search_radius = float(task['query']['object_coordinates']['cone_search_radius'])
         # convert to rad:
-        if task['object_coordinates']['cone_search_unit'] == 'arcsec':
+        if task['query']['object_coordinates']['cone_search_unit'] == 'arcsec':
             cone_search_radius *= np.pi / 180.0 / 3600.
-        elif task['object_coordinates']['cone_search_unit'] == 'arcmin':
+        elif task['query']['object_coordinates']['cone_search_unit'] == 'arcmin':
             cone_search_radius *= np.pi / 180.0 / 60.
-        elif task['object_coordinates']['cone_search_unit'] == 'deg':
+        elif task['query']['object_coordinates']['cone_search_unit'] == 'deg':
             cone_search_radius *= np.pi / 180.0
-        elif task['object_coordinates']['cone_search_unit'] == 'rad':
+        elif task['query']['object_coordinates']['cone_search_unit'] == 'rad':
             cone_search_radius *= 1
         else:
             raise Exception('unknown cone search unit: must be in [arcsec, arcmin, deg, rad]')
 
-        if isinstance(task['object_coordinates']['radec'], str):
-            radec = task['object_coordinates']['radec'].strip()
+        if isinstance(task['query']['object_coordinates']['radec'], str):
+            radec = task['query']['object_coordinates']['radec'].strip()
 
             # comb radecs for a single source as per Tom's request:
             if radec[0] not in ('[', '(', '{'):
@@ -388,10 +388,10 @@ def parse_query(task, save: bool = False):
             # print(task['object_coordinates']['radec'])
             objects = literal_eval(radec)
             # print(type(objects), isinstance(objects, dict), isinstance(objects, list))
-        elif isinstance(task['object_coordinates']['radec'], list) or \
-                isinstance(task['object_coordinates']['radec'], tuple) or \
-                isinstance(task['object_coordinates']['radec'], dict):
-            objects = task['object_coordinates']['radec']
+        elif isinstance(task['query']['object_coordinates']['radec'], list) or \
+                isinstance(task['query']['object_coordinates']['radec'], tuple) or \
+                isinstance(task['query']['object_coordinates']['radec'], dict):
+            objects = task['query']['object_coordinates']['radec']
         else:
             raise Exception('bad source coordinates')
 
@@ -408,44 +408,44 @@ def parse_query(task, save: bool = False):
 
         # print(object_names, object_coordinates)
 
-        for catalog in task['catalogs']:
+        for catalog in task['query']['catalogs']:
+            task_reduced['query'][catalog] = dict()
 
             if task['user'] != config['server']['admin_username']:
-                if str(catalog) in prohibited_collections:
+                if str(catalog.strip()) in prohibited_collections:
                     raise Exception('protected collection')
 
-            task_reduced['query'][catalog] = dict()
-            # parse catalog query:
+            task_reduced['query'][catalog.strip()] = dict()
+
             # construct filter
-            _filter = task['catalogs'][catalog]['filter']
-            if isinstance(_filter, str):
-                # passed string? evaluate:
-                catalog_query = literal_eval(_filter.strip())
-            elif isinstance(_filter, dict):
-                # passed dict?
-                catalog_query = _filter
+            if 'filter' in task['query']:
+                _filter = task['query']['filter']
+                if isinstance(_filter, str):
+                    # passed string? evaluate:
+                    catalog_filter = literal_eval(_filter.strip())
+                elif isinstance(_filter, dict):
+                    # passed dict?
+                    catalog_filter = _filter
+                else:
+                    raise ValueError('Unsupported filter specification')
             else:
-                raise ValueError('unsupported filter specification')
+                catalog_filter = dict()
 
             # construct projection
-            _projection = task['catalogs'][catalog]['projection']
-            if isinstance(_projection, str):
-                # passed string? evaluate:
-                catalog_projection = literal_eval(_projection.strip())
-            elif isinstance(_filter, dict):
-                # passed dict?
-                catalog_projection = _projection
+            if 'projection' in task['query']:
+                _projection = task['query']['projection']
+                if isinstance(_projection, str):
+                    # passed string? evaluate:
+                    catalog_projection = literal_eval(_projection.strip())
+                elif isinstance(_filter, dict):
+                    # passed dict?
+                    catalog_projection = _projection
+                else:
+                    raise ValueError('Unsupported projection specification')
             else:
-                raise ValueError('unsupported projection specification')
+                catalog_projection = dict()
 
             # parse coordinate list
-
-            if isinstance(_projection, str):
-                # passed string? evaluate:
-                catalog_projection = literal_eval(_projection.strip())
-            elif isinstance(_filter, dict):
-                # passed dict?
-                catalog_projection = _projection
 
             for oi, obj_crd in enumerate(object_coordinates):
                 # convert ra/dec into GeoJSON-friendly format
@@ -454,8 +454,13 @@ def parse_query(task, save: bool = False):
                 object_position_query['coordinates.radec_geojson'] = {
                     '$geoWithin': {'$centerSphere': [[_ra, _dec], cone_search_radius]}}
                 # use stringified object coordinates as dict keys and merge dicts with cat/obj queries:
-                task_reduced['query'][catalog][object_names[oi]] = ({**object_position_query, **catalog_query},
-                                                                    {**catalog_projection})
+                if task_reduced['kwargs'].get('filter_first', False):
+                    task_reduced['query'][catalog][object_names[oi]] = ({**object_position_query, **catalog_filter},
+                                                                        {**catalog_projection})
+                else:
+                    # place the filter expression in front of the positional query?
+                    task_reduced['query'][catalog][object_names[oi]] = ({**catalog_filter, **object_position_query},
+                                                                        {**catalog_projection})
 
     elif task['query_type'] == 'info':
 
