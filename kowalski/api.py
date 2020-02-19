@@ -278,7 +278,7 @@ def parse_query(task, save: bool = False):
             if isinstance(_projection, str):
                 # passed string? evaluate:
                 catalog_projection = literal_eval(_projection.strip())
-            elif isinstance(_filter, dict):
+            elif isinstance(_projection, dict):
                 # passed dict?
                 catalog_projection = _projection
             else:
@@ -372,7 +372,7 @@ def parse_query(task, save: bool = False):
         elif task['query']['object_coordinates']['cone_search_unit'] == 'rad':
             cone_search_radius *= 1
         else:
-            raise Exception('unknown cone search unit: must be in [arcsec, arcmin, deg, rad]')
+            raise Exception('unknown cone search unit: must be in ["arcsec", "arcmin", "deg", "rad"]')
 
         if isinstance(task['query']['object_coordinates']['radec'], str):
             radec = task['query']['object_coordinates']['radec'].strip()
@@ -437,7 +437,7 @@ def parse_query(task, save: bool = False):
                 if isinstance(_projection, str):
                     # passed string? evaluate:
                     catalog_projection = literal_eval(_projection.strip())
-                elif isinstance(_filter, dict):
+                elif isinstance(_projection, dict):
                     # passed dict?
                     catalog_projection = _projection
                 else:
