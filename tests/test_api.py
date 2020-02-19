@@ -129,7 +129,7 @@ class TestAPIs(object):
         result = await resp.json()
         assert result['status'] == 'success'
 
-    # todo: test multiple query types without book-keeping (the default and almost exclusively used scenario):
+    # test multiple query types without book-keeping (the default and almost exclusively used scenario):
     #  - find_one
     #  - find
     #  - info
