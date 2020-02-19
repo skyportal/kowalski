@@ -418,7 +418,7 @@ def parse_query(task, save: bool = False):
             task_reduced['query'][catalog.strip()] = dict()
 
             # construct filter
-            if 'filter' in task['query']:
+            if 'filter' in task['query'][catalog]:
                 _filter = task['query'][catalog]['filter']
                 if isinstance(_filter, str):
                     # passed string? evaluate:
@@ -432,7 +432,7 @@ def parse_query(task, save: bool = False):
                 catalog_filter = dict()
 
             # construct projection
-            if 'projection' in task['query']:
+            if 'projection' in task['query'][catalog]:
                 _projection = task['query'][catalog]['projection']
                 if isinstance(_projection, str):
                     # passed string? evaluate:
