@@ -136,6 +136,60 @@ class TestAPIs(object):
     #  - count_documents
     #  - estimated_document_count
     #  - aggregate
+    #  - cone_search
+
+    async def test_query_cone_search(self, aiohttp_client):
+        """
+            Test {"query_type": "cone_search", ...}: /api/queries
+        :param aiohttp_client:
+        :return:
+        """
+        client = await aiohttp_client(await app_factory())
+
+        # authorize
+        _auth = await client.post(f'/api/auth',
+                                  json={"username": config['server']['admin_username'],
+                                        "password": config['server']['admin_password']})
+        assert _auth.status == 200
+        credentials = await _auth.json()
+        assert credentials['status'] == 'success'
+        assert 'token' in credentials
+
+        access_token = credentials['token']
+
+        headers = {'Authorization': f'Bearer {access_token}'}
+
+        collection = 'ZTF_alerts'
+
+        # check query without book-keeping
+        qu = {"query_type": "cone_search",
+              "query": {
+                  "object_coordinates": {
+                      "cone_search_radius": 2,
+                      "cone_search_unit": "arcsec",
+                      "radec": {"object1": (71.6577756, -10.2263957)}
+                  },
+                  "catalogs": {
+                      "ZTF_alerts": {
+                          "filter": {},
+                          "projection": {"_id": 0, "candid": 1, "objectId": 1}
+                      }
+                  }
+              },
+              "kwargs": {
+                  "filter_first": False
+              }
+              }
+        # print(qu)
+        resp = await client.post('/api/queries', json=qu, headers=headers, timeout=5)
+        assert resp.status == 200
+        result = await resp.json()
+        # print(result)
+        assert result['status'] == 'success'
+        assert result['message'] == 'query successfully executed'
+        assert 'data' in result
+        # should always return a dict, even if it's empty
+        assert isinstance(result['data'], dict)
 
     async def test_query_find_one(self, aiohttp_client):
         """
