@@ -413,13 +413,13 @@ def parse_query(task, save: bool = False):
 
             if task['user'] != config['server']['admin_username']:
                 if str(catalog.strip()) in prohibited_collections:
-                    raise Exception('protected collection')
+                    raise Exception('Trying to query a protected collection')
 
             task_reduced['query'][catalog.strip()] = dict()
 
             # construct filter
             if 'filter' in task['query']:
-                _filter = task['query']['filter']
+                _filter = task['query'][catalog]['filter']
                 if isinstance(_filter, str):
                     # passed string? evaluate:
                     catalog_filter = literal_eval(_filter.strip())
@@ -433,7 +433,7 @@ def parse_query(task, save: bool = False):
 
             # construct projection
             if 'projection' in task['query']:
-                _projection = task['query']['projection']
+                _projection = task['query'][catalog]['projection']
                 if isinstance(_projection, str):
                     # passed string? evaluate:
                     catalog_projection = literal_eval(_projection.strip())
