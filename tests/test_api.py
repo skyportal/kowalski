@@ -167,7 +167,7 @@ class TestAPIs(object):
                   "object_coordinates": {
                       "cone_search_radius": 2,
                       "cone_search_unit": "arcsec",
-                      "radec": {"object1": (71.6577756, -10.2263957)}
+                      "radec": {"object1": [71.6577756, -10.2263957]}
                   },
                   "catalogs": {
                       "ZTF_alerts": {
