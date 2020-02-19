@@ -130,6 +130,6 @@ class TestIngester(object):
         print(f'{time_stamp()}: All done!')
 
         # shut down Kafka server and ZooKeeper
-        time.sleep(25)
+        time.sleep(15)
         p_zookeeper.kill()
         p_kafka_server.kill()
