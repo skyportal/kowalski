@@ -127,9 +127,27 @@ class TestIngester(object):
 
         # digest and ingest
         ingester(obs_date=date, save_packets=False, test=True)
-        print(f'{time_stamp()}: All done!')
+        print(f'{time_stamp()}: Digested and ingested: all done!')
 
-        # shut down Kafka server and ZooKeeper
+        print(f'{time_stamp()}: Shutting down Kafka Server at localhost:9092')
+        # start the Kafka server:
+        cmd_kafka_server_stop = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-server-stop.sh'),
+                                 os.path.join(config['path']['path_kafka'], 'config', 'server.properties')]
+
+        with open(os.path.join(config['path']['path_logs'], 'kafka_server.stdout'), 'w') as stdout_kafka_server:
+            p_kafka_server_stop = subprocess.run(cmd_kafka_server_stop,
+                                                 stdout=stdout_kafka_server, stderr=subprocess.STDOUT)
+
+        print(f'{time_stamp()}: Shutting down ZooKeeper at localhost:2181')
+
+        # start ZooKeeper in the background (using Popen and not run with shell=True for safety)
+        cmd_zookeeper_stop = [os.path.join(config['path']['path_kafka'], 'bin', 'zookeeper-server-stop.sh'),
+                              os.path.join(config['path']['path_kafka'], 'config', 'zookeeper.properties')]
+
+        with open(os.path.join(config['path']['path_logs'], 'zookeeper.stdout'), 'w') as stdout_zookeeper:
+            p_zookeeper_stop = subprocess.run(cmd_zookeeper_stop, stdout=stdout_zookeeper, stderr=subprocess.STDOUT)
+
+        # shut down Kafka server and ZooKeeper?
         time.sleep(15)
         p_zookeeper.kill()
         p_kafka_server.kill()
