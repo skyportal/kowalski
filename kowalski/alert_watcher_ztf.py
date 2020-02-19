@@ -170,6 +170,7 @@ class AlertConsumer(object):
         self.connect_to_db()
 
         # create indexes
+        print(self.config['indexes'][self.collection_alerts])
         for index_name, index in self.config['indexes'][self.collection_alerts].items():
             print(index_name, index)
             self.db['db'][self.collection_alerts].create_index(index, name=index_name, background=True)
