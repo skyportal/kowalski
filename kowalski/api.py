@@ -360,6 +360,10 @@ def parse_query(task, save: bool = False):
     elif task['query_type'] == 'cone_search':
         # specify task type:
         task_reduced['query_type'] = 'cone_search'
+
+        # apply filter before positional query?
+        filter_first = task_reduced['kwargs'].get('filter_first', False)
+
         # cone search radius:
         cone_search_radius = float(task['query']['object_coordinates']['cone_search_radius'])
         # convert to rad:
@@ -418,8 +422,8 @@ def parse_query(task, save: bool = False):
             task_reduced['query'][catalog.strip()] = dict()
 
             # construct filter
-            if 'filter' in task['query'][catalog]:
-                _filter = task['query'][catalog]['filter']
+            if 'filter' in task['query']['catalogs'][catalog]:
+                _filter = task['query']['catalogs'][catalog]['filter']
                 if isinstance(_filter, str):
                     # passed string? evaluate:
                     catalog_filter = literal_eval(_filter.strip())
@@ -432,8 +436,8 @@ def parse_query(task, save: bool = False):
                 catalog_filter = dict()
 
             # construct projection
-            if 'projection' in task['query'][catalog]:
-                _projection = task['query'][catalog]['projection']
+            if 'projection' in task['query']['catalogs'][catalog]:
+                _projection = task['query']['catalogs'][catalog]['projection']
                 if isinstance(_projection, str):
                     # passed string? evaluate:
                     catalog_projection = literal_eval(_projection.strip())
@@ -454,7 +458,8 @@ def parse_query(task, save: bool = False):
                 object_position_query['coordinates.radec_geojson'] = {
                     '$geoWithin': {'$centerSphere': [[_ra, _dec], cone_search_radius]}}
                 # use stringified object coordinates as dict keys and merge dicts with cat/obj queries:
-                if task_reduced['kwargs'].get('filter_first', False):
+
+                if not filter_first:
                     task_reduced['query'][catalog][object_names[oi]] = ({**object_position_query, **catalog_filter},
                                                                         {**catalog_projection})
                 else:
