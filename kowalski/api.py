@@ -161,10 +161,15 @@ async def remove_user(request):
 
         # try to remove the user:
         if username is not None:
-            await request.app['mongo'].users.delete_one({'_id': username})
+            r = await request.app['mongo'].users.delete_one({'_id': username})
 
-        return web.json_response({'status': 'success',
-                                  'message': f'successfully removed user {username}'}, status=200)
+            if r.deleted_count != 0:
+                return web.json_response({'status': 'success', 'message': f'removed user {username}'}, status=200)
+            else:
+                return web.json_response({'status': 'error', 'message': f'user {username} not found'}, status=400)
+
+        else:
+            return web.json_response({'status': 'error', 'message': f'bad username: {username}'}, status=400)
 
     except Exception as _e:
         return web.json_response({'status': 'error',
@@ -961,9 +966,12 @@ async def filter_delete(request):
     filter_id = request.match_info['filter_id']
 
     try:
-        await request.app['mongo'].filters.delete_one({'_id': filter_id})
+        r = await request.app['mongo'].filters.delete_one({'_id': filter_id})
 
-        return web.json_response({'status': 'success', 'message': f'removed filter: {filter_id}'}, status=200)
+        if r.deleted_count != 0:
+            return web.json_response({'status': 'success', 'message': f'removed filter: {filter_id}'}, status=200)
+        else:
+            return web.json_response({'status': 'error', 'message': f'filter {filter_id} not found'}, status=400)
 
     except Exception as _e:
         print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
