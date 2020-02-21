@@ -121,21 +121,6 @@
         }
       },
 
-      "IPHAS_DR2": {
-        "filter": {},
-        "projection": {
-          "_id": 0,
-          "name": 1,
-          "coordinates.radec_str": 1,
-          "r": 1,
-          "rErr": 1,
-          "i": 1,
-          "iErr": 1,
-          "ha": 1,
-          "haErr": 1
-        }
-      },
-
       "Gaia_DR2": {
         "filter": {},
         "projection": {
@@ -150,18 +135,46 @@
       },
 
       "Gaia_DR2_WD": {
-          "filter": {},
-          "projection": {
-            "_id": 1,
-            "coordinates.radec_str": 1,
-            "White_dwarf_name": 1,
-            "Pwd": 1,
-            "Pwd_correction": 1,
-            "SDSS_name": 1,
-            "Teff": 1,
-            "eTeff": 1
-          }
-        },
+        "filter": {},
+        "projection": {
+          "_id": 1,
+          "coordinates.radec_str": 1,
+          "White_dwarf_name": 1,
+          "Pwd": 1,
+          "Pwd_correction": 1,
+          "SDSS_name": 1,
+          "Teff": 1,
+          "eTeff": 1
+        }
+      },
+
+      "GALEX": {
+        "filter": {},
+        "projection": {
+          "_id": 0,
+          "name": 1,
+          "coordinates.radec_str": 1,
+          "FUVmag": 1,
+          "e_FUVmag": 1,
+          "NUVmag": 1,
+          "e_NUVmag": 1
+        }
+      },
+
+      "IPHAS_DR2": {
+        "filter": {},
+        "projection": {
+          "_id": 0,
+          "name": 1,
+          "coordinates.radec_str": 1,
+          "r": 1,
+          "rErr": 1,
+          "i": 1,
+          "iErr": 1,
+          "ha": 1,
+          "haErr": 1
+        }
+      },
 
       "LAMOST_DR5_v3": {
         "filter": {},

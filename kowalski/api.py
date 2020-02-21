@@ -4,22 +4,24 @@ from astropy.io import fits
 import asyncio
 from ast import literal_eval
 from bson.json_util import dumps, loads
+from copy import deepcopy
 import datetime
 import gzip
 import io
 import jwt
 from matplotlib.colors import LogNorm
 import matplotlib.pyplot as plt
-from middlewares import auth_middleware, auth_required
+from middlewares import auth_middleware, auth_required, admin_required
 from motor.motor_asyncio import AsyncIOMotorClient
 from multidict import MultiDict
 import numpy as np
 import os
 import pathlib
+from pymongo.errors import DuplicateKeyError
 import shutil
 import traceback
 from utils import add_admin, check_password_hash, compute_hash, generate_password_hash, \
-    init_db, load_config, radec_str2geojson
+    init_db, load_config, radec_str2geojson, uid
 import uvloop
 
 
@@ -124,7 +126,7 @@ async def add_user(request):
 
             if len(username) == 0 or len(password) == 0:
                 return web.json_response({'status': 'error',
-                                          'message': 'username and password must be set'}, status=500)
+                                          'message': 'username and password must be set'}, status=400)
 
             if len(permissions) == 0:
                 permissions = '{}'
@@ -159,7 +161,7 @@ async def remove_user(request):
         try:
             username = _data.get('user', None)
             if username == config['server']['admin_username']:
-                return web.json_response({'status': 'error', 'message': 'cannot remove the superuser!'}, status=500)
+                return web.json_response({'status': 'error', 'message': 'cannot remove the superuser!'}, status=400)
 
             # try to remove the user:
             if username is not None:
@@ -192,11 +194,11 @@ async def edit_user(request):
 
             if _id == config['server']['admin_username'] and username != config['server']['admin_username']:
                 return web.json_response({'status': 'error',
-                                          'message': 'cannot change the admin username!'}, status=500)
+                                          'message': 'cannot change the admin username!'}, status=400)
 
             if len(username) == 0:
                 return web.json_response({'status': 'error',
-                                          'message': 'username must be set'}, status=500)
+                                          'message': 'username must be set'}, status=400)
 
             # change username:
             if _id != username:
@@ -762,8 +764,11 @@ async def query(request):
         known_query_types = ('cone_search', 'count_documents', 'estimated_document_count',
                              'find', 'find_one', 'aggregate', 'info')
 
-        assert _query['query_type'] in known_query_types, \
-            f'query_type {_query["query_type"]} not in {str(known_query_types)}'
+        if _query['query_type'] not in known_query_types:
+            return web.json_response({'status': 'error',
+                                      'message': f'query_type {_query["query_type"]} not in {str(known_query_types)}'},
+                                     status=400)
+
 
         _query['user'] = request.user
 
@@ -829,7 +834,7 @@ async def query_grab(request):
                 return web.json_response(await f_task_result_file.read(), status=200)
 
         else:
-            return web.json_response({'status': 'error', 'message': 'part not recognized'}, status=500)
+            return web.json_response({'status': 'error', 'message': 'part not recognized'}, status=400)
 
     except Exception as _e:
         print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
@@ -892,13 +897,64 @@ async def filter_get(request):
 
 
 @routes.post('/api/filters')
-@auth_required
+@admin_required(admin=config['server']['admin_username'])
 async def filter_post(request):
     """
-        todo: Save user user-defined filter assigning unique id
+        todo: Save user-defined filter assigning unique id
         store as serialized extended json string, use literal_eval to convert to dict at execution
         run a simple sanity check before saving
         https://www.npmjs.com/package/bson
+    :param request:
+    :return:
+    """
+    try:
+        if request.user != config['server']['admin_username']:
+            return web.json_response({'status': 'error', 'message': 'must be admin to add filters'}, status=403)
+
+        try:
+            filter_spec = await request.json()
+        except Exception as _e:
+            print(f'{datetime.datetime.utcnow()} Cannot extract json() from request, trying post(): {str(_e)}')
+            filter_spec = await request.post()
+
+        # filter_spec = {'group_id': group_id,
+        #                'catalog': 'ZTF_alerts',
+        #                'pipeline': <json|dict>}
+
+        doc = deepcopy(filter_spec)
+        if not isinstance(doc['pipeline'], str):
+            doc['pipeline'] = dumps(doc['pipeline'])
+
+        # todo: try on last ingested alert
+
+        # use a short _id and avoid random name collisions
+        for nr in range(config['misc']['max_retries']):
+            try:
+                filter_id = uid(length=6)
+                doc['_id'] = filter_id
+                await request.app['mongo'].filters.insert_one(doc)
+                return web.json_response({'status': 'success',
+                                          'message': f'saved filter: {filter_id}',
+                                          'data': {'_id': filter_id}}, status=200)
+            except DuplicateKeyError as e:
+                continue
+        else:
+            return web.json_response({'status': 'error',
+                                      'message': f"name collision, {config['misc']['max_retries']} attempts"},
+                                     status=500)
+
+    except Exception as _e:
+        print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
+        _err = traceback.format_exc()
+        print(_err)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
+
+
+@routes.post('/api/filters/test')
+@auth_required
+async def filter_test_post(request):
+    """
+        todo: Test user-defined filter: check that is lexically correct, throws no errors and executes reasonably fast
     :param request:
     :return:
     """
@@ -913,7 +969,21 @@ async def filter_delete(request):
     :param request:
     :return:
     """
-    pass
+    filter_id = request.match_info['filter_id']
+
+    try:
+        if request.user != config['server']['admin_username']:
+            return web.json_response({'status': 'error', 'message': 'must be admin to delete filters'}, status=403)
+
+        await request.app['mongo'].filters.delete_one({'_id': filter_id})
+
+        return web.json_response({'status': 'success', 'message': f'removed filter: {filter_id}'}, status=200)
+
+    except Exception as _e:
+        print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
+        _err = traceback.format_exc()
+        print(_err)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
 
 
 ''' lab apis '''
@@ -927,65 +997,80 @@ async def ztf_alert_get_cutout_handler(request):
     :param request:
     :return:
     """
-    candid = int(request.match_info['candid'])
-    cutout = request.match_info['cutout'].capitalize()
-    file_format = request.match_info['file_format']
+    try:
+        candid = int(request.match_info['candid'])
+        cutout = request.match_info['cutout'].capitalize()
+        file_format = request.match_info['file_format']
 
-    assert cutout in ['Science', 'Template', 'Difference']
-    assert file_format in ['fits', 'png']
+        known_cutouts = ['Science', 'Template', 'Difference']
+        if cutout not in known_cutouts:
+            return web.json_response({'status': 'error',
+                                      'message': f'cutout {cutout} not in {str(known_cutouts)}'},
+                                     status=400)
+        known_file_formats = ['fits', 'png']
+        if file_format not in known_file_formats:
+            return web.json_response({'status': 'error',
+                                      'message': f'file format {file_format} not in {str(known_file_formats)}'},
+                                     status=400)
 
-    alert = await request.app['mongo']['ZTF_alerts'].find_one({'candid': candid},
-                                                              {f'cutout{cutout}': 1},
-                                                              max_time_ms=60000)
+        alert = await request.app['mongo']['ZTF_alerts'].find_one({'candid': candid},
+                                                                  {f'cutout{cutout}': 1},
+                                                                  max_time_ms=60000)
 
-    cutout_data = loads(dumps([alert[f'cutout{cutout}']['stampData']]))[0]
+        cutout_data = loads(dumps([alert[f'cutout{cutout}']['stampData']]))[0]
 
-    # unzipped fits name
-    fits_name = pathlib.Path(alert[f"cutout{cutout}"]["fileName"]).with_suffix('')
+        # unzipped fits name
+        fits_name = pathlib.Path(alert[f"cutout{cutout}"]["fileName"]).with_suffix('')
 
-    # unzip and flip about y axis on the server side
-    with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
-        with fits.open(io.BytesIO(f.read())) as hdu:
-            header = hdu[0].header
-            data_flipped_y = np.flipud(hdu[0].data)
+        # unzip and flip about y axis on the server side
+        with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
+            with fits.open(io.BytesIO(f.read())) as hdu:
+                header = hdu[0].header
+                data_flipped_y = np.flipud(hdu[0].data)
 
-    if file_format == 'fits':
-        hdu = fits.PrimaryHDU(data_flipped_y, header=header)
-        # hdu = fits.PrimaryHDU(data_flipped_y)
-        hdul = fits.HDUList([hdu])
+        if file_format == 'fits':
+            hdu = fits.PrimaryHDU(data_flipped_y, header=header)
+            # hdu = fits.PrimaryHDU(data_flipped_y)
+            hdul = fits.HDUList([hdu])
 
-        stamp_fits = io.BytesIO()
-        hdul.writeto(fileobj=stamp_fits)
+            stamp_fits = io.BytesIO()
+            hdul.writeto(fileobj=stamp_fits)
 
-        return web.Response(body=stamp_fits.getvalue(), content_type='image/fits',
-                            headers=MultiDict({'Content-Disposition': f'Attachment;filename={fits_name}'}), )
+            return web.Response(body=stamp_fits.getvalue(), content_type='image/fits',
+                                headers=MultiDict({'Content-Disposition': f'Attachment;filename={fits_name}'}), )
 
-    if file_format == 'png':
-        buff = io.BytesIO()
-        plt.close('all')
-        fig = plt.figure()
-        fig.set_size_inches(4, 4, forward=False)
-        ax = plt.Axes(fig, [0., 0., 1., 1.])
-        ax.set_axis_off()
-        fig.add_axes(ax)
+        if file_format == 'png':
+            buff = io.BytesIO()
+            plt.close('all')
+            fig = plt.figure()
+            fig.set_size_inches(4, 4, forward=False)
+            ax = plt.Axes(fig, [0., 0., 1., 1.])
+            ax.set_axis_off()
+            fig.add_axes(ax)
 
-        # remove nans:
-        img = np.array(data_flipped_y)
-        img = np.nan_to_num(img)
+            # remove nans:
+            img = np.array(data_flipped_y)
+            img = np.nan_to_num(img)
 
-        if cutout != 'Difference':
-            # img += np.min(img)
-            img[img <= 0] = np.median(img)
-            # plt.imshow(img, cmap='gray', norm=LogNorm(), origin='lower')
-            plt.imshow(img, cmap=plt.cm.bone, norm=LogNorm(), origin='lower')
-        else:
-            # plt.imshow(img, cmap='gray', origin='lower')
-            plt.imshow(img, cmap=plt.cm.bone, origin='lower')
-        plt.savefig(buff, dpi=42)
+            if cutout != 'Difference':
+                # img += np.min(img)
+                img[img <= 0] = np.median(img)
+                # plt.imshow(img, cmap='gray', norm=LogNorm(), origin='lower')
+                plt.imshow(img, cmap=plt.cm.bone, norm=LogNorm(), origin='lower')
+            else:
+                # plt.imshow(img, cmap='gray', origin='lower')
+                plt.imshow(img, cmap=plt.cm.bone, origin='lower')
+            plt.savefig(buff, dpi=42)
 
-        buff.seek(0)
-        plt.close('all')
-        return web.Response(body=buff, content_type='image/png')
+            buff.seek(0)
+            plt.close('all')
+            return web.Response(body=buff, content_type='image/png')
+
+    except Exception as _e:
+        print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
+        _err = traceback.format_exc()
+        print(_err)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
 
 
 @routes.get('/lab/zuds-alerts/{candid}/cutout/{cutout}/{file_format}')
@@ -996,68 +1081,82 @@ async def zuds_alert_get_cutout_handler(request):
     :param request:
     :return:
     """
+    try:
+        candid = int(request.match_info['candid'])
+        cutout = request.match_info['cutout'].capitalize()
+        file_format = request.match_info['file_format']
 
-    candid = int(request.match_info['candid'])
-    cutout = request.match_info['cutout'].capitalize()
-    file_format = request.match_info['file_format']
+        known_cutouts = ['Science', 'Template', 'Difference']
+        if cutout not in known_cutouts:
+            return web.json_response({'status': 'error',
+                                      'message': f'cutout {cutout} not in {str(known_cutouts)}'},
+                                     status=400)
+        known_file_formats = ['fits', 'png']
+        if file_format not in known_file_formats:
+            return web.json_response({'status': 'error',
+                                      'message': f'file format {file_format} not in {str(known_file_formats)}'},
+                                     status=400)
 
-    assert cutout in ['Science', 'Template', 'Difference']
-    assert file_format in ['fits', 'png']
+        alert = await request.app['mongo']['ZUDS_alerts'].find_one({'candid': candid},
+                                                                   {f'cutout{cutout}': 1},
+                                                                   max_time_ms=60000)
 
-    alert = await request.app['mongo']['ZUDS_alerts'].find_one({'candid': candid},
-                                                               {f'cutout{cutout}': 1},
-                                                               max_time_ms=60000)
+        cutout_data = loads(dumps([alert[f'cutout{cutout}']]))[0]
 
-    cutout_data = loads(dumps([alert[f'cutout{cutout}']]))[0]
+        # unzipped fits name
+        fits_name = f"{candid}.cutout{cutout}.fits"
 
-    # unzipped fits name
-    fits_name = f"{candid}.cutout{cutout}.fits"
+        # unzip and flip about y axis on the server side
+        with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
+            with fits.open(io.BytesIO(f.read())) as hdu:
+                header = hdu[0].header
+                # no need to flip it since Danny does that on his end
+                # data_flipped_y = np.flipud(hdu[0].data)
+                data_flipped_y = hdu[0].data
 
-    # unzip and flip about y axis on the server side
-    with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
-        with fits.open(io.BytesIO(f.read())) as hdu:
-            header = hdu[0].header
-            # no need to flip it since Danny does that on his end
-            # data_flipped_y = np.flipud(hdu[0].data)
-            data_flipped_y = hdu[0].data
+        if file_format == 'fits':
+            hdu = fits.PrimaryHDU(data_flipped_y, header=header)
+            # hdu = fits.PrimaryHDU(data_flipped_y)
+            hdul = fits.HDUList([hdu])
 
-    if file_format == 'fits':
-        hdu = fits.PrimaryHDU(data_flipped_y, header=header)
-        # hdu = fits.PrimaryHDU(data_flipped_y)
-        hdul = fits.HDUList([hdu])
+            stamp_fits = io.BytesIO()
+            hdul.writeto(fileobj=stamp_fits)
 
-        stamp_fits = io.BytesIO()
-        hdul.writeto(fileobj=stamp_fits)
+            return web.Response(body=stamp_fits.getvalue(), content_type='image/fits',
+                                headers=MultiDict({'Content-Disposition': f'Attachment;filename={fits_name}'}), )
 
-        return web.Response(body=stamp_fits.getvalue(), content_type='image/fits',
-                            headers=MultiDict({'Content-Disposition': f'Attachment;filename={fits_name}'}), )
+        if file_format == 'png':
+            buff = io.BytesIO()
+            plt.close('all')
+            fig = plt.figure()
+            fig.set_size_inches(4, 4, forward=False)
+            ax = plt.Axes(fig, [0., 0., 1., 1.])
+            ax.set_axis_off()
+            fig.add_axes(ax)
 
-    if file_format == 'png':
-        buff = io.BytesIO()
-        plt.close('all')
-        fig = plt.figure()
-        fig.set_size_inches(4, 4, forward=False)
-        ax = plt.Axes(fig, [0., 0., 1., 1.])
-        ax.set_axis_off()
-        fig.add_axes(ax)
+            # remove nans:
+            img = np.array(data_flipped_y)
+            img = np.nan_to_num(img)
 
-        # remove nans:
-        img = np.array(data_flipped_y)
-        img = np.nan_to_num(img)
+            if cutout != 'Difference':
+                # img += np.min(img)
+                img[img <= 0] = np.median(img)
+                # plt.imshow(img, cmap='gray', norm=LogNorm(), origin='lower')
+                plt.imshow(img, cmap=plt.cm.bone, norm=LogNorm(), origin='lower')
+            else:
+                # plt.imshow(img, cmap='gray', origin='lower')
+                plt.imshow(img, cmap=plt.cm.bone, origin='lower')
+            plt.savefig(buff, dpi=42)
 
-        if cutout != 'Difference':
-            # img += np.min(img)
-            img[img <= 0] = np.median(img)
-            # plt.imshow(img, cmap='gray', norm=LogNorm(), origin='lower')
-            plt.imshow(img, cmap=plt.cm.bone, norm=LogNorm(), origin='lower')
-        else:
-            # plt.imshow(img, cmap='gray', origin='lower')
-            plt.imshow(img, cmap=plt.cm.bone, origin='lower')
-        plt.savefig(buff, dpi=42)
+            buff.seek(0)
+            plt.close('all')
+            return web.Response(body=buff, content_type='image/png')
 
-        buff.seek(0)
-        plt.close('all')
-        return web.Response(body=buff, content_type='image/png')
+    except Exception as _e:
+        print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
+        _err = traceback.format_exc()
+        print(_err)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
 
 
 async def app_factory():

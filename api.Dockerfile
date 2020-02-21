@@ -19,7 +19,9 @@ COPY ["secrets.json", "kowalski/*_api.*", "kowalski/generate_secrets.py",\
 WORKDIR /app
 
 # install python libs and generate keys
-RUN pip install -r /app/requirements_api.txt --no-cache-dir && python generate_secrets.py
+#RUN pip install -r /app/requirements_api.txt --no-cache-dir && python generate_secrets.py
+# do not re-generate keys every time
+RUN pip install -r /app/requirements_api.txt --no-cache-dir
 
 #COPY kowalski/api.py /app/
 

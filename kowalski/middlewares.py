@@ -44,3 +44,17 @@ def auth_required(func):
         return func(request)
     return wrapper
 
+
+@auth_required
+def admin_required(func, admin: str = 'admin'):
+    """
+        Wrapper to ensure successful user admin rights
+    :param func:
+    :param admin: admin name
+    :return:
+    """
+    def wrapper(request):
+        if request.user != admin:
+            return web.json_response({'status': 'error', 'message': 'admin rights required'}, status=403)
+        return func(request)
+    return wrapper

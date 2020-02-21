@@ -151,6 +151,7 @@ Headers:
 ```
 
 Body:
+
 ```json
 {
     "query_type": "find",
@@ -159,6 +160,28 @@ Body:
     	"filter": {"classifications.braai": {"$gt": 0.9}},
     	"projection": {"_id": 0, "candid": 1, "classifications.braai": 1}
     }
+}
+```
+
+```json
+{
+  "query_type": "cone_search",
+  "query": {
+    "object_coordinates": {
+      "cone_search_radius": 2,
+      "cone_search_unit": "arcsec",
+      "radec": {"object1": [71.6577756, -10.2263957]}
+    },
+    "catalogs": {
+      "ZTF_alerts": {
+        "filter": {},
+        "projection": {"_id": 0, "candid": 1, "objectId": 1}
+      }
+    }
+  },
+  "kwargs": {
+    "filter_first": false
+  }
 }
 ```
 
