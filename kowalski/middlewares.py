@@ -1,5 +1,6 @@
 from aiohttp import web
 from copy import deepcopy
+from functools import wraps
 import jwt
 
 
@@ -34,7 +35,7 @@ async def auth_middleware(request, handler):
 
 def auth_required(func):
     """
-        Wrapper to ensure successful user authorization to use the API
+        Decorator to ensure successful user authorization to use the API
     :param func:
     :return:
     """
@@ -45,16 +46,19 @@ def auth_required(func):
     return wrapper
 
 
-@auth_required
-def admin_required(func, admin: str = 'admin'):
+def admin_required(admin: str = 'admin'):
     """
-        Wrapper to ensure successful user admin rights
-    :param func:
+        Decorator to ensure user authorization _and_ admin rights
     :param admin: admin name
     :return:
     """
-    def wrapper(request):
-        if request.user != admin:
-            return web.json_response({'status': 'error', 'message': 'admin rights required'}, status=403)
-        return func(request)
-    return wrapper
+    def inner_function(func):
+        def wrapper(request):
+            if not request.user:
+                return web.json_response({'status': 'error', 'message': 'auth required'}, status=401)
+            if request.user != admin:
+                return web.json_response({'status': 'error', 'message': 'admin rights required'}, status=403)
+            return func(request)
+        return wrapper
+
+    return inner_function
