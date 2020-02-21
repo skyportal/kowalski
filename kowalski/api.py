@@ -109,7 +109,7 @@ async def root_handler(request):
 
 
 @routes.put('/api/users')
-@auth_required
+@admin_required(admin=config['server']['admin_username'])
 async def add_user(request):
     """
         Add new user
@@ -117,39 +117,36 @@ async def add_user(request):
     """
     _data = await request.json()
 
-    if request.user == config['server']['admin_username']:
-        try:
-            username = _data.get('user', '')
-            password = _data.get('password', '')
-            email = _data.get('email', '')
-            permissions = _data.get('permissions', '{}')
+    try:
+        username = _data.get('user', '')
+        password = _data.get('password', '')
+        email = _data.get('email', '')
+        permissions = _data.get('permissions', '{}')
 
-            if len(username) == 0 or len(password) == 0:
-                return web.json_response({'status': 'error',
-                                          'message': 'username and password must be set'}, status=400)
+        if len(username) == 0 or len(password) == 0:
+            return web.json_response({'status': 'error',
+                                      'message': 'username and password must be set'}, status=400)
 
-            if len(permissions) == 0:
-                permissions = '{}'
+        if len(permissions) == 0:
+            permissions = '{}'
 
-            # add user to coll_usr collection:
-            await request.app['mongo'].users.insert_one(
-                {'_id': username,
-                 'email': email,
-                 'password': generate_password_hash(password),
-                 'permissions': literal_eval(str(permissions)),
-                 'last_modified': datetime.datetime.now()}
-            )
+        # add user to coll_usr collection:
+        await request.app['mongo'].users.insert_one(
+            {'_id': username,
+             'email': email,
+             'password': generate_password_hash(password),
+             'permissions': literal_eval(str(permissions)),
+             'last_modified': datetime.datetime.now()}
+        )
 
-            return web.json_response({'status': 'success', 'message': f'added user {username}'}, status=200)
+        return web.json_response({'status': 'success', 'message': f'added user {username}'}, status=200)
 
-        except Exception as _e:
-            return web.json_response({'status': 'error', 'message': f'failed to add user: {_e}'}, status=500)
-    else:
-        return web.json_response({'status': 'error', 'message': 'must be admin to add users'}, status=403)
+    except Exception as _e:
+        return web.json_response({'status': 'error', 'message': f'failed to add user: {_e}'}, status=500)
 
 
 @routes.delete('/api/users')
-@auth_required
+@admin_required(admin=config['server']['admin_username'])
 async def remove_user(request):
     """
         Remove user
@@ -157,28 +154,25 @@ async def remove_user(request):
     """
     _data = await request.json()
 
-    if request.user == config['server']['admin_username']:
-        try:
-            username = _data.get('user', None)
-            if username == config['server']['admin_username']:
-                return web.json_response({'status': 'error', 'message': 'cannot remove the superuser!'}, status=400)
+    try:
+        username = _data.get('user', None)
+        if username == config['server']['admin_username']:
+            return web.json_response({'status': 'error', 'message': 'cannot remove the superuser!'}, status=400)
 
-            # try to remove the user:
-            if username is not None:
-                await request.app['mongo'].users.delete_one({'_id': username})
+        # try to remove the user:
+        if username is not None:
+            await request.app['mongo'].users.delete_one({'_id': username})
 
-            return web.json_response({'status': 'success',
-                                      'message': f'successfully removed user {username}'}, status=200)
+        return web.json_response({'status': 'success',
+                                  'message': f'successfully removed user {username}'}, status=200)
 
-        except Exception as _e:
-            return web.json_response({'status': 'error',
-                                      'message': f'failed to remove user: {_e}'}, status=500)
-    else:
-        return web.json_response({'status': 'error', 'message': 'must be admin to delete users'}, status=403)
+    except Exception as _e:
+        return web.json_response({'status': 'error',
+                                  'message': f'failed to remove user: {_e}'}, status=500)
 
 
 @routes.post('/api/users')
-@auth_required
+@admin_required(admin=config['server']['admin_username'])
 async def edit_user(request):
     """
         Edit user info
@@ -186,47 +180,44 @@ async def edit_user(request):
     """
     _data = await request.json()
 
-    if request.user == config['server']['admin_username']:
-        try:
-            _id = _data.get('_user', None)
-            username = _data.get('edit-user', '')
-            password = _data.get('edit-password', '')
+    try:
+        _id = _data.get('_user', None)
+        username = _data.get('edit-user', '')
+        password = _data.get('edit-password', '')
 
-            if _id == config['server']['admin_username'] and username != config['server']['admin_username']:
-                return web.json_response({'status': 'error',
-                                          'message': 'cannot change the admin username!'}, status=400)
-
-            if len(username) == 0:
-                return web.json_response({'status': 'error',
-                                          'message': 'username must be set'}, status=400)
-
-            # change username:
-            if _id != username:
-                select = await request.app['mongo'].users.find_one({'_id': _id})
-                select['_id'] = username
-                await request.app['mongo'].users.insert_one(select)
-                await request.app['mongo'].users.delete_one({'_id': _id})
-
-            # change password:
-            if len(password) != 0:
-                await request.app['mongo'].users.update_one(
-                    {'_id': username},
-                    {
-                        '$set': {
-                            'password': generate_password_hash(password)
-                        },
-                        '$currentDate': {'last_modified': True}
-                    }
-                )
-
-            return web.json_response({'status': 'success',
-                                      'message': f'successfully edited user {_id}'}, status=200)
-
-        except Exception as _e:
+        if _id == config['server']['admin_username'] and username != config['server']['admin_username']:
             return web.json_response({'status': 'error',
-                                      'message': f'failed to edit user: {_e}'}, status=500)
-    else:
-        return web.json_response({'status': 'error', 'message': 'must be admin to edit users'}, status=403)
+                                      'message': 'cannot change the admin username!'}, status=400)
+
+        if len(username) == 0:
+            return web.json_response({'status': 'error',
+                                      'message': 'username must be set'}, status=400)
+
+        # change username:
+        if _id != username:
+            select = await request.app['mongo'].users.find_one({'_id': _id})
+            select['_id'] = username
+            await request.app['mongo'].users.insert_one(select)
+            await request.app['mongo'].users.delete_one({'_id': _id})
+
+        # change password:
+        if len(password) != 0:
+            await request.app['mongo'].users.update_one(
+                {'_id': username},
+                {
+                    '$set': {
+                        'password': generate_password_hash(password)
+                    },
+                    '$currentDate': {'last_modified': True}
+                }
+            )
+
+        return web.json_response({'status': 'success',
+                                  'message': f'successfully edited user {_id}'}, status=200)
+
+    except Exception as _e:
+        return web.json_response({'status': 'error',
+                                  'message': f'failed to edit user: {_e}'}, status=500)
 
 
 ''' query apis '''
@@ -886,7 +877,7 @@ async def query_delete(request):
 
 
 @routes.get('/api/filters/{filter_id}')
-@auth_required
+@admin_required(admin=config['server']['admin_username'])
 async def filter_get(request):
     """
         todo: Retrieve user-defined filter by id
@@ -908,13 +899,11 @@ async def filter_post(request):
     :return:
     """
     try:
-        if request.user != config['server']['admin_username']:
-            return web.json_response({'status': 'error', 'message': 'must be admin to add filters'}, status=403)
 
         try:
             filter_spec = await request.json()
         except Exception as _e:
-            print(f'{datetime.datetime.utcnow()} Cannot extract json() from request, trying post(): {str(_e)}')
+            print(f'{datetime.datetime.utcnow()}: Cannot extract json() from request, trying post(): {str(_e)}')
             filter_spec = await request.post()
 
         # filter_spec = {'group_id': group_id,
@@ -951,7 +940,7 @@ async def filter_post(request):
 
 
 @routes.post('/api/filters/test')
-@auth_required
+@admin_required(admin=config['server']['admin_username'])
 async def filter_test_post(request):
     """
         todo: Test user-defined filter: check that is lexically correct, throws no errors and executes reasonably fast
@@ -962,7 +951,7 @@ async def filter_test_post(request):
 
 
 @routes.delete('/api/filters/{filter_id}')
-@auth_required
+@admin_required(admin=config['server']['admin_username'])
 async def filter_delete(request):
     """
         todo?: Delete user-defined filter by id
@@ -972,9 +961,6 @@ async def filter_delete(request):
     filter_id = request.match_info['filter_id']
 
     try:
-        if request.user != config['server']['admin_username']:
-            return web.json_response({'status': 'error', 'message': 'must be admin to delete filters'}, status=403)
-
         await request.app['mongo'].filters.delete_one({'_id': filter_id})
 
         return web.json_response({'status': 'success', 'message': f'removed filter: {filter_id}'}, status=200)
