@@ -196,7 +196,8 @@ class AlertConsumer(object):
 
         # load user-defined alert filter templates
         # todo: implement magic variables such as <jd>, <jd_date>
-        # load only the latest filter for each group_id. the assumption is
+        # load only the latest filter for each group_id. the assumption is that there is only one filter per group_id
+        # as far as the end user is concerned
         # self.filter_templates = \
         #     list(self.db['db'][config['database']['collection_filters']].find({'catalog': self.collection_alerts}))
         self.filter_templates = list(self.db['db'][config['database']['collection_filters']].\
