@@ -15,7 +15,10 @@ Create `secrets.json` with the secrets. Come up with strong passwords!
 {
   "server" : {
     "admin_username": "admin",
-    "admin_password": "admin"
+    "admin_password": "admin",
+    "SECRET_KEY": "abc0123",
+    "JWT_SECRET_KEY": "abc0123",
+    "fernet_key": "irjsxvfJdqSJ2fcnpPacbH972dt-RPMMLE48PQ8J5Hg="
   },
 
   "database": {

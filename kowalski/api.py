@@ -941,6 +941,7 @@ async def filter_post(request):
             try:
                 filter_id = uid(length=6)
                 doc['_id'] = filter_id
+                doc['created'] = datetime.datetime.utcnow()
                 await request.app['mongo'].filters.insert_one(doc)
                 return web.json_response({'status': 'success',
                                           'message': f'saved filter: {filter_id}',
