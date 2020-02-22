@@ -915,11 +915,26 @@ async def filter_post(request):
         #                'catalog': 'ZTF_alerts',
         #                'pipeline': <json|dict>}
 
+        # checks:
+        group_id = filter_spec.get('group_id', None)
+        catalog = filter_spec.get('catalog', None)
+        pipeline = filter_spec.get('pipeline', None)
+        if not group_id:
+            return web.json_response({'status': 'error', 'message': 'group_id must be set'}, status=400)
+        if not catalog:
+            return web.json_response({'status': 'error', 'message': 'catalog must be set'}, status=400)
+        if not pipeline:
+            return web.json_response({'status': 'error', 'message': 'pipeline must be set'}, status=400)
+
         doc = deepcopy(filter_spec)
         if not isinstance(doc['pipeline'], str):
             doc['pipeline'] = dumps(doc['pipeline'])
 
-        # todo: try on last ingested alert
+        # todo: try on most recently ingested alert
+        n_docs = await request.app['mongo'][catalog].estimated_document_count()
+        print(n_docs)
+
+        print(loads(doc['pipeline']))
 
         # use a short _id and avoid random name collisions
         for nr in range(config['misc']['max_retries']):
@@ -948,7 +963,7 @@ async def filter_post(request):
 @admin_required(admin=config['server']['admin_username'])
 async def filter_test_post(request):
     """
-        todo: Test user-defined filter: check that is lexically correct, throws no errors and executes reasonably fast
+        todo?: Test user-defined filter: check that is lexically correct, throws no errors and executes reasonably fast
     :param request:
     :return:
     """
@@ -959,7 +974,7 @@ async def filter_test_post(request):
 @admin_required(admin=config['server']['admin_username'])
 async def filter_delete(request):
     """
-        todo?: Delete user-defined filter by id
+        Delete user-defined filter by id
     :param request:
     :return:
     """

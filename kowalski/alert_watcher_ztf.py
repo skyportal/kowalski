@@ -1,7 +1,7 @@
 import argparse
 from ast import literal_eval
 from astropy.io import fits
-from bson.json_util import dumps
+from bson.json_util import dumps, loads
 import confluent_kafka
 from copy import deepcopy
 import datetime
@@ -103,7 +103,7 @@ class EopError(AlertError):
         The Kafka message result from consumer.poll().
     """
     def __init__(self, msg):
-        message = f'{time_stamp()}, topic:{msg.topic()}, partition:{msg.partition()}, '\
+        message = f'{time_stamp()}: topic:{msg.topic()}, partition:{msg.partition()}, '\
                   f'status:end, offset:{msg.offset()}, key:{str(msg.key())}\n'
         self.message = message
 
@@ -132,15 +132,15 @@ class AlertConsumer(object):
         self.topic = topic
 
         def error_cb(err, _self=self):
-            print(time_stamp(), 'error_cb -------->', err)
+            print(f'{time_stamp()}: error_cb -------->', err)
             # print(err.code())
             if err.code() == -195:
                 _self.num_disconnected_partitions += 1
                 if _self.num_disconnected_partitions == _self.num_partitions:
-                    print(time_stamp(), 'all partitions got disconnected, killing thread')
+                    print(f'{time_stamp()}: all partitions got disconnected, killing thread')
                     sys.exit()
                 else:
-                    print(time_stamp(), f'{_self.topic}: disconnected from partition.',
+                    print(f'{time_stamp()}: {_self.topic}: disconnected from partition.',
                           'total:', _self.num_disconnected_partitions)
 
         # 'error_cb': error_cb
@@ -184,13 +184,22 @@ class AlertConsumer(object):
                 mf = os.path.join(config["path"]["path_ml_models"], f'{m}_{m_v}.h5')
                 self.ml_models[m] = {'model': load_model(mf), 'version': m_v}
             except Exception as e:
-                print(time_stamp(), f'Error loading ML model {m}: {str(e)}')
+                print(f'{time_stamp()}: Error loading ML model {m}: {str(e)}')
                 _err = traceback.format_exc()
                 print(_err)
                 continue
 
-        # todo: load user-defined alert filters
-        self.filters = dict()
+        # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
+        # including archival photometry and cross-matches:
+        self.filter_pipeline_upstream = config['filters'][self.collection_alerts]
+        print(self.filter_pipeline_upstream)
+
+        # load user-defined alert filter templates
+        # todo: implement magic variables such as <jd>, <jd_date>
+        self.filter_templates = \
+            list(self.db['db'][config['database']['collection_filters']].find({'catalog': self.collection_alerts}))
+        for filter_template in self.filter_templates:
+            filter_template['pipeline'] = self.filter_pipeline_upstream + loads(filter_template['pipeline'])
 
     def connect_to_db(self):
         """
@@ -229,7 +238,7 @@ class AlertConsumer(object):
         try:
             self.db['db'][_collection].insert_one(_db_entry)
         except Exception as _e:
-            print(time_stamp(), 'Error inserting {:s} into {:s}'.format(str(_db_entry['_id']), _collection))
+            print(f'{time_stamp()}: Error inserting {str(_db_entry["_id"])} into {_collection}')
             traceback.print_exc()
             print(_e)
 
@@ -237,7 +246,6 @@ class AlertConsumer(object):
         """
             Insert a document _doc to collection _collection in DB.
             It is monitored for timeout in case DB connection hangs for some reason
-        :param _db:
         :param _collection:
         :param _db_entries:
         :return:
@@ -321,6 +329,7 @@ class AlertConsumer(object):
         :param path_alerts:
         :param path_tess:
         :param datestr:
+        :param save_packets:
         :return:
         """
         # msg = self.consumer.poll(timeout=timeout)
@@ -341,7 +350,7 @@ class AlertConsumer(object):
                 candid = record['candid']
                 objectId = record['objectId']
 
-                print(time_stamp(), self.topic, objectId, candid)
+                print(f'{time_stamp()}: {self.topic} {objectId} {candid}')
 
                 # check that candid not in collection_alerts
                 if self.db['db'][self.collection_alerts].count_documents({'candid': candid}, limit=1) == 0:
@@ -354,7 +363,7 @@ class AlertConsumer(object):
                         if not os.path.exists(path_alert_dir):
                             os.makedirs(path_alert_dir)
                         path_avro = os.path.join(path_alert_dir, f'{candid}.avro')
-                        print(time_stamp(), f'saving {candid} to disk')
+                        print(f'{time_stamp()}: saving {candid} to disk')
                         with open(path_avro, 'wb') as f:
                             f.write(msg.value())
 
@@ -365,7 +374,7 @@ class AlertConsumer(object):
                     scores = alert_filter__ml(record, ml_models=self.ml_models)
                     alert['classifications'] = scores
 
-                    print(time_stamp(), f'ingesting {alert["candid"]} into db')
+                    print(f'{time_stamp()}: ingesting {alert["candid"]} into db')
                     self.insert_db_entry(_collection=self.collection_alerts, _db_entry=alert)
 
                     # prv_candidates: pop nulls - save space
@@ -417,19 +426,21 @@ class AlertConsumer(object):
                             if not os.path.exists(path_tess_dir):
                                 os.makedirs(path_tess_dir)
 
-                            print(time_stamp(), f'saving {alert["candid"]} to disk')
+                            print(f'{time_stamp()}: saving {alert["candid"]} to disk')
                             try:
                                 with open(os.path.join(path_tess_dir, f"{alert['candid']}.json"), 'w') as f:
                                     f.write(dumps(alert))
                             except Exception as e:
-                                print(time_stamp(), str(e))
+                                print(f'{time_stamp()}: {str(e)}')
                                 _err = traceback.format_exc()
-                                print(time_stamp(), str(_err))
+                                print(f'{time_stamp()}: {str(_err)}')
 
                     # todo: execute user-defined alert filters
-                    #       make an API call or execute aggregation pipeline directly?
+                    passed_filters = alert_filter__user_defined(self.db['db'], self.filter_templates, alert)
 
-                    # todo: submit to SkyPortal
+                    # todo: submit alerts that passed at least one filter to SkyPortal
+                    if len(passed_filters) > 0:
+                        pass
 
     def decodeMessage(self, msg):
         """Decode Avro message according to a schema.
@@ -507,7 +518,7 @@ def make_triplet(alert, to_tpu: bool = False):
     return triplet
 
 
-def alert_filter__ml(alert, ml_models: dict = None):
+def alert_filter__ml(alert, ml_models: dict = None) -> dict:
     """
         Execute ML models
     """
@@ -543,7 +554,7 @@ else:
     raise Exception('Unknown cone search unit. Must be in [deg, rad, arcsec, arcmin]')
 
 
-def alert_filter__xmatch(db, alert):
+def alert_filter__xmatch(database, alert) -> dict:
     """
         Cross-match alerts
     """
@@ -564,7 +575,7 @@ def alert_filter__xmatch(db, alert):
             object_position_query = dict()
             object_position_query['coordinates.radec_geojson'] = {
                 '$geoWithin': {'$centerSphere': [[ra_geojson, dec_geojson], cone_search_radius]}}
-            s = db[catalog].find({**object_position_query, **catalog_filter},
+            s = database[catalog].find({**object_position_query, **catalog_filter},
                                  {**catalog_projection})
             xmatches[catalog] = list(s)
 
@@ -580,9 +591,9 @@ cone_search_radius_clu = 3.0
 cone_search_radius_clu *= np.pi / 180.0
 
 
-def alert_filter__xmatch_clu(database, alert, size_margin=3, clu_version='CLU_20190625'):
+def alert_filter__xmatch_clu(database, alert, size_margin=3, clu_version='CLU_20190625') -> dict:
     """
-        Filter to apply to each alert.
+        Filter to apply to each alert: cross-match with the CLU catalog
 
     :param database:
     :param alert:
@@ -658,6 +669,38 @@ def alert_filter__xmatch_clu(database, alert, size_margin=3, clu_version='CLU_20
     return xmatches
 
 
+def alert_filter__user_defined(database, filter_templates, alert,
+                               catalog: str = 'ZTF_alerts', max_time_ms: int = 500) -> dict:
+    """
+        Evaluate user defined filters
+    :param database:
+    :param filter_templates:
+    :param alert:
+    :param catalog:
+    :param max_time_ms:
+    :return:
+    """
+    passed_filters = dict()
+    for filter_template in filter_templates:
+        try:
+            _filter = deepcopy(filter_template)
+            # match candid
+            _filter['pipeline'][0]["$match"]["candid"] = alert['candid']
+            # todo: evaluate magic variables (such as "<jd>" or "<jd_date>") here with DFS for each pipeline stage
+            passed_filter = list(database[catalog].aggregate(_filter['pipeline'],
+                                                             allowDiskUse=False, maxTimeMS=max_time_ms))
+            # passed filter? then len(passed_filter) should be = 1
+            if len(passed_filter) > 0:
+                print(f'{time_stamp()}: {alert["candid"]} passed filter {_filter["_id"]}')
+                passed_filters[_filter['_id']] = passed_filter[0]
+
+        except Exception as e:
+            print(f'{time_stamp()}: filter {_filter["_id"]} execution failed on alert {alert["candid"]}: {e}')
+            continue
+
+    return passed_filters
+
+
 def listener(topic, bootstrap_servers='', offset_reset='earliest',
              group=None, path_alerts=None, path_tess=None, save_packets=True,
              test=False):
@@ -700,7 +743,7 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest',
 
         except EopError as e:
             # Write when reaching end of partition
-            print(time_stamp(), e.message)
+            print(f'{time_stamp()}: e.message')
             if test:
                 # when testing, terminate once reached end of partition:
                 sys.exit()
@@ -758,7 +801,7 @@ def ingester(obs_date=None, save_packets=True, test=False):
 
             for t in topics_tonight:
                 if t not in topics_on_watch:
-                    print(time_stamp(), f'starting listener thread for {t}')
+                    print(f'{time_stamp()}: starting listener thread for {t}')
                     offset_reset = config['kafka']['default.topic.config']['auto.offset.reset']
                     if not test:
                         bootstrap_servers = config['kafka']['bootstrap.servers']
@@ -777,17 +820,17 @@ def ingester(obs_date=None, save_packets=True, test=False):
                     topics_on_watch[t].start()
 
                 else:
-                    print(time_stamp(), f'performing thread health check for {t}')
+                    print(f'{time_stamp()}: performing thread health check for {t}')
                     try:
                         # if not topics_on_watch[t].isAlive():
                         if not topics_on_watch[t].is_alive():
-                            print(time_stamp(), f'{t} died, removing')
+                            print(f'{time_stamp()}: {t} died, removing')
                             # topics_on_watch[t].terminate()
                             topics_on_watch.pop(t, None)
                         else:
-                            print(time_stamp(), f'{t} appears normal')
+                            print(f'{time_stamp()}: {t} appears normal')
                     except Exception as _e:
-                        print(time_stamp(), 'Failed to perform health check', str(_e))
+                        print(f'{time_stamp()}: Failed to perform health check', str(_e))
                         pass
 
             if test:
@@ -799,9 +842,9 @@ def ingester(obs_date=None, save_packets=True, test=False):
                 break
 
         except Exception as e:
-            print(time_stamp(), str(e))
+            print(f'{time_stamp()}:  {str(e)}')
             _err = traceback.format_exc()
-            print(time_stamp(), str(_err))
+            print(f'{time_stamp()}: {str(_err)}')
 
         if obs_date is None:
             time.sleep(300)

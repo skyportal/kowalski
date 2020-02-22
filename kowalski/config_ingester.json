@@ -83,6 +83,15 @@
     }
   },
 
+  "filters": {
+    "ZTF_alerts": [
+      {"$match": {"candid": null}},
+      {"$project": {"cutoutScience": 0, "cutoutTemplate": 0, "cutoutDifference": 0}},
+      {"$lookup": {"from": "ZTF_alerts_aux", "localField": "objectId", "foreignField": "_id", "as": "aux"}},
+      {"$replaceRoot": {"newRoot": {"$mergeObjects": [{"$arrayElemAt": ["$aux", 0]}, "$$ROOT"]}}}
+    ]
+  },
+
   "ml_models": {
     "braai": {
       "version":  "d6_m9"
