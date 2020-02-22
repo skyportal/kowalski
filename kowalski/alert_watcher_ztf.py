@@ -196,9 +196,15 @@ class AlertConsumer(object):
 
         # load user-defined alert filter templates
         # todo: implement magic variables such as <jd>, <jd_date>
-        # todo: load only latest filter for each group_id
-        self.filter_templates = \
-            list(self.db['db'][config['database']['collection_filters']].find({'catalog': self.collection_alerts}))
+        # load only the latest filter for each group_id. the assumption is
+        # self.filter_templates = \
+        #     list(self.db['db'][config['database']['collection_filters']].find({'catalog': self.collection_alerts}))
+        self.filter_templates = list(self.db['db'][config['database']['collection_filters']].\
+            aggregate([{'$match': {'catalog': self.collection_alerts}},
+                       {'$group': {'_id': '$group_id', 'created': {'$max': '$created'}, 'tmp': {'$last': '$$ROOT'}}},
+                       {'$group': {'_id': None, "filters": {"$push": "$tmp"}}}]))[0]['filters']
+        print(self.filter_templates)
+        # prepend default upstream filter:
         for filter_template in self.filter_templates:
             filter_template['pipeline'] = self.filter_pipeline_upstream + loads(filter_template['pipeline'])
 
