@@ -638,6 +638,7 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
                 catalogs = await db.list_collection_names()
                 # exclude system collections
                 catalogs_system = (config['database']['collection_users'],
+                                   config['database']['collection_filters'],
                                    config['database']['collection_queries'])
 
                 query_result = [c for c in sorted(catalogs)[::-1] if c not in catalogs_system]
@@ -765,7 +766,6 @@ async def query(request):
                                       'message': f'query_type {_query["query_type"]} not in {str(known_query_types)}'},
                                      status=400)
 
-
         _query['user'] = request.user
 
         # by default, [unless enqueue_only is requested]
@@ -790,7 +790,7 @@ async def query(request):
         print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
         _err = traceback.format_exc()
         print(_err)
-        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
 @routes.get('/api/queries/{task_id}')
