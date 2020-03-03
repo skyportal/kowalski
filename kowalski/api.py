@@ -897,7 +897,7 @@ async def filter_get(request):
 
         return web.json_response({'status': 'success',
                                   'message': f'retrieved filter_id {filter_id}',
-                                  'data': user_filter}, status=200)
+                                  'data': user_filter}, status=200, dumps=dumps)
 
     except Exception as _e:
         print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
@@ -935,13 +935,13 @@ async def filter_post(request):
         science_program_id = filter_spec.get('science_program_id', None)
         catalog = filter_spec.get('catalog', None)
         pipeline = filter_spec.get('pipeline', None)
-        if not group_id:
+        if group_id is None:
             return web.json_response({'status': 'error', 'message': 'group_id must be set'}, status=400)
-        if not science_program_id:
+        if science_program_id is None:
             return web.json_response({'status': 'error', 'message': 'science_program_id must be set'}, status=400)
-        if not catalog:
+        if catalog is None:
             return web.json_response({'status': 'error', 'message': 'catalog must be set'}, status=400)
-        if not pipeline:
+        if pipeline is None:
             return web.json_response({'status': 'error', 'message': 'pipeline must be set'}, status=400)
 
         doc = deepcopy(filter_spec)
@@ -971,7 +971,7 @@ async def filter_post(request):
                   f'group_id {group_id}, science_program_id {science_program_id}')
             print(f'{datetime.datetime.utcnow()} Saving blindly, which is not great!')
 
-        print(loads(doc['pipeline']))
+        # print(loads(doc['pipeline']))
 
         # use a short _id and avoid random name collisions
         for nr in range(config['misc']['max_retries']):
@@ -1013,6 +1013,8 @@ async def filter_test_post(request):
             print(f'{datetime.datetime.utcnow()}: Cannot extract json() from request, trying post(): {str(_e)}')
             filter_spec = await request.post()
 
+        # print(list(filter_spec.keys()))
+
         # filter_spec = {'group_id': group_id,
         #                'science_program_id': science_program_id,
         #                'catalog': 'ZTF_alerts',
@@ -1023,13 +1025,13 @@ async def filter_test_post(request):
         science_program_id = filter_spec.get('science_program_id', None)
         catalog = filter_spec.get('catalog', None)
         pipeline = filter_spec.get('pipeline', None)
-        if not group_id:
+        if group_id is None:
             return web.json_response({'status': 'error', 'message': 'group_id must be set'}, status=400)
-        if not science_program_id:
+        if science_program_id is None:
             return web.json_response({'status': 'error', 'message': 'science_program_id must be set'}, status=400)
-        if not catalog:
+        if catalog is None:
             return web.json_response({'status': 'error', 'message': 'catalog must be set'}, status=400)
-        if not pipeline:
+        if pipeline is None:
             return web.json_response({'status': 'error', 'message': 'pipeline must be set'}, status=400)
 
         doc = deepcopy(filter_spec)
@@ -1051,8 +1053,8 @@ async def filter_test_post(request):
             filter_pipeline_upstream = config['filters'][catalog]
             filter_template = filter_pipeline_upstream + loads(doc['pipeline'])
             filter_template[0]["$match"]["candid"] = alert['candid']
-            print(filter_template)
-            cursor = request.app['mongo'][catalog].aggregate(filter_template, allowDiskUse=False, maxTimeMS=1000)
+            # print(f'{datetime.datetime.utcnow()} {filter_template}')
+            cursor = request.app['mongo'][catalog].aggregate(filter_template, allowDiskUse=False, maxTimeMS=500)
             passed_filter = await cursor.to_list(length=None)
         else:
             return web.json_response({'status': 'error',

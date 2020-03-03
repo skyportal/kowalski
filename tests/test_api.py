@@ -157,7 +157,7 @@ class TestAPIs(object):
         user_filter = {
             "group_id": 0,
             "science_program_id": 0,
-            "catalog": "collection",
+            "catalog": collection,
             "pipeline": [
                 {
                     "$match": {
