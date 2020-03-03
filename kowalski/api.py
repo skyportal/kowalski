@@ -934,17 +934,28 @@ async def filter_post(request):
         if not isinstance(doc['pipeline'], str):
             doc['pipeline'] = dumps(doc['pipeline'])
 
-        # todo: try on most recently ingested alert
+        # try on most recently ingested alert
         n_docs = await request.app['mongo'][catalog].estimated_document_count()
-        print(n_docs)
 
         if n_docs > 0:
+            # get latest candid:
+            select = request.app['mongo'][catalog].find({}, {'_id': 0, 'candid': 1}).sort([('$natural', -1)]).limit(1)
+            alert = await select.to_list(length=1)
+            alert = alert[0]
+            # print(alert)
+
             # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
             # including archival photometry and cross-matches:
             filter_pipeline_upstream = config['filters'][catalog]
             filter_template = filter_pipeline_upstream + loads(doc['pipeline'])
+            filter_template[0]["$match"]["candid"] = alert['candid']
+            # print(filter_template)
             cursor = request.app['mongo'][catalog].aggregate(filter_template, allowDiskUse=False, maxTimeMS=1000)
             passed_filter = await cursor.to_list(length=None)
+        else:
+            print(f'{datetime.datetime.utcnow()} No alerts in db, cannot test filter: '
+                  f'group_id {group_id}, science_program_id {science_program_id}')
+            print(f'{datetime.datetime.utcnow()} Saving blindly, which is not great!')
 
         print(loads(doc['pipeline']))
 
@@ -969,18 +980,78 @@ async def filter_post(request):
         print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
         _err = traceback.format_exc()
         print(_err)
-        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
 @routes.post('/api/filters/test')
 @admin_required(admin=config['server']['admin_username'])
 async def filter_test_post(request):
     """
-        todo?: Test user-defined filter: check that is lexically correct, throws no errors and executes reasonably fast
+        Test user-defined filter: check that is lexically correct, throws no errors and executes reasonably fast
     :param request:
     :return:
     """
-    pass
+    try:
+
+        try:
+            filter_spec = await request.json()
+        except Exception as _e:
+            print(f'{datetime.datetime.utcnow()}: Cannot extract json() from request, trying post(): {str(_e)}')
+            filter_spec = await request.post()
+
+        # filter_spec = {'group_id': group_id,
+        #                'science_program_id': science_program_id,
+        #                'catalog': 'ZTF_alerts',
+        #                'pipeline': [list of <json|dict>]}
+
+        # checks:
+        group_id = filter_spec.get('group_id', None)
+        science_program_id = filter_spec.get('science_program_id', None)
+        catalog = filter_spec.get('catalog', None)
+        pipeline = filter_spec.get('pipeline', None)
+        if not group_id:
+            return web.json_response({'status': 'error', 'message': 'group_id must be set'}, status=400)
+        if not science_program_id:
+            return web.json_response({'status': 'error', 'message': 'science_program_id must be set'}, status=400)
+        if not catalog:
+            return web.json_response({'status': 'error', 'message': 'catalog must be set'}, status=400)
+        if not pipeline:
+            return web.json_response({'status': 'error', 'message': 'pipeline must be set'}, status=400)
+
+        doc = deepcopy(filter_spec)
+        if not isinstance(doc['pipeline'], str):
+            doc['pipeline'] = dumps(doc['pipeline'])
+
+        # try on most recently ingested alert
+        n_docs = await request.app['mongo'][catalog].estimated_document_count()
+
+        if n_docs > 0:
+            # get latest candid:
+            select = request.app['mongo'][catalog].find({}, {'_id': 0, 'candid': 1}).sort([('$natural', -1)]).limit(1)
+            alert = await select.to_list(length=1)
+            alert = alert[0]
+            # print(alert)
+
+            # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
+            # including archival photometry and cross-matches:
+            filter_pipeline_upstream = config['filters'][catalog]
+            filter_template = filter_pipeline_upstream + loads(doc['pipeline'])
+            filter_template[0]["$match"]["candid"] = alert['candid']
+            print(filter_template)
+            cursor = request.app['mongo'][catalog].aggregate(filter_template, allowDiskUse=False, maxTimeMS=1000)
+            passed_filter = await cursor.to_list(length=None)
+        else:
+            return web.json_response({'status': 'error',
+                                      'message': f'no alerts in {catalog}, cannot test filter'}, status=500)
+
+        return web.json_response({'status': 'success',
+                                  'message': f'successfully executed on candid {alert["candid"]}'}, status=200)
+
+    except Exception as _e:
+        print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
+        _err = traceback.format_exc()
+        print(_err)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
 @routes.delete('/api/filters/{filter_id}')
