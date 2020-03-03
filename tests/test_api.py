@@ -1,6 +1,7 @@
 # import sys
 # sys.path.append('../kowalski')
 from api import app_factory
+import pytest
 from utils import load_config, uid
 
 
@@ -10,6 +11,24 @@ config = load_config(config_file='config_api.json')
 class TestAPIs(object):
     # python -m pytest -s api.py
     # python -m pytest api.py
+
+    async def auth_admin(self, aiohttp_client):
+        """
+            Fixture to get authorization token for admin
+        :param aiohttp_client:
+        :return:
+        """
+        client = await aiohttp_client(await app_factory())
+
+        _auth = await client.post(f'/api/auth',
+                                  json={"username": config['server']['admin_username'],
+                                        "password": config['server']['admin_password']})
+        assert _auth.status == 200
+
+        credentials = await _auth.json()
+        assert 'token' in credentials
+
+        return credentials
 
     async def test_auth(self, aiohttp_client):
         """
@@ -52,15 +71,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # check JWT authorization
-        _auth = await client.post(f'/api/auth',
-                                  json={"username": config['server']['admin_username'],
-                                        "password": config['server']['admin_password']})
-        assert _auth.status == 200
-        # print(await auth.text())
-        # print(await auth.json())
-        credentials = await _auth.json()
-        assert 'token' in credentials
-
+        credentials = await self.auth_admin(aiohttp_client)
         access_token = credentials['token']
 
         headers = {'Authorization': access_token}
@@ -92,14 +103,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        _auth = await client.post(f'/api/auth',
-                                  json={"username": config['server']['admin_username'],
-                                        "password": config['server']['admin_password']})
-        assert _auth.status == 200
-        credentials = await _auth.json()
-        assert credentials['status'] == 'success'
-        assert 'token' in credentials
-
+        credentials = await self.auth_admin(aiohttp_client)
         access_token = credentials['token']
 
         headers = {'Authorization': access_token}
@@ -140,14 +144,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize as admin, regular users cannot do this
-        _auth = await client.post(f'/api/auth',
-                                  json={"username": config['server']['admin_username'],
-                                        "password": config['server']['admin_password']})
-        assert _auth.status == 200
-        credentials = await _auth.json()
-        assert credentials['status'] == 'success'
-        assert 'token' in credentials
-
+        credentials = await self.auth_admin(aiohttp_client)
         access_token = credentials['token']
 
         headers = {'Authorization': f'Bearer {access_token}'}
@@ -217,6 +214,62 @@ class TestAPIs(object):
         assert result['status'] == 'success'
         assert result['message'] == f'removed filter: {filter_id}'
 
+    # test raising errors
+
+    async def test_bad_filter(self, aiohttp_client):
+        """
+            Test trying to save a bad filter: /api/filters/test
+        :param aiohttp_client:
+        :return:
+        """
+        client = await aiohttp_client(await app_factory())
+
+        credentials = await self.auth_admin(aiohttp_client)
+        access_token = credentials['token']
+
+        headers = {'Authorization': f'Bearer {access_token}'}
+
+        collection = 'ZTF_alerts'
+
+        user_filter = {
+            "group_id": 0,
+            "science_program_id": 0,
+            "catalog": collection,
+            "pipeline": [
+                {
+                    "$matc": {  # <-- should be "$match"
+                        "candidate.drb": {
+                            "$gt": 0.9999
+                        },
+                        "cross_matches.CLU_20190625.0": {
+                            "$exists": False
+                        }
+                    }
+                },
+                {
+                    "$addFields": {
+                        "annotations.author": "dd",
+                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                    }
+                },
+                {
+                    "$project": {
+                        "_id": 0,
+                        "candid": 1,
+                        "objectId": 1,
+                        "annotations": 1
+                    }
+                }
+            ]
+        }
+
+        # test:
+        resp = await client.post('/api/filters/test', json=user_filter, headers=headers, timeout=5)
+        assert resp.status == 400
+        result = await resp.json()
+        # print(result)
+        assert result['status'] == 'error'
+
     # test multiple query types without book-keeping (the default and almost exclusively used scenario):
     #  - find_one
     #  - find
@@ -235,14 +288,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        _auth = await client.post(f'/api/auth',
-                                  json={"username": config['server']['admin_username'],
-                                        "password": config['server']['admin_password']})
-        assert _auth.status == 200
-        credentials = await _auth.json()
-        assert credentials['status'] == 'success'
-        assert 'token' in credentials
-
+        credentials = await self.auth_admin(aiohttp_client)
         access_token = credentials['token']
 
         headers = {'Authorization': f'Bearer {access_token}'}
@@ -288,14 +334,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        _auth = await client.post(f'/api/auth',
-                                  json={"username": config['server']['admin_username'],
-                                        "password": config['server']['admin_password']})
-        assert _auth.status == 200
-        credentials = await _auth.json()
-        assert credentials['status'] == 'success'
-        assert 'token' in credentials
-
+        credentials = await self.auth_admin(aiohttp_client)
         access_token = credentials['token']
 
         headers = {'Authorization': access_token}
@@ -328,14 +367,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        _auth = await client.post(f'/api/auth',
-                                  json={"username": config['server']['admin_username'],
-                                        "password": config['server']['admin_password']})
-        assert _auth.status == 200
-        credentials = await _auth.json()
-        assert credentials['status'] == 'success'
-        assert 'token' in credentials
-
+        credentials = await self.auth_admin(aiohttp_client)
         access_token = credentials['token']
 
         headers = {'Authorization': access_token}
@@ -371,14 +403,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        _auth = await client.post(f'/api/auth',
-                                  json={"username": config['server']['admin_username'],
-                                        "password": config['server']['admin_password']})
-        assert _auth.status == 200
-        credentials = await _auth.json()
-        assert credentials['status'] == 'success'
-        assert 'token' in credentials
-
+        credentials = await self.auth_admin(aiohttp_client)
         access_token = credentials['token']
 
         headers = {'Authorization': access_token}
@@ -412,14 +437,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        _auth = await client.post(f'/api/auth',
-                                  json={"username": config['server']['admin_username'],
-                                        "password": config['server']['admin_password']})
-        assert _auth.status == 200
-        credentials = await _auth.json()
-        assert credentials['status'] == 'success'
-        assert 'token' in credentials
-
+        credentials = await self.auth_admin(aiohttp_client)
         access_token = credentials['token']
 
         headers = {'Authorization': access_token}
@@ -446,14 +464,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        _auth = await client.post(f'/api/auth',
-                                  json={"username": config['server']['admin_username'],
-                                        "password": config['server']['admin_password']})
-        assert _auth.status == 200
-        credentials = await _auth.json()
-        assert credentials['status'] == 'success'
-        assert 'token' in credentials
-
+        credentials = await self.auth_admin(aiohttp_client)
         access_token = credentials['token']
 
         headers = {'Authorization': access_token}
@@ -485,14 +496,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        _auth = await client.post(f'/api/auth',
-                                  json={"username": config['server']['admin_username'],
-                                        "password": config['server']['admin_password']})
-        assert _auth.status == 200
-        credentials = await _auth.json()
-        assert credentials['status'] == 'success'
-        assert 'token' in credentials
-
+        credentials = await self.auth_admin(aiohttp_client)
         access_token = credentials['token']
 
         headers = {'Authorization': access_token}
