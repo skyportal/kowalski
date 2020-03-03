@@ -885,18 +885,32 @@ async def query_delete(request):
 @admin_required(admin=config['server']['admin_username'])
 async def filter_get(request):
     """
-        todo: Retrieve user-defined filter by id
+        Retrieve user-defined filter by id
     :param request:
     :return:
     """
-    pass
+    try:
+        # get query params
+        filter_id = request.match_info['filter_id']
+
+        user_filter = await request.app['mongo'][config['database']['collection_filters']].find_one({'_id': filter_id})
+
+        return web.json_response({'status': 'success',
+                                  'message': f'retrieved filter_id {filter_id}',
+                                  'data': user_filter}, status=200)
+
+    except Exception as _e:
+        print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
+        _err = traceback.format_exc()
+        print(_err)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
 @routes.post('/api/filters')
 @admin_required(admin=config['server']['admin_username'])
 async def filter_post(request):
     """
-        todo: Save user-defined filter assigning unique id
+        Save user-defined filter assigning unique id
         store as serialized extended json string, use literal_eval to convert to dict at execution
         run a simple sanity check before saving
         https://www.npmjs.com/package/bson
@@ -1062,9 +1076,9 @@ async def filter_delete(request):
     :param request:
     :return:
     """
-    filter_id = request.match_info['filter_id']
-
     try:
+        filter_id = request.match_info['filter_id']
+
         r = await request.app['mongo'].filters.delete_one({'_id': filter_id})
 
         if r.deleted_count != 0:
