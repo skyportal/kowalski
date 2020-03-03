@@ -192,6 +192,7 @@ class AlertConsumer(object):
         # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
         # including archival photometry and cross-matches:
         self.filter_pipeline_upstream = config['filters'][self.collection_alerts]
+        print('Upstream filtering pipeline:')
         print(self.filter_pipeline_upstream)
 
         # load user-defined alert filter templates
@@ -202,9 +203,15 @@ class AlertConsumer(object):
         #     list(self.db['db'][config['database']['collection_filters']].find({'catalog': self.collection_alerts}))
         self.filter_templates = list(self.db['db'][config['database']['collection_filters']].\
             aggregate([{'$match': {'catalog': self.collection_alerts}},
-                       {'$group': {'_id': '$group_id', 'created': {'$max': '$created'}, 'tmp': {'$last': '$$ROOT'}}},
-                       {'$group': {'_id': None, "filters": {"$push": "$tmp"}}}]))[0]['filters']
+                       {'$group': {'_id': 'science_program_id',
+                                   'created': {'$max': '$created'}, 'tmp': {'$last': '$$ROOT'}}},
+                       {'$group': {'_id': None, "filters": {"$push": "$tmp"}}}]))
+        if len(self.filter_templates) > 0:
+            self.filter_templates = self.filter_templates[0]['filters']
+
+        print('Science filters:')
         print(self.filter_templates)
+
         # prepend default upstream filter:
         for filter_template in self.filter_templates:
             filter_template['pipeline'] = self.filter_pipeline_upstream + loads(filter_template['pipeline'])

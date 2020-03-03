@@ -912,15 +912,19 @@ async def filter_post(request):
             filter_spec = await request.post()
 
         # filter_spec = {'group_id': group_id,
+        #                'science_program_id': science_program_id,
         #                'catalog': 'ZTF_alerts',
-        #                'pipeline': <json|dict>}
+        #                'pipeline': [list of <json|dict>]}
 
         # checks:
         group_id = filter_spec.get('group_id', None)
+        science_program_id = filter_spec.get('science_program_id', None)
         catalog = filter_spec.get('catalog', None)
         pipeline = filter_spec.get('pipeline', None)
         if not group_id:
             return web.json_response({'status': 'error', 'message': 'group_id must be set'}, status=400)
+        if not science_program_id:
+            return web.json_response({'status': 'error', 'message': 'science_program_id must be set'}, status=400)
         if not catalog:
             return web.json_response({'status': 'error', 'message': 'catalog must be set'}, status=400)
         if not pipeline:
@@ -933,6 +937,14 @@ async def filter_post(request):
         # todo: try on most recently ingested alert
         n_docs = await request.app['mongo'][catalog].estimated_document_count()
         print(n_docs)
+
+        if n_docs > 0:
+            # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
+            # including archival photometry and cross-matches:
+            filter_pipeline_upstream = config['filters'][catalog]
+            filter_template = filter_pipeline_upstream + loads(doc['pipeline'])
+            cursor = request.app['mongo'][catalog].aggregate(filter_template, allowDiskUse=False, maxTimeMS=1000)
+            passed_filter = await cursor.to_list(length=None)
 
         print(loads(doc['pipeline']))
 

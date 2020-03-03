@@ -28,6 +28,15 @@
     "collection_queries": "queries"
   },
 
+  "filters": {
+    "ZTF_alerts": [
+      {"$match": {"candid": null}},
+      {"$project": {"cutoutScience": 0, "cutoutTemplate": 0, "cutoutDifference": 0}},
+      {"$lookup": {"from": "ZTF_alerts_aux", "localField": "objectId", "foreignField": "_id", "as": "aux"}},
+      {"$replaceRoot": {"newRoot": {"$mergeObjects": [{"$arrayElemAt": ["$aux", 0]}, "$$ROOT"]}}}
+    ]
+  },
+
   "misc": {
     "supported_penquins_versions": ["2.0.0", "2.0.1", "2.0.2"],
     "query_expiration_interval": 5,
