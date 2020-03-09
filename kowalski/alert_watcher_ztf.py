@@ -454,6 +454,7 @@ class AlertConsumer(object):
                     passed_filters = alert_filter__user_defined(self.db['db'], self.filter_templates, alert)
 
                     # todo: submit alerts that passed at least one filter to SkyPortal
+                    #       if no filters are found, dumps all alerts?
                     if len(passed_filters) > 0:
                         pass
 

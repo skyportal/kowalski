@@ -29,6 +29,7 @@ class TestIngester(object):
             - Spin up Kafka server
             - create topic
             - publish test alerts to topic
+            - fixme: create test filter?
             - spin up ingester
             - digest and ingest alert stream
     """

@@ -92,6 +92,8 @@ docker-compose -f docker-compose.traefik.yaml up -d
 
 ### kubernetes
 
+todo:
+
 Use [`kompose`](https://kompose.io/). 
 It will try to upload images to your space on Docker Hub 
 so you need to replace `dmitryduev` with your docker username in `docker-compose.deploy.yaml`.
@@ -256,15 +258,23 @@ it has no match with the `CLU_20190625` catalog.
             	}
             },
             {
+                "$addFields": {
+                    "annotations.author": "dd",
+                    "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                }
+            },
+            {
                 "$project": {
                     "_id": 0,
-                    "objectId": 1
+                    "candid": 1,
+                    "objectId": 1,
+                    "annotations": 1
                 }
             }
         ]
     },
     "kwargs": {
-        "max_time_ms": 10
+        "max_time_ms": 100
     }
 }
 ```

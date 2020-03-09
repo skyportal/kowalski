@@ -1,0 +1,9 @@
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    token:
+      type: apiKey
+      in: header
+      name: Authorization

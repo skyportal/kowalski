@@ -1,5 +1,6 @@
 import aiofiles
 from aiohttp import web
+from aiohttp_swagger3 import SwaggerDocs, ReDocUiSettings, SwaggerUiSettings
 from astropy.io import fits
 import asyncio
 from ast import literal_eval
@@ -37,7 +38,109 @@ routes = web.RouteTableDef()
 async def auth(request):
     """
         Authenticate
-        todo: swagger!
+
+    ---
+    summary: Get access token
+    tags:
+      - auth
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - username
+              - password
+            properties:
+              username:
+                type: string
+              password:
+                type: string
+          example:
+            username: user
+            password: PwD
+
+    responses:
+      '200':
+        description: access token
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+                token:
+                  type: string
+            example:
+              status: success
+              token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiYWRtaW4iLCJleHAiOjE1OTE1NjE5MTl9.2emEp9EKf154WLJQwulofvXhTX7L0s9Y2-6_xI0Gx8w
+
+      '400':
+        description: username or password missing in requestBody
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            examples:
+              missing username:
+                value:
+                  status: error
+                  message: missing username
+              missing password:
+                value:
+                  status: error
+                  message: missing password
+
+      '401':
+        description: bad credentials
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            example:
+              status: error
+              message: wrong credentials
+
+      '500':
+        description: internal/unknown cause of failure
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            example:
+              status: error
+              message: auth failed
     """
     try:
         try:
@@ -94,13 +197,38 @@ async def auth(request):
         return web.json_response({'status': 'error', 'message': 'auth failed'}, status=500)
 
 
-@routes.get('/', name='root')
-@auth_required
-async def root_handler(request):
+@routes.get('/', name='root', allow_head=False)
+# @auth_required
+async def root_handler(request: web.Request) -> web.Response:
     """
-        Ping pong
+    ping/pong
+
     :param request:
     :return:
+
+    ---
+    summary: ping/pong
+    tags:
+      - root
+
+    responses:
+      '200':
+        description: greetings to an authorized user
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            example:
+              status: success
+              message: greetings from Kowalski!
     """
     return web.json_response({'status': 'success', 'message': 'greetings from Kowalski!'}, status=200)
 
@@ -793,7 +921,7 @@ async def query(request):
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
-@routes.get('/api/queries/{task_id}')
+@routes.get('/api/queries/{task_id}', allow_head=False)
 @auth_required
 async def query_grab(request):
     """
@@ -881,7 +1009,7 @@ async def query_delete(request):
 ''' filters apis '''
 
 
-@routes.get('/api/filters/{filter_id}')
+@routes.get('/api/filters/{filter_id}', allow_head=False)
 @admin_required(admin=config['server']['admin_username'])
 async def filter_get(request):
     """
@@ -1098,7 +1226,7 @@ async def filter_delete(request):
 ''' lab apis '''
 
 
-@routes.get('/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}')
+@routes.get('/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}', allow_head=False)
 @auth_required
 async def ztf_alert_get_cutout_handler(request):
     """
@@ -1182,7 +1310,7 @@ async def ztf_alert_get_cutout_handler(request):
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
 
 
-@routes.get('/lab/zuds-alerts/{candid}/cutout/{cutout}/{file_format}')
+@routes.get('/lab/zuds-alerts/{candid}/cutout/{cutout}/{file_format}', allow_head=False)
 @auth_required
 async def zuds_alert_get_cutout_handler(request):
     """
@@ -1307,8 +1435,20 @@ async def app_factory():
                   'JWT_ALGORITHM': 'HS256',
                   'JWT_EXP_DELTA_SECONDS': 30 * 86400 * 3}
 
+    # OpenAPI specs:
+    s = SwaggerDocs(app,
+                    redoc_ui_settings=ReDocUiSettings(path="/docs/"),
+                    # swagger_ui_settings=SwaggerUiSettings(path="/docs/"),
+                    validate=False,  # fixme?
+                    title="Kowalski",
+                    version="2.0.0",
+                    components="components_api.yaml")
+    # ?
+    # app["storage"] = {}
+
     # route table
-    app.add_routes(routes)
+    # app.add_routes(routes)
+    s.add_routes(routes)
 
     return app
 
