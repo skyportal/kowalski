@@ -35,7 +35,7 @@ routes = web.RouteTableDef()
 
 
 @routes.post('/api/auth')
-async def auth(request):
+async def auth(request: web.Request) -> web.Response:
     """
         Authenticate
 
@@ -236,34 +236,115 @@ async def root_handler(request: web.Request) -> web.Response:
 ''' users api '''
 
 
-@routes.put('/api/users')
-@admin_required(admin=config['server']['admin_username'])
-async def add_user(request):
+@routes.post('/api/users')
+# @admin_required(admin=config['server']['admin_username'])
+async def add_user(request: web.Request) -> web.Response:
     """
-        Add new user
-    :return:
-    """
-    _data = await request.json()
+    Add new user
 
+    :return:
+
+    ---
+    summary: Add new user
+    tags:
+      - users
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - username
+              - password
+            properties:
+              username:
+                type: string
+              password:
+                type: string
+              email:
+                type: string
+              permissions:
+                type: string
+          example:
+            username: noone
+            password: nopas!
+            email: user@caltech.edu
+
+    responses:
+      '200':
+        description: added user
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            example:
+              status: success
+              message: added user noone
+
+      '400':
+        description: username or password missing in requestBody
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            example:
+              status: error
+              message: username and password must be set
+
+      '500':
+        description: internal/unknown cause of failure
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            example:
+              status: error
+              message: "failed to add user: <error message>"
+    """
     try:
-        username = _data.get('user', '')
+        _data = await request.json()
+
+        username = _data.get('username', '')
         password = _data.get('password', '')
-        email = _data.get('email', '')
-        permissions = _data.get('permissions', '{}')
+        email = _data.get('email', None)
+        permissions = _data.get('permissions', dict())
 
         if len(username) == 0 or len(password) == 0:
             return web.json_response({'status': 'error',
                                       'message': 'username and password must be set'}, status=400)
-
-        if len(permissions) == 0:
-            permissions = '{}'
 
         # add user to coll_usr collection:
         await request.app['mongo'].users.insert_one(
             {'_id': username,
              'email': email,
              'password': generate_password_hash(password),
-             'permissions': literal_eval(str(permissions)),
+             'permissions': permissions,
              'last_modified': datetime.datetime.now()}
         )
 
@@ -273,61 +354,195 @@ async def add_user(request):
         return web.json_response({'status': 'error', 'message': f'failed to add user: {_e}'}, status=500)
 
 
-@routes.delete('/api/users')
-@admin_required(admin=config['server']['admin_username'])
-async def remove_user(request):
+@routes.delete('/api/users/{username}')
+# @admin_required(admin=config['server']['admin_username'])
+async def remove_user(request: web.Request) -> web.Response:
     """
-        Remove user
-    :return:
-    """
-    _data = await request.json()
+    Remove user
 
+    :return:
+
+    ---
+    summary: Remove user
+    tags:
+      - users
+
+    responses:
+      '200':
+        description: removed user
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            example:
+              status: success
+              message: removed user noone
+
+      '400':
+        description: username not found or is superuser
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            examples:
+              attempting superuser removal:
+                value:
+                  status: error
+                  message: cannot remove the superuser!
+              username not found:
+                value:
+                  status: error
+                  message: user noone not found
+
+      '500':
+        description: internal/unknown cause of failure
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            example:
+              status: error
+              message: "failed to remove user: <error message>"
+    """
     try:
-        username = _data.get('user', None)
+        # get query params
+        username = request.match_info['username']
+
         if username == config['server']['admin_username']:
             return web.json_response({'status': 'error', 'message': 'cannot remove the superuser!'}, status=400)
 
         # try to remove the user:
-        if username is not None:
-            r = await request.app['mongo'].users.delete_one({'_id': username})
+        r = await request.app['mongo'].users.delete_one({'_id': username})
 
-            if r.deleted_count != 0:
-                return web.json_response({'status': 'success', 'message': f'removed user {username}'}, status=200)
-            else:
-                return web.json_response({'status': 'error', 'message': f'user {username} not found'}, status=400)
-
+        if r.deleted_count != 0:
+            return web.json_response({'status': 'success', 'message': f'removed user {username}'}, status=200)
         else:
-            return web.json_response({'status': 'error', 'message': f'bad username: {username}'}, status=400)
+            return web.json_response({'status': 'error', 'message': f'user {username} not found'}, status=400)
 
     except Exception as _e:
-        return web.json_response({'status': 'error',
-                                  'message': f'failed to remove user: {_e}'}, status=500)
+        return web.json_response({'status': 'error', 'message': f'failed to remove user: {_e}'}, status=500)
 
 
-@routes.post('/api/users')
-@admin_required(admin=config['server']['admin_username'])
-async def edit_user(request):
+@routes.put('/api/users/{username}')
+# @admin_required(admin=config['server']['admin_username'])
+async def edit_user(request: web.Request) -> web.Response:
     """
-        Edit user info
+    Edit user data
+
     :return:
-    """
-    _data = await request.json()
 
+    ---
+    summary: Edit user data
+    tags:
+      - users
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              username:
+                type: string
+              password:
+                type: string
+          example:
+            username: noone
+
+    responses:
+      '200':
+        description: edited user
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            example:
+              status: success
+              message: edited user noone
+
+      '400':
+        description: cannot rename superuser
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            examples:
+              attempting superuser renaming:
+                value:
+                    status: error
+                    message: cannot rename the superuser!
+
+      '500':
+        description: internal/unknown cause of failure
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            example:
+              status: error
+              message: "failed to remove user: <error message>"
+    """
     try:
-        _id = _data.get('_user', None)
-        username = _data.get('edit-user', '')
-        password = _data.get('edit-password', '')
+        _data = await request.json()
+
+        _id = request.match_info['username']
+        username = _data.get('username', '')
+        password = _data.get('password', '')
 
         if _id == config['server']['admin_username'] and username != config['server']['admin_username']:
-            return web.json_response({'status': 'error',
-                                      'message': 'cannot change the admin username!'}, status=400)
-
-        if len(username) == 0:
-            return web.json_response({'status': 'error',
-                                      'message': 'username must be set'}, status=400)
+            return web.json_response({'status': 'error', 'message': 'cannot rename the superuser!'}, status=400)
 
         # change username:
-        if _id != username:
+        if (_id != username) and (len(username) > 0):
             select = await request.app['mongo'].users.find_one({'_id': _id})
             select['_id'] = username
             await request.app['mongo'].users.insert_one(select)
@@ -345,12 +560,10 @@ async def edit_user(request):
                 }
             )
 
-        return web.json_response({'status': 'success',
-                                  'message': f'successfully edited user {_id}'}, status=200)
+        return web.json_response({'status': 'success', 'message': f'edited user {_id}'}, status=200)
 
     except Exception as _e:
-        return web.json_response({'status': 'error',
-                                  'message': f'failed to edit user: {_e}'}, status=500)
+        return web.json_response({'status': 'error', 'message': f'failed to edit user: {_e}'}, status=500)
 
 
 ''' query apis '''
@@ -1441,7 +1654,7 @@ async def app_factory():
                     # swagger_ui_settings=SwaggerUiSettings(path="/docs/"),
                     validate=False,  # fixme?
                     title="Kowalski",
-                    version="2.0.0",
+                    version="2.0.0dev",
                     components="components_api.yaml")
     # ?
     # app["storage"] = {}
