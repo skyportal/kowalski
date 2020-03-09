@@ -74,24 +74,23 @@ class TestAPIs(object):
         credentials = await self.auth_admin(aiohttp_client)
         access_token = credentials['token']
 
-        headers = {'Authorization': access_token}
+        headers = {'Authorization': f'Bearer {access_token}'}
+
+        test_user = 'test_user'
+        test_user_edited = 'test_user_edited'
 
         # adding a user
-        resp = await client.put('/api/users', json={'user': 'test_user', 'password': uid(6)}, headers=headers)
+        resp = await client.post('/api/users', json={'username': test_user, 'password': uid(6)}, headers=headers)
         assert resp.status == 200
 
-        # editing user credentials
-        resp = await client.post('/api/users', json={'_user': 'test_user',
-                                                     'edit-user': 'test_user',
-                                                     'edit-password': uid(6)}, headers=headers)
+        # editing user data
+        resp = await client.put(f'/api/users/{test_user}', json={'password': uid(6)}, headers=headers)
         assert resp.status == 200
-        resp = await client.post('/api/users', json={'_user': 'test_user',
-                                                     'edit-user': 'test_user_edited',
-                                                     'edit-password': ''}, headers=headers)
+        resp = await client.put(f'/api/users/{test_user}', json={'username': test_user_edited}, headers=headers)
         assert resp.status == 200
 
         # deleting a user
-        resp = await client.delete('/api/users', json={'user': 'test_user_edited'}, headers=headers)
+        resp = await client.delete(f'/api/users/{test_user_edited}', headers=headers)
         assert resp.status == 200
 
     async def test_query_save(self, aiohttp_client):
