@@ -89,8 +89,17 @@ components:
                   - type: array
                     items:
                       type: array
+                      items:
+                        oneOf:
+                          - type: string
+                            description: "('HH:MM:SS', 'DD:MM:SS') or ('HHhMMmSSs', 'DDdMMmSSs')"
+                          - type: number
+                            description: "(deg, deg)"
+                        minItems: 2
+                        maxItems: 2
                       minItems: 1
                   - type: object
+                    description: "{'object_name': [<ra>, <dec>], ...} <ra/dec> could be either strings or numbers [deg]"
                   - type: string
                 description: "ICRF position(s): R.A. and Decl."
     cone_search_kwargs:
@@ -124,40 +133,154 @@ components:
 
     count_documents:
       type: object
+      required:
+        - catalog
+        - filter
       properties:
         catalog:
+          type: string
+          description: "catalog name. use info query_type to get available catalogs."
+        filter:
           type: object
+          description: "filter expression in MQL"
+      description: "count documents in a collection/catalog matching a particular filter expression"
     count_documents_kwargs:
       type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
+          skip:
+            type: integer
+            description: "number of matched documents to skip"
+            minimum: 0
+          hint:
+            type: string
+            description: "index name to use"
+          limit:
+            type: integer
+            description: "maximum number of matched documents to return"
+            minimum: 1
 
     estimated_document_count:
       type: object
+      required:
+        - catalog
       properties:
         catalog:
-          type: object
+          type: string
+          description: "catalog name. use info query_type to get available catalogs."
+      description: "estimated count of documents in a collection/catalog using average document size"
     estimated_document_count_kwargs:
       type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
 
     find:
       type: object
+      required:
+        - catalog
+        - filter
       properties:
         catalog:
+          type: string
+          description: "catalog name. use info query_type to get available catalogs."
+        filter:
           type: object
+          description: "filter expression in MQL"
+        projection:
+          type: object
+          description: "projection expression (document fields to return/ditch) in MQL"
     find_kwargs:
       type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
+          skip:
+            type: integer
+            description: "number of matched documents to skip"
+            minimum: 0
+          hint:
+            type: string
+            description: "index name to use"
+          limit:
+            type: integer
+            description: "maximum number of matched documents to return"
+            minimum: 1
+          sort:
+            type: array
+            description: "sorting order"
 
     find_one:
       type: object
+      required:
+        - catalog
+        - filter
       properties:
         catalog:
+          type: string
+          description: "catalog name. use info query_type to get available catalogs."
+        filter:
           type: object
+          description: "filter expression in MQL"
     find_one_kwargs:
       type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
+          skip:
+            type: integer
+            description: "number of matched documents to skip"
+            minimum: 0
+          hint:
+            type: string
+            description: "index name to use"
+          limit:
+            type: integer
+            description: "maximum number of matched documents to return"
+            minimum: 1
+          sort:
+            type: array
+            description: "sorting order"
 
     info:
       type: object
+      required:
+        - command
       properties:
+        command:
+          type: string
+          enum: [catalog_info, index_info, db_info]
+          description: "info command to run"
         catalog:
           type: object
     info_kwargs:
       type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
