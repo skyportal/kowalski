@@ -504,7 +504,7 @@ class TestAPIs(object):
 
         # check catalog_names info
         qu = {"query_type": "estimated_document_count",
-              "query": {"catalog": collection, "filter": {"candid": {"$lt": 0}}}}
+              "query": {"catalog": collection}}
         # print(qu)
         resp = await client.post('/api/queries', json=qu, headers=headers, timeout=5)
         assert resp.status == 200

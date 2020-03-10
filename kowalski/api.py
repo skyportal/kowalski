@@ -1130,10 +1130,82 @@ async def query(request: web.Request) -> web.Response:
                   - $ref: "#/components/schemas/find_one_kwargs"
                   - $ref: "#/components/schemas/info_kwargs"
           examples:
-            cone search:
+            aggregate:
               value:
-                query_type: cone_search
-                query: none
+                "query_type": "aggregate"
+                "query": {
+                  "catalog": "ZTF_alerts",
+                  "pipeline": [
+                    {'$match': {'candid': 1127561445515015011}},
+                    {"$project": {"_id": 0, "candid": 1}}
+                  ],
+                }
+                "kwargs": {
+                  "max_time_ms": 2000
+                }
+
+            cone_search:
+              value:
+                "query_type": "cone_search"
+                "query": {
+                  "object_coordinates": {
+                    "cone_search_radius": 2,
+                    "cone_search_unit": "arcsec",
+                    "radec": {"object1": [71.6577756, -10.2263957]}
+                  },
+                  "catalogs": {
+                    "ZTF_alerts": {
+                      "filter": {},
+                      "projection": {"_id": 0, "candid": 1, "objectId": 1}
+                    }
+                  }
+                }
+                "kwargs": {
+                  "filter_first": False
+                }
+
+            find:
+              value:
+                "query_type": "find"
+                "query": {
+                  "catalog": "ZTF_alerts",
+                  "filter": {'candid': {"$lt": 0}},
+                  "projection": {"_id": 0, "candid": 1},
+                }
+                "kwargs": {
+                  "sort": [["$natural", -1]],
+                  "limit": 2
+                }
+
+            find_one:
+              value:
+                "query_type": "find_one"
+                "query": {
+                  "catalog": "ZTF_alerts",
+                  "filter": {}
+                }
+
+            info:
+              value:
+                "query_type": "info"
+                "query": {
+                  "command": "catalog_names"
+                }
+
+            count_documents:
+              value:
+                "query_type": "count_documents"
+                "query": {
+                  "catalog": "ZTF_alerts",
+                  "filter": {"objectId": "ZTF20aakyoez"}
+                }
+
+            estimated_document_count:
+              value:
+                "query_type": "estimated_document_count"
+                "query": {
+                  "catalog": "ZTF_alerts"
+                }
 
     responses:
       '200':
@@ -1227,7 +1299,7 @@ async def query(request: web.Request) -> web.Response:
 @auth_required
 async def query_grab(request):
     """
-        Grab query / result.
+        Grab saved query / result.
 
     :return:
     """
@@ -1273,7 +1345,7 @@ async def query_grab(request):
 @auth_required
 async def query_delete(request):
     """
-        Delete Query from DB programmatically.
+        Delete saved query from DB programmatically.
 
     :return:
     """
