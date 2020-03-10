@@ -37,7 +37,7 @@ routes = web.RouteTableDef()
 @routes.post('/api/auth')
 async def auth(request: web.Request) -> web.Response:
     """
-        Authenticate
+    Authenticate
 
     ---
     summary: Get access token
@@ -1084,12 +1084,101 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
 
 
 @routes.post('/api/queries')
-@auth_required
-async def query(request):
+# @auth_required
+async def query(request: web.Request) -> web.Response:
     """
-        Query Kowalski
+    Query Kowalski
 
-    :return:
+    ---
+    summary: Query Kowalski
+    tags:
+      - queries
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - query_type
+              - query
+            properties:
+              query_type:
+                type: string
+                enum: [aggregate, cone_search, count_documents, estimated_document_count, find, find_one, info]
+              query:
+                type: object
+                description: query. depends on query_type, see examples
+                oneOf:
+                  - $ref: "#/components/schemas/aggregate"
+                  - $ref: "#/components/schemas/cone_search"
+                  - $ref: "#/components/schemas/count_documents"
+                  - $ref: "#/components/schemas/estimated_document_count"
+                  - $ref: "#/components/schemas/find"
+                  - $ref: "#/components/schemas/find_one"
+                  - $ref: "#/components/schemas/info"
+              kwargs:
+                type: object
+                description: additional parameters. depends on query_type, see examples
+                oneOf:
+                  - $ref: "#/components/schemas/aggregate_kwargs"
+                  - $ref: "#/components/schemas/cone_search_kwargs"
+                  - $ref: "#/components/schemas/count_documents_kwargs"
+                  - $ref: "#/components/schemas/estimated_document_count_kwargs"
+                  - $ref: "#/components/schemas/find_kwargs"
+                  - $ref: "#/components/schemas/find_one_kwargs"
+                  - $ref: "#/components/schemas/info_kwargs"
+          examples:
+            cone search:
+              value:
+                query_type: cone_search
+                query: none
+
+    responses:
+      '200':
+        description: query result
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+                token:
+                  type: string
+            examples:
+              cone search:
+                value:
+                  status: success
+
+      '400':
+        description: bad credentials
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                message:
+                  type: string
+            examples:
+              unknown query type:
+                value:
+                  status: error
+                  message: "query_type not in ('cone_search', 'count_documents', 'estimated_document_count', 'find', 'find_one', 'aggregate', 'info')"
+              random error:
+                value:
+                  status: error
+                  message: "failure: <error message>"
     """
     try:
         try:
