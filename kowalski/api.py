@@ -1137,7 +1137,7 @@ async def query(request: web.Request) -> web.Response:
                   "catalog": "ZTF_alerts",
                   "pipeline": [
                     {'$match': {'candid': 1127561445515015011}},
-                    {"$project": {"_id": 0, "candid": 1}}
+                    {"$project": {"_id": 0, "candid": 1, "candidate.drb": 1}}
                   ],
                 }
                 "kwargs": {
@@ -1169,8 +1169,8 @@ async def query(request: web.Request) -> web.Response:
                 "query_type": "find"
                 "query": {
                   "catalog": "ZTF_alerts",
-                  "filter": {'candid': {"$lt": 0}},
-                  "projection": {"_id": 0, "candid": 1},
+                  "filter": {'candidate.drb': {"$gt": 0.9}},
+                  "projection": {"_id": 0, "candid": 1, "candidate.drb": 1},
                 }
                 "kwargs": {
                   "sort": [["$natural", -1]],
@@ -1215,21 +1215,112 @@ async def query(request: web.Request) -> web.Response:
             schema:
               type: object
               required:
+                - user
+                - message
                 - status
               properties:
                 status:
                   type: string
+                  enum: [success]
                 message:
                   type: string
-                token:
+                user:
                   type: string
+                kwargs:
+                  type: object
+                data:
+                  oneOf:
+                    - type: number
+                    - type: array
+                    - type: object
             examples:
-              cone search:
+              aggregate:
                 value:
-                  status: success
+                  "user": "admin"
+                  "kwargs": {
+                    "max_time_ms": 2000
+                  }
+                  "status": "success"
+                  "message": "query successfully executed"
+                  "data": [
+                    {
+                      "candid": 1127107111615015007,
+                      "candidate": {
+                        "drb": 0.9986417293548584
+                      }
+                    }
+                  ]
+
+              cone_search:
+                value:
+                  "user": "admin"
+                  "kwargs": {
+                    "filter_first": false
+                  }
+                  "status": "success"
+                  "message": "query successfully executed"
+                  "data": {
+                    "ZTF_alerts": {
+                      "object1": [
+                        {"objectId": "ZTF19abzrhgq",
+                         "candid": 1127107111615015007}
+                      ]
+                    }
+                  }
+
+              find:
+                value:
+                  "user": "admin"
+                  "kwargs": {
+                    "sort": [["$natural", -1]],
+                    "limit": 2
+                  }
+                  "status": "success"
+                  "message": "query successfully executed"
+                  "data": [
+                    {
+                      "candid": 1127561444715015009,
+                      "candidate": {
+                        "drb": 0.9999618530273438
+                      }
+                    },
+                    {
+                      "candid": 1127107111615015007,
+                      "candidate": {
+                        "drb": 0.9986417293548584
+                      }
+                    }
+                  ]
+
+              info:
+                value:
+                  "user": "admin"
+                  "kwargs": {}
+                  "status": "success"
+                  "message": "query successfully executed"
+                  "data": [
+                    "ZTF_alerts_aux",
+                    "ZTF_alerts"
+                  ]
+
+              count_documents:
+                value:
+                  "user": "admin"
+                  "kwargs": {}
+                  "status": "success"
+                  "message": "query successfully executed"
+                  "data": 1
+
+              estimated_document_count:
+                value:
+                  "user": "admin"
+                  "kwargs": {}
+                  "status": "success"
+                  "message": "query successfully executed"
+                  "data": 11
 
       '400':
-        description: bad credentials
+        description: query parsing/execution error
         content:
           application/json:
             schema:
@@ -1240,6 +1331,7 @@ async def query(request: web.Request) -> web.Response:
               properties:
                 status:
                   type: string
+                  enum: [error]
                 message:
                   type: string
             examples:
