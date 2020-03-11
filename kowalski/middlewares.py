@@ -2,6 +2,10 @@ from aiohttp import web
 from copy import deepcopy
 from functools import wraps
 import jwt
+from utils import load_config
+
+
+config = load_config(config_file='config_api.json')
 
 
 @web.middleware
@@ -39,6 +43,7 @@ def auth_required(func):
     :param func:
     :return:
     """
+    @wraps(func)
     def wrapper(request):
         if not request.user:
             return web.json_response({'status': 'error', 'message': 'auth required'}, status=401)
@@ -46,19 +51,36 @@ def auth_required(func):
     return wrapper
 
 
-def admin_required(admin: str = 'admin'):
+def admin_required(func):
     """
         Decorator to ensure user authorization _and_ admin rights
-    :param admin: admin name
+    :param func:
     :return:
     """
-    def inner_function(func):
-        def wrapper(request):
-            if not request.user:
-                return web.json_response({'status': 'error', 'message': 'auth required'}, status=401)
-            if request.user != admin:
-                return web.json_response({'status': 'error', 'message': 'admin rights required'}, status=403)
-            return func(request)
-        return wrapper
+    @wraps(func)
+    def wrapper(request):
+        if not request.user:
+            return web.json_response({'status': 'error', 'message': 'auth required'}, status=401)
+        if request.user != config['server']['admin_username']:
+            return web.json_response({'status': 'error', 'message': 'admin rights required'}, status=403)
+        return func(request)
+    return wrapper
 
-    return inner_function
+
+# def auth(admin: bool = False):
+#     """
+#         Decorator to ensure user authorization _and_ admin rights
+#     :param admin: admin name
+#     :return:
+#     """
+#     def inner_function(func):
+#         @wraps(func)
+#         def wrapper(request):
+#             if not request.user:
+#                 return web.json_response({'status': 'error', 'message': 'auth required'}, status=401)
+#             if admin and request.user != config['server']['admin_username']:
+#                 return web.json_response({'status': 'error', 'message': 'admin rights required'}, status=403)
+#             return func(request)
+#         return wrapper
+#
+#     return inner_function

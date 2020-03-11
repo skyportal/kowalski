@@ -35,7 +35,7 @@ routes = web.RouteTableDef()
 
 
 @routes.post('/api/auth')
-async def auth(request: web.Request) -> web.Response:
+async def auth_post(request: web.Request) -> web.Response:
     """
     Authenticate
 
@@ -198,8 +198,8 @@ async def auth(request: web.Request) -> web.Response:
 
 
 @routes.get('/', name='root', allow_head=False)
-# @auth_required
-async def root_handler(request: web.Request) -> web.Response:
+@auth_required
+async def root(request: web.Request) -> web.Response:
     """
     ping/pong
 
@@ -237,8 +237,8 @@ async def root_handler(request: web.Request) -> web.Response:
 
 
 @routes.post('/api/users')
-# @admin_required(admin=config['server']['admin_username'])
-async def add_user(request: web.Request) -> web.Response:
+@admin_required
+async def users_post(request: web.Request) -> web.Response:
     """
     Add new user
 
@@ -355,8 +355,8 @@ async def add_user(request: web.Request) -> web.Response:
 
 
 @routes.delete('/api/users/{username}')
-# @admin_required(admin=config['server']['admin_username'])
-async def remove_user(request: web.Request) -> web.Response:
+@admin_required
+async def users_delete(request: web.Request) -> web.Response:
     """
     Remove user
 
@@ -448,8 +448,8 @@ async def remove_user(request: web.Request) -> web.Response:
 
 
 @routes.put('/api/users/{username}')
-# @admin_required(admin=config['server']['admin_username'])
-async def edit_user(request: web.Request) -> web.Response:
+@admin_required
+async def users_put(request: web.Request) -> web.Response:
     """
     Edit user data
 
@@ -1084,8 +1084,8 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
 
 
 @routes.post('/api/queries')
-# @auth_required
-async def query(request: web.Request) -> web.Response:
+@admin_required
+async def queries_post(request: web.Request) -> web.Response:
     """
     Query Kowalski
 
@@ -1389,7 +1389,7 @@ async def query(request: web.Request) -> web.Response:
 
 @routes.get('/api/queries/{task_id}', allow_head=False)
 @auth_required
-async def query_grab(request):
+async def queries_get(request):
     """
         Grab saved query / result.
 
@@ -1415,7 +1415,7 @@ async def query_grab(request):
                 return web.json_response(await f_task_file.read(), status=200)
 
         elif part == 'result':
-            if query['status'] == 'enqueued':
+            if _query['status'] == 'enqueued':
                 return web.json_response({'status': 'success', 'message': f'query not finished yet'}, status=200)
 
             task_result_file = os.path.join(config['path']['path_queries'], user, f'{task_id}.result.json')
@@ -1435,7 +1435,7 @@ async def query_grab(request):
 
 @routes.delete('/api/queries/{task_id}')
 @auth_required
-async def query_delete(request):
+async def queries_delete(request):
     """
         Delete saved query from DB programmatically.
 
@@ -1476,8 +1476,8 @@ async def query_delete(request):
 
 
 @routes.get('/api/filters/{filter_id}', allow_head=False)
-@admin_required(admin=config['server']['admin_username'])
-async def filter_get(request):
+@admin_required
+async def filters_get(request):
     """
         Retrieve user-defined filter by id
     :param request:
@@ -1501,8 +1501,8 @@ async def filter_get(request):
 
 
 @routes.post('/api/filters')
-@admin_required(admin=config['server']['admin_username'])
-async def filter_post(request):
+@admin_required
+async def filters_post(request):
     """
         Save user-defined filter assigning unique id
         store as serialized extended json string, use literal_eval to convert to dict at execution
@@ -1592,8 +1592,8 @@ async def filter_post(request):
 
 
 @routes.post('/api/filters/test')
-@admin_required(admin=config['server']['admin_username'])
-async def filter_test_post(request):
+@admin_required
+async def filters_test_post(request):
     """
         Test user-defined filter: check that is lexically correct, throws no errors and executes reasonably fast
     :param request:
@@ -1665,8 +1665,8 @@ async def filter_test_post(request):
 
 
 @routes.delete('/api/filters/{filter_id}')
-@admin_required(admin=config['server']['admin_username'])
-async def filter_delete(request):
+@admin_required
+async def filters_delete(request):
     """
         Delete user-defined filter by id
     :param request:
@@ -1694,7 +1694,7 @@ async def filter_delete(request):
 
 @routes.get('/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}', allow_head=False)
 @auth_required
-async def ztf_alert_get_cutout_handler(request):
+async def ztf_alert_get_cutout(request):
     """
         Serve cutouts as fits or png
     :param request:
@@ -1778,7 +1778,7 @@ async def ztf_alert_get_cutout_handler(request):
 
 @routes.get('/lab/zuds-alerts/{candid}/cutout/{cutout}/{file_format}', allow_head=False)
 @auth_required
-async def zuds_alert_get_cutout_handler(request):
+async def zuds_alert_get_cutout(request):
     """
         Serve cutouts as fits or png
     :param request:
@@ -1908,13 +1908,36 @@ async def app_factory():
                     validate=False,  # fixme?
                     title="Kowalski",
                     version="2.0.0dev",
+                    description="",
                     components="components_api.yaml")
-    # ?
-    # app["storage"] = {}
 
-    # route table
+    # route table from decorators.
     # app.add_routes(routes)
     s.add_routes(routes)
+
+    # add routes manually
+    # s.add_routes([web.get('/', root, name='root', allow_head=False),
+    #               # auth:
+    #               web.post('/api/auth', auth_post, name='auth'),
+    #               # users:
+    #               web.post('/api/users', users_post),
+    #               web.delete('/api/users/{username}', users_delete),
+    #               web.put('/api/users/{username}', users_put),
+    #               # queries:
+    #               web.post('/api/queries', queries_post),
+    #               web.get('/api/queries/{task_id}', queries_get, allow_head=False),
+    #               web.delete('/api/queries/{task_id}', queries_delete),
+    #               # filters:
+    #               web.get('/api/filters/{filter_id}', filters_get, allow_head=False),
+    #               web.post('/api/filters', filters_post),
+    #               web.delete('/api/filters/{filter_id}', filters_delete),
+    #               web.post('/api/filters/test', filters_test_post),
+    #               # lab:
+    #               web.get('/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}',
+    #                       ztf_alert_get_cutout, allow_head=False),
+    #               web.get('/lab/zuds-alerts/{candid}/cutout/{cutout}/{file_format}',
+    #                       zuds_alert_get_cutout, allow_head=False),
+    #               ])
 
     return app
 
