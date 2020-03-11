@@ -1908,7 +1908,7 @@ async def app_factory():
                     validate=False,  # fixme?
                     title="Kowalski",
                     version="2.0.0dev",
-                    description="Toolkit for Time-Domain Astronomy",
+                    description="Kowalski: a toolkit for Time-Domain Astronomy",
                     components="components_api.yaml")
 
     # route table from decorators:
