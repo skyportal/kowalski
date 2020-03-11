@@ -65,7 +65,7 @@ components:
                     projection:
                       type: object
                       description: "projection expression (document fields to return/ditch) in MQL"
-                description: "define filter and projection per <catalog_name>."
+                description: "define filter and projection per catalog."
         object_coordinates:
           type: object
           additionalProperties:

@@ -71,10 +71,9 @@ async def auth_post(request: web.Request) -> web.Response:
               type: object
               required:
                 - status
+                - token
               properties:
                 status:
-                  type: string
-                message:
                   type: string
                 token:
                   type: string
@@ -1136,7 +1135,7 @@ async def queries_post(request: web.Request) -> web.Response:
                 "query": {
                   "catalog": "ZTF_alerts",
                   "pipeline": [
-                    {'$match': {'candid': 1127561445515015011}},
+                    {'$match': {'candid': 1105522281015015000}},
                     {"$project": {"_id": 0, "candid": 1, "candidate.drb": 1}}
                   ],
                 }
@@ -1244,9 +1243,9 @@ async def queries_post(request: web.Request) -> web.Response:
                   "message": "query successfully executed"
                   "data": [
                     {
-                      "candid": 1127107111615015007,
+                      "candid": 1105522281015015000,
                       "candidate": {
-                        "drb": 0.9986417293548584
+                        "drb": 0.999999463558197
                       }
                     }
                   ]
@@ -1262,8 +1261,8 @@ async def queries_post(request: web.Request) -> web.Response:
                   "data": {
                     "ZTF_alerts": {
                       "object1": [
-                        {"objectId": "ZTF19abzrhgq",
-                         "candid": 1127107111615015007}
+                        {"objectId": "ZTF20aaelulu",
+                         "candid": 1105522281015015000}
                       ]
                     }
                   }
