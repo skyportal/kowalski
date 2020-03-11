@@ -1901,17 +1901,17 @@ async def app_factory():
                   'JWT_ALGORITHM': 'HS256',
                   'JWT_EXP_DELTA_SECONDS': 30 * 86400 * 3}
 
-    # OpenAPI specs:
+    # OpenAPI docs:
     s = SwaggerDocs(app,
-                    redoc_ui_settings=ReDocUiSettings(path="/docs/"),
-                    # swagger_ui_settings=SwaggerUiSettings(path="/docs/"),
+                    redoc_ui_settings=ReDocUiSettings(path="/docs/api/"),
+                    # swagger_ui_settings=SwaggerUiSettings(path="/docs/api/"),
                     validate=False,  # fixme?
                     title="Kowalski",
                     version="2.0.0dev",
-                    description="",
+                    description="Toolkit for Time-Domain Astronomy",
                     components="components_api.yaml")
 
-    # route table from decorators.
+    # route table from decorators:
     # app.add_routes(routes)
     s.add_routes(routes)
 
