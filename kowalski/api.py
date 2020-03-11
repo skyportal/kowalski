@@ -1904,7 +1904,7 @@ async def app_factory():
     s = SwaggerDocs(app,
                     redoc_ui_settings=ReDocUiSettings(path="/docs/api/"),
                     # swagger_ui_settings=SwaggerUiSettings(path="/docs/api/"),
-                    validate=False,  # fixme?
+                    validate=config['misc']['openapi_validate'],
                     title="Kowalski",
                     version="2.0.0dev",
                     description="Kowalski: a toolkit for Time-Domain Astronomy",

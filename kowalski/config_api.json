@@ -42,6 +42,7 @@
     "query_expiration_interval": 5,
     "max_time_ms": 300000,
     "max_retries": 100,
-    "logging_level": "debug"
+    "logging_level": "debug",
+    "openapi_validate":  false
   }
 }
