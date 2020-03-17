@@ -1541,7 +1541,7 @@ async def filters_get(request):
               }
 
       '400':
-        description: retrival failed or internal/unknown cause of failure
+        description: retrieval failed or internal/unknown cause of failure
         content:
           application/json:
             schema:
@@ -2179,9 +2179,69 @@ async def filters_delete(request):
 @auth_required
 async def ztf_alert_get_cutout(request):
     """
-        Serve cutouts as fits or png
+    Serve ZTF alert cutouts as fits or png
+
     :param request:
     :return:
+
+    ---
+    summary: Serve ZTF alert cutout as fits or png
+    tags:
+      - lab
+
+    parameters:
+      - in: path
+        name: candid
+        description: "ZTF alert candid"
+        required: true
+        schema:
+          type: integer
+      - in: path
+        name: cutout
+        description: "retrieve science, template, or difference cutout image?"
+        required: true
+        schema:
+          type: string
+          enum: [science, template, difference]
+      - in: path
+        name: file_format
+        description: "response file format: original lossless FITS or rendered png"
+        required: true
+        schema:
+          type: string
+          enum: [fits, png]
+
+    responses:
+      '200':
+        description: retrieved cutout
+        content:
+          image/fits:
+            schema:
+              type: string
+              format: binary
+          image/png:
+            schema:
+              type: string
+              format: binary
+
+      '400':
+        description: retrieval failed
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [error]
+                message:
+                  type: string
+            example:
+              status: error
+              message: "failure: <error message>"
     """
     try:
         candid = int(request.match_info['candid'])
@@ -2256,16 +2316,76 @@ async def ztf_alert_get_cutout(request):
         print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
         _err = traceback.format_exc()
         print(_err)
-        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
 @routes.get('/lab/zuds-alerts/{candid}/cutout/{cutout}/{file_format}', allow_head=False)
 @auth_required
 async def zuds_alert_get_cutout(request):
     """
-        Serve cutouts as fits or png
+    Serve cutouts as fits or png
+
     :param request:
     :return:
+
+    ---
+    summary: Serve ZUDS alert cutout as fits or png
+    tags:
+      - lab
+
+    parameters:
+      - in: path
+        name: candid
+        description: "ZUDS alert candid"
+        required: true
+        schema:
+          type: integer
+      - in: path
+        name: cutout
+        description: "retrieve science, template, or difference cutout image?"
+        required: true
+        schema:
+          type: string
+          enum: [science, template, difference]
+      - in: path
+        name: file_format
+        description: "response file format: original lossless FITS or rendered png"
+        required: true
+        schema:
+          type: string
+          enum: [fits, png]
+
+    responses:
+      '200':
+        description: retrieved cutout
+        content:
+          image/fits:
+            schema:
+              type: string
+              format: binary
+          image/png:
+            schema:
+              type: string
+              format: binary
+
+      '400':
+        description: retrieval failed
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [error]
+                message:
+                  type: string
+            example:
+              status: error
+              message: "failure: <error message>"
     """
     try:
         candid = int(request.match_info['candid'])
@@ -2342,7 +2462,7 @@ async def zuds_alert_get_cutout(request):
         print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
         _err = traceback.format_exc()
         print(_err)
-        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
 async def app_factory():
