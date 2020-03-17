@@ -1487,9 +1487,77 @@ async def queries_delete(request):
 @admin_required
 async def filters_get(request):
     """
-        Retrieve user-defined filter by id
+    Retrieve user-defined filter by id
+
     :param request:
     :return:
+
+    ---
+    summary: Retrieve user-defined filter by id
+    tags:
+      - filters
+
+    parameters:
+      - in: path
+        name: filter_id
+        description: "unique filter _id"
+        required: true
+        schema:
+          type: string
+          minLength: 6
+          maxLength: 6
+
+    responses:
+      '200':
+        description: retrived filter data
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+                - data
+              properties:
+                status:
+                  type: string
+                  enum: [success]
+                message:
+                  type: string
+                data:
+                  type: object
+            example:
+              "status": "success"
+              "message": "retrieved filter_id c3ig1t"
+              "data": {
+                "_id": "c3ig1t",
+                "group_id": 1,
+                "science_program_id": 1,
+                "catalog": "ZTF_alerts",
+                "pipeline": "<serialized extended json string>",
+                "created": {
+                    "$date": 1584403506877
+                }
+              }
+
+      '400':
+        description: retrival failed or internal/unknown cause of failure
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [error]
+                message:
+                  type: string
+            example:
+              status: error
+              message: "failure: <error message>"
     """
     try:
         # get query params
