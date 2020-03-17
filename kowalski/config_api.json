@@ -1,6 +1,8 @@
 {
   "server": {
-    "logo": "Kowalski",
+    "name": "Kowalski",
+    "version": "2.0.0dev",
+    "description": "Kowalski: a toolkit for Time-Domain Astronomy",
     "environment": "production",
     "host": "0.0.0.0",
     "port": "4000"

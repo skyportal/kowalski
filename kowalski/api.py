@@ -1503,12 +1503,163 @@ async def filters_get(request):
 @admin_required
 async def filters_post(request):
     """
-        Save user-defined filter assigning unique id
-        store as serialized extended json string, use literal_eval to convert to dict at execution
-        run a simple sanity check before saving
-        https://www.npmjs.com/package/bson
-    :param request:
-    :return:
+    Save user-defined filter assigning unique id
+    store as serialized extended json string, use literal_eval to convert to dict at execution
+    run a simple sanity check before saving
+    https://www.npmjs.com/package/bson
+
+    ---
+    summary: Save user-defined filter
+    tags:
+      - filters
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - group_id
+              - science_program_id
+              - catalog
+              - pipeline
+            properties:
+              group_id:
+                type: integer
+                description: "[fritz] user group id"
+                minimum: 1
+              science_program_id:
+                type: integer
+                description: "[fritz] science program id for this user group id"
+                minimum: 1
+              catalog:
+                type: string
+                description: "alert stream to filter: ZTF or ZUDS"
+                enum: [ZTF_alerts, ZUDS_alerts]
+              pipeline:
+                type: array
+                items:
+                  type: object
+                description: "aggregation pipeline stages in MQL"
+                minItems: 1
+          examples:
+            filter_1:
+              value:
+                "group_id": 1
+                "science_program_id": 1
+                "catalog": ZTF_alerts
+                "pipeline": [
+                    {
+                        "$match": {
+                            "candidate.drb": {
+                                "$gt": 0.9999
+                            },
+                            "cross_matches.CLU_20190625.0": {
+                                "$exists": False
+                            }
+                        }
+                    },
+                    {
+                        "$addFields": {
+                            "annotations.author": "dd",
+                            "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                        }
+                    },
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "candid": 1,
+                            "objectId": 1,
+                            "annotations": 1
+                        }
+                    }
+                ]
+            filter_2:
+              value:
+                "group_id": 2
+                "science_program_id": 1
+                "catalog": ZTF_alerts
+                "pipeline": [
+                    {
+                        "$match": {
+                            "candidate.drb": {
+                                "$gt": 0.9999
+                            },
+                            "cross_matches.CLU_20190625.0": {
+                                "$exists": True
+                            }
+                        }
+                    },
+                    {
+                        "$addFields": {
+                            "annotations.author": "dd",
+                            "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                        }
+                    },
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "candid": 1,
+                            "objectId": 1,
+                            "annotations": 1
+                        }
+                    }
+                ]
+
+    responses:
+      '200':
+        description: filter successfully saved
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+                - data
+              properties:
+                status:
+                  type: string
+                  enum: [success]
+                message:
+                  type: string
+                user:
+                  type: string
+                data:
+                  description: "contains unique filter _id"
+                  type: object
+                  additionalProperties:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                        description: "generated unique filter _id"
+            example:
+              "status": "success"
+              "message": "saved filter: c3ig1t"
+              "data": {
+               "_id": "c3ig1t"
+              }
+
+      '400':
+        description: filter parsing/testing/saving error
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [error]
+                message:
+                  type: string
+            example:
+              status: error
+              message: "failure: <error message>"
     """
     try:
 
@@ -1905,9 +2056,9 @@ async def app_factory():
                     redoc_ui_settings=ReDocUiSettings(path="/docs/api/"),
                     # swagger_ui_settings=SwaggerUiSettings(path="/docs/api/"),
                     validate=config['misc']['openapi_validate'],
-                    title="Kowalski",
-                    version="2.0.0dev",
-                    description="Kowalski: a toolkit for Time-Domain Astronomy",
+                    title=config['server']['name'],
+                    version=config['server']['version'],
+                    description=config['server']['description'],
                     components="components_api.yaml")
 
     # route table from decorators:

@@ -132,7 +132,7 @@ class TestAPIs(object):
         result = await resp.json()
         assert result['status'] == 'success'
 
-    # todo: test filters api
+    # test filters api
 
     async def test_filters(self, aiohttp_client):
         """
