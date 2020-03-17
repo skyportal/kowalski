@@ -1576,6 +1576,26 @@ async def filters_get(request):
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
+@routes.get('/api/filters')
+@admin_required
+async def filters_query(request):
+    """
+    todo: get filters (filter id's?) for group_id[/science_program_id]:
+          /api/filters?group_id=1&science_program_id=1&all=false&only_ids=true
+          all ever saved
+          ? or use the standard POST to /api/queries endpoint ? gotta think a bit...
+
+    :param request:
+    :return:
+
+    {"data": [{"group_id": 1, "science_programs": [{"science_program_id": 1, "filters": ["filter_id": "abc123"]}]}]}
+
+    ?
+
+    """
+    pass
+
+
 @routes.post('/api/filters')
 @admin_required
 async def filters_post(request):
@@ -1827,6 +1847,164 @@ async def filters_test_post(request):
         Test user-defined filter: check that is lexically correct, throws no errors and executes reasonably fast
     :param request:
     :return:
+
+    ---
+    summary: Test user-defined filter
+    tags:
+      - filters
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - group_id
+              - science_program_id
+              - catalog
+              - pipeline
+            properties:
+              group_id:
+                type: integer
+                description: "[fritz] user group id"
+                minimum: 1
+              science_program_id:
+                type: integer
+                description: "[fritz] science program id for this user group id"
+                minimum: 1
+              catalog:
+                type: string
+                description: "alert stream to filter: ZTF or ZUDS"
+                enum: [ZTF_alerts, ZUDS_alerts]
+              pipeline:
+                type: array
+                items:
+                  type: object
+                description: "aggregation pipeline stages in MQL"
+                minItems: 1
+          examples:
+            filter_1:
+              value:
+                "group_id": 1
+                "science_program_id": 1
+                "catalog": ZTF_alerts
+                "pipeline": [
+                    {
+                        "$match": {
+                            "candidate.drb": {
+                                "$gt": 0.9999
+                            },
+                            "cross_matches.CLU_20190625.0": {
+                                "$exists": False
+                            }
+                        }
+                    },
+                    {
+                        "$addFields": {
+                            "annotations.author": "dd",
+                            "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                        }
+                    },
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "candid": 1,
+                            "objectId": 1,
+                            "annotations": 1
+                        }
+                    }
+                ]
+            filter_2:
+              value:
+                "group_id": 2
+                "science_program_id": 1
+                "catalog": ZTF_alerts
+                "pipeline": [
+                    {
+                        "$match": {
+                            "candidate.drb": {
+                                "$gt": 0.9999
+                            },
+                            "cross_matches.CLU_20190625.0": {
+                                "$exists": True
+                            }
+                        }
+                    },
+                    {
+                        "$addFields": {
+                            "annotations.author": "dd",
+                            "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                        }
+                    },
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "candid": 1,
+                            "objectId": 1,
+                            "annotations": 1
+                        }
+                    }
+                ]
+
+    responses:
+      '200':
+        description: filter successfully tested
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [success]
+                message:
+                  type: string
+            example:
+              "status": "success"
+              "message": "successfully executed on candid <candid>"
+
+      '400':
+        description: filter parsing/testing error
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [error]
+                message:
+                  type: string
+            example:
+              status: error
+              message: "failure: <error message>"
+
+      '500':
+        description: "unable to test, no alerts in db"
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [error]
+                message:
+                  type: string
+            example:
+              status: error
+              message: "no alerts in <catalog>, cannot test filter"
+
     """
     try:
 
