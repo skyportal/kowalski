@@ -284,6 +284,7 @@ async def users_post(request: web.Request) -> web.Response:
               properties:
                 status:
                   type: string
+                  enum: [success]
                 message:
                   type: string
             example:
@@ -302,6 +303,7 @@ async def users_post(request: web.Request) -> web.Response:
               properties:
                 status:
                   type: string
+                  enum: [error]
                 message:
                   type: string
             example:
@@ -320,6 +322,7 @@ async def users_post(request: web.Request) -> web.Response:
               properties:
                 status:
                   type: string
+                  enum: [error]
                 message:
                   type: string
             example:
@@ -379,6 +382,7 @@ async def users_delete(request: web.Request) -> web.Response:
               properties:
                 status:
                   type: string
+                  enum: [success]
                 message:
                   type: string
             example:
@@ -397,6 +401,7 @@ async def users_delete(request: web.Request) -> web.Response:
               properties:
                 status:
                   type: string
+                  enum: [error]
                 message:
                   type: string
             examples:
@@ -421,6 +426,7 @@ async def users_delete(request: web.Request) -> web.Response:
               properties:
                 status:
                   type: string
+                  enum: [error]
                 message:
                   type: string
             example:
@@ -486,6 +492,7 @@ async def users_put(request: web.Request) -> web.Response:
               properties:
                 status:
                   type: string
+                  enum: [success]
                 message:
                   type: string
             example:
@@ -504,6 +511,7 @@ async def users_put(request: web.Request) -> web.Response:
               properties:
                 status:
                   type: string
+                  enum: [error]
                 message:
                   type: string
             examples:
@@ -524,6 +532,7 @@ async def users_put(request: web.Request) -> web.Response:
               properties:
                 status:
                   type: string
+                  enum: [error]
                 message:
                   type: string
             example:
@@ -1635,6 +1644,8 @@ async def filters_post(request):
                       _id:
                         type: string
                         description: "generated unique filter _id"
+                        minLength: 6
+                        maxLength: 6
             example:
               "status": "success"
               "message": "saved filter: c3ig1t"
@@ -1818,9 +1829,85 @@ async def filters_test_post(request):
 @admin_required
 async def filters_delete(request):
     """
-        Delete user-defined filter by id
+    Delete user-defined filter by id
+
     :param request:
     :return:
+
+    ---
+    summary: Delete user-defined filter by id
+    tags:
+      - filters
+
+    parameters:
+      - in: path
+        name: filter_id
+        description: "unique filter _id"
+        required: true
+        schema:
+          type: string
+          minLength: 6
+          maxLength: 6
+
+    responses:
+      '200':
+        description: filter removed
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [success]
+                message:
+                  type: string
+            example:
+              status: success
+              message: "removed filter: c3ig1t"
+
+      '400':
+        description: filter not found or removal failed
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [error]
+                message:
+                  type: string
+            examples:
+              filter not found:
+                value:
+                  status: error
+                  message: filter c3ig1t not found
+
+      '500':
+        description: internal/unknown cause of failure
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [error]
+                message:
+                  type: string
+            example:
+              status: error
+              message: "failure: <error message>"
     """
     try:
         filter_id = request.match_info['filter_id']
