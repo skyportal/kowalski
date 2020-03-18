@@ -12,6 +12,8 @@ import multiprocessing
 import numpy as np
 import os
 import pymongo
+import requests
+# from requests.adapters import HTTPAdapter, DEFAULT_POOLBLOCK, DEFAULT_POOLSIZE, DEFAULT_RETRIES
 import subprocess
 import sys
 from tensorflow.keras.models import load_model
@@ -161,6 +163,20 @@ class AlertConsumer(object):
         self.consumer.subscribe([topic], on_assign=on_assign)
 
         self.config = config
+
+        # session to talk to SkyPortal
+        self.session = requests.Session()
+        self.session_headers = {'Authorization': f"token {config['skyportal']['token']}"}
+        # non-default settings:
+        # pc = pool_connections if pool_connections is not None else DEFAULT_POOLSIZE
+        # pm = pool_maxsize if pool_maxsize is not None else DEFAULT_POOLSIZE
+        # mr = max_retries if max_retries is not None else DEFAULT_RETRIES
+        # pb = pool_block if pool_block is not None else DEFAULT_POOLBLOCK
+        #
+        # self.session.mount('https://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
+        #                                            max_retries=mr, pool_block=pb))
+        # self.session.mount('http://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
+        #                                           max_retries=mr, pool_block=pb))
 
         # MongoDB collections to store the alerts:
         self.collection_alerts = self.config['database']['collection_alerts_ztf']
@@ -358,105 +374,123 @@ class AlertConsumer(object):
             raise EopError(msg)
 
         elif msg is not None:
-            # decode avro packet
-            msg_decoded = self.decodeMessage(msg)
-            for record in msg_decoded:
+            try:
+                # decode avro packet
+                msg_decoded = self.decodeMessage(msg)
+                for record in msg_decoded:
 
-                candid = record['candid']
-                objectId = record['objectId']
+                    candid = record['candid']
+                    objectId = record['objectId']
 
-                print(f'{time_stamp()}: {self.topic} {objectId} {candid}')
+                    print(f'{time_stamp()}: {self.topic} {objectId} {candid}')
 
-                # check that candid not in collection_alerts
-                if self.db['db'][self.collection_alerts].count_documents({'candid': candid}, limit=1) == 0:
-                    # candid not in db, ingest
-
-                    if save_packets:
-                        # save avro packet to disk
-                        path_alert_dir = os.path.join(path_alerts, datestr)
-                        # mkdir if does not exist
-                        if not os.path.exists(path_alert_dir):
-                            os.makedirs(path_alert_dir)
-                        path_avro = os.path.join(path_alert_dir, f'{candid}.avro')
-                        print(f'{time_stamp()}: saving {candid} to disk')
-                        with open(path_avro, 'wb') as f:
-                            f.write(msg.value())
-
-                    # ingest decoded avro packet into db
-                    alert, prv_candidates = self.alert_mongify(record)
-
-                    # ML models:
-                    scores = alert_filter__ml(record, ml_models=self.ml_models)
-                    alert['classifications'] = scores
-
-                    print(f'{time_stamp()}: ingesting {alert["candid"]} into db')
-                    self.insert_db_entry(_collection=self.collection_alerts, _db_entry=alert)
-
-                    # prv_candidates: pop nulls - save space
-                    prv_candidates = [{kk: vv for kk, vv in prv_candidate.items() if vv is not None}
-                                      for prv_candidate in prv_candidates]
-
-                    # cross-match with external catalogs if objectId not in collection_alerts_aux:
-                    if self.db['db'][self.collection_alerts_aux].count_documents({'_id': objectId}, limit=1) == 0:
-                        # tic = time.time()
-                        xmatches = alert_filter__xmatch(self.db['db'], alert)
-                        # CLU cross-match:
-                        xmatches = {**xmatches, **alert_filter__xmatch_clu(self.db['db'], alert)}
-                        # alert['cross_matches'] = xmatches
-                        # toc = time.time()
-                        # print(f'xmatch for {alert["candid"]} took {toc-tic:.2f} s')
-
-                        alert_aux = {'_id': objectId,
-                                     'cross_matches': xmatches,
-                                     'prv_candidates': prv_candidates}
-
-                        self.insert_db_entry(_collection=self.collection_alerts_aux, _db_entry=alert_aux)
-
-                    else:
-                        self.db['db'][self.collection_alerts_aux].update_one({'_id': objectId},
-                                                                             {'$addToSet':
-                                                                                  {'prv_candidates':
-                                                                                       {'$each': prv_candidates}}},
-                                                                             upsert=True)
-
-                    # dump packet as json to disk if in a public TESS sector
-                    if 'TESS' in alert['candidate']['programpi']:
-                        # put prv_candidates back
-                        alert['prv_candidates'] = prv_candidates
-
-                        # get cross-matches
-                        # xmatches = self.db['db'][self.collection_alerts_aux].find_one({'_id': objectId})
-                        xmatches = self.db['db'][self.collection_alerts_aux].find({'_id': objectId},
-                                                                                  {'cross_matches': 1},
-                                                                                  limit=1)
-                        xmatches = list(xmatches)[0]
-                        # fixme: pop CLU:
-                        xmatches.pop('CLU_20190625', None)
-
-                        alert['cross_matches'] = xmatches['cross_matches']
+                    # check that candid not in collection_alerts
+                    if self.db['db'][self.collection_alerts].count_documents({'candid': candid}, limit=1) == 0:
+                        # candid not in db, ingest
 
                         if save_packets:
-                            path_tess_dir = os.path.join(path_tess, datestr)
+                            # save avro packet to disk
+                            path_alert_dir = os.path.join(path_alerts, datestr)
                             # mkdir if does not exist
-                            if not os.path.exists(path_tess_dir):
-                                os.makedirs(path_tess_dir)
+                            if not os.path.exists(path_alert_dir):
+                                os.makedirs(path_alert_dir)
+                            path_avro = os.path.join(path_alert_dir, f'{candid}.avro')
+                            print(f'{time_stamp()}: saving {candid} to disk')
+                            with open(path_avro, 'wb') as f:
+                                f.write(msg.value())
 
-                            print(f'{time_stamp()}: saving {alert["candid"]} to disk')
-                            try:
-                                with open(os.path.join(path_tess_dir, f"{alert['candid']}.json"), 'w') as f:
-                                    f.write(dumps(alert))
-                            except Exception as e:
-                                print(f'{time_stamp()}: {str(e)}')
-                                _err = traceback.format_exc()
-                                print(f'{time_stamp()}: {str(_err)}')
+                        # ingest decoded avro packet into db
+                        alert, prv_candidates = self.alert_mongify(record)
 
-                    # todo: execute user-defined alert filters
-                    passed_filters = alert_filter__user_defined(self.db['db'], self.filter_templates, alert)
+                        # ML models:
+                        scores = alert_filter__ml(record, ml_models=self.ml_models)
+                        alert['classifications'] = scores
 
-                    # todo: submit alerts that passed at least one filter to SkyPortal
-                    #       if no filters are found, dumps all alerts?
-                    if len(passed_filters) > 0:
-                        pass
+                        print(f'{time_stamp()}: ingesting {alert["candid"]} into db')
+                        self.insert_db_entry(_collection=self.collection_alerts, _db_entry=alert)
+
+                        # prv_candidates: pop nulls - save space
+                        prv_candidates = [{kk: vv for kk, vv in prv_candidate.items() if vv is not None}
+                                          for prv_candidate in prv_candidates]
+
+                        # cross-match with external catalogs if objectId not in collection_alerts_aux:
+                        if self.db['db'][self.collection_alerts_aux].count_documents({'_id': objectId}, limit=1) == 0:
+                            # tic = time.time()
+                            xmatches = alert_filter__xmatch(self.db['db'], alert)
+                            # CLU cross-match:
+                            xmatches = {**xmatches, **alert_filter__xmatch_clu(self.db['db'], alert)}
+                            # alert['cross_matches'] = xmatches
+                            # toc = time.time()
+                            # print(f'xmatch for {alert["candid"]} took {toc-tic:.2f} s')
+
+                            alert_aux = {'_id': objectId,
+                                         'cross_matches': xmatches,
+                                         'prv_candidates': prv_candidates}
+
+                            self.insert_db_entry(_collection=self.collection_alerts_aux, _db_entry=alert_aux)
+
+                        else:
+                            self.db['db'][self.collection_alerts_aux].update_one({'_id': objectId},
+                                                                                 {'$addToSet':
+                                                                                      {'prv_candidates':
+                                                                                           {'$each': prv_candidates}}},
+                                                                                 upsert=True)
+
+                        # dump packet as json to disk if in a public TESS sector
+                        if 'TESS' in alert['candidate']['programpi']:
+                            # put prv_candidates back
+                            alert['prv_candidates'] = prv_candidates
+
+                            # get cross-matches
+                            # xmatches = self.db['db'][self.collection_alerts_aux].find_one({'_id': objectId})
+                            xmatches = self.db['db'][self.collection_alerts_aux].find({'_id': objectId},
+                                                                                      {'cross_matches': 1},
+                                                                                      limit=1)
+                            xmatches = list(xmatches)[0]
+                            # fixme: pop CLU:
+                            xmatches.pop('CLU_20190625', None)
+
+                            alert['cross_matches'] = xmatches['cross_matches']
+
+                            if save_packets:
+                                path_tess_dir = os.path.join(path_tess, datestr)
+                                # mkdir if does not exist
+                                if not os.path.exists(path_tess_dir):
+                                    os.makedirs(path_tess_dir)
+
+                                print(f'{time_stamp()}: saving {alert["candid"]} to disk')
+                                try:
+                                    with open(os.path.join(path_tess_dir, f"{alert['candid']}.json"), 'w') as f:
+                                        f.write(dumps(alert))
+                                except Exception as e:
+                                    print(f'{time_stamp()}: {str(e)}')
+                                    _err = traceback.format_exc()
+                                    print(f'{time_stamp()}: {str(_err)}')
+
+                        # execute user-defined alert filters
+                        passed_filters = alert_filter__user_defined(self.db['db'], self.filter_templates, alert)
+
+                        # todo: submit alerts that passed at least one filter to SkyPortal
+                        #       ?if no filters are found, dumps all alerts?
+                        if config['misc']['post_to_skyportal'] and (len(passed_filters) > 0):
+                            # fixme: pass annotations, cross-matches, ml scores etc.
+                            alert_thin = {
+                                "id": alert['objectId'],
+                                "ra": alert['candidate']['ra'],
+                                "dec": alert['candidate']['dec'],
+                                "score": alert['candidate']['drb'],
+                            }
+                            resp = self.session.post(
+                                f"{config['skyportal']['protocol']}://"
+                                f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                                "/api/sources",
+                                json=alert_thin, headers=self.session_headers, timeout=1,
+                            )
+                            print(f"{time_stamp()}: Posted {alert['candid']} to SkyPortal")
+                            print(resp.json())
+
+            except Exception as e:
+                print(f"{time_stamp()}: {str(e)}")
 
     def decodeMessage(self, msg):
         """Decode Avro message according to a schema.
@@ -703,6 +737,7 @@ def alert_filter__user_defined(database, filter_templates, alert,
             # match candid
             _filter['pipeline'][0]["$match"]["candid"] = alert['candid']
             # todo: evaluate magic variables (such as "<jd>" or "<jd_date>") here with DFS for each pipeline stage
+            #       or serialize, replace, and de-serialize
             passed_filter = list(database[catalog].aggregate(_filter['pipeline'],
                                                              allowDiskUse=False, maxTimeMS=max_time_ms))
             # passed filter? then len(passed_filter) should be = 1
@@ -711,7 +746,7 @@ def alert_filter__user_defined(database, filter_templates, alert,
                 passed_filters[_filter['_id']] = passed_filter[0]
 
         except Exception as e:
-            print(f'{time_stamp()}: filter {_filter["_id"]} execution failed on alert {alert["candid"]}: {e}')
+            print(f'{time_stamp()}: filter {filter_template["_id"]} execution failed on alert {alert["candid"]}: {e}')
             continue
 
     return passed_filters

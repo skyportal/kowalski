@@ -1,6 +1,8 @@
 {
   "server": {
-    "logo": "Kowalski",
+    "name": "Kowalski",
+    "version": "2.0.0dev",
+    "description": "Kowalski: a toolkit for Time-Domain Astronomy",
     "environment": "production",
     "host": "0.0.0.0",
     "port": "4000"
@@ -217,6 +219,7 @@
   },
 
   "misc": {
+    "post_to_skyportal": true,
     "supported_penquins_versions": ["2.0.0", "2.0.1", "2.0.2"],
     "query_expiration_interval": 5,
     "max_time_ms": 300000,

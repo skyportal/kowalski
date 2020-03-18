@@ -36,10 +36,11 @@ Create `secrets.json` with the secrets. Come up with strong passwords!
   },
   
   "skyportal": {
+    "protocol": "http",
     "host": "0.0.0.0",
     "port": 443,
     "username": "kowalski",
-    "password": "password"
+    "token": "<token>"
   },
 
   "ztf_depot": {

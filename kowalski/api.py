@@ -37,7 +37,7 @@ routes = web.RouteTableDef()
 @routes.post('/api/auth')
 async def auth_post(request: web.Request) -> web.Response:
     """
-    Authenticate
+    Authentication
 
     ---
     summary: Get access token

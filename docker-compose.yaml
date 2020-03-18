@@ -4,6 +4,12 @@ volumes:
   mongodb:
   data:
 
+networks:
+  kowalski:
+  skyportal:
+    external:
+      name: skyportal_default
+
 services:
 
   api:
@@ -24,6 +30,8 @@ services:
     restart: always
     depends_on:
       - mongo
+    networks:
+      - kowalski
 
   ingester:
     build:
@@ -39,6 +47,9 @@ services:
     restart: always
     depends_on:
       - mongo
+    networks:
+      - kowalski
+      - skyportal
 
   mongo:
     image: mongo:latest
@@ -53,3 +64,5 @@ services:
     volumes:
       - mongodb:/data/db
     restart: always
+    networks:
+      - kowalski
