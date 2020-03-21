@@ -487,7 +487,7 @@ class AlertConsumer(object):
                                 json=alert_thin, headers=self.session_headers, timeout=1,
                             )
                             print(f"{time_stamp()}: Posted {alert['candid']} to SkyPortal")
-                            print(resp.json())
+                            # print(resp.json())
 
             except Exception as e:
                 print(f"{time_stamp()}: {str(e)}")
