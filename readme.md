@@ -215,7 +215,8 @@ it has no match with the `CLU_20190625` catalog.
         "pipeline": [
             {
                 "$match": {
-                    "candid": 1127561440015015001
+                    "candid": 1127561440015015001,
+                    "candidate.programid": {"$in": [0, 1, 2, 3]}
                 }
             },
             {
@@ -246,6 +247,25 @@ it has no match with the `CLU_20190625` catalog.
                             "$$ROOT"
                         ]
                     }
+                }
+            },
+            {
+                "$project": {
+                    "cross_matches": 1,
+                    "prv_candidates": {
+                        "$filter": {
+                            "input": "$prv_candidates",
+                            "as": "item",
+                            "cond": {"$in": ["$$item.programid", [1, 2, 3]]}
+                        }
+                    },
+                    "schemavsn": 1,
+                    "publisher": 1,
+                    "objectId": 1,
+                    "candid": 1,
+                    "candidate": 1,
+                    "classifications": 1,
+                    "coordinates": 1
                 }
             },
             {
