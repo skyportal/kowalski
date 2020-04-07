@@ -471,8 +471,9 @@ class AlertConsumer(object):
                         passed_filters = alert_filter__user_defined(self.db['db'], self.filter_templates, alert)
 
                         # todo: submit alerts that passed at least one filter to SkyPortal
-                        #       ?if no filters are found, dumps all alerts?
-                        if config['misc']['post_to_skyportal'] and (len(passed_filters) > 0):
+                        # fixme: ?if no filters are found, dumps all alerts?
+                        # if config['misc']['post_to_skyportal'] and (len(passed_filters) > 0):
+                        if config['misc']['post_to_skyportal']:
                             # fixme: pass annotations, cross-matches, ml scores etc.
                             alert_thin = {
                                 "id": alert['objectId'],

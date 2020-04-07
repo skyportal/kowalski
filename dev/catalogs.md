@@ -1,17 +1,17 @@
 # Dumps of catalogs and where to find them
 
 * sdss_ellipticals
-  - gs://kowalski/sdss_ellipticals.20191018.dump.gz
+  - gs://kowalski-catalogs/sdss_ellipticals.20191018.dump.gz
 * mzls_ellipticals
-  - gs://kowalski/mzls_ellipticals.20191018.dump.gz
+  - gs://kowalski-catalogs/mzls_ellipticals.20191018.dump.gz
 * milliquas_v6
-  - gs://kowalski/milliquas_v6.20191018.dump.gz
+  - gs://kowalski-catalogs/milliquas_v6.20191018.dump.gz
 * legacysurveys_photoz_DR7
-  - gs://kowalski/legacysurveys_photoz_DR7.20191018.dump.gz
+  - gs://kowalski-catalogs/legacysurveys_photoz_DR7.20191018.dump.gz
 * legacysurveys_photoz_DR6
-  - gs://kowalski/legacysurveys_photoz_DR6.20191018.dump.gz
+  - gs://kowalski-catalogs/legacysurveys_photoz_DR6.20191018.dump.gz
 * cfht_w3_photozs
-  - gs://kowalski/cfht_w3_photozs.20191018.dump.gz
+  - gs://kowalski-catalogs/cfht_w3_photozs.20191018.dump.gz
 * ZUDS_alerts_aux
 * ZUDS_alerts
 * ZTF_sources_20191101
@@ -19,43 +19,43 @@
 * ZTF_source_features_20191101_v1
 * ZTF_source_features_20191101
 * ZTF_ops
-  - gs://kowalski/ZTF_ops.20200326.dump.gz
+  - gs://kowalski-catalogs/ZTF_ops.20200326.dump.gz
 * ZTF_exposures_20191101
 * ZTF_alerts_aux
 * ZTF_alerts
 * TNS
-  - gs://kowalski/TNS.20200326.dump.gz
+  - gs://kowalski-catalogs/TNS.20200326.dump.gz
 * TGSS_ADR1
-  - gs://kowalski/TGSS_ADR1.20200326.dump.gz
+  - gs://kowalski-catalogs/TGSS_ADR1.20200326.dump.gz
 * RFC_2019d
-  - gs://kowalski/RFC_2019d.20200326.dump.gz
+  - gs://kowalski-catalogs/RFC_2019d.20200326.dump.gz
 * RFC_2019a
 * PS1_DR1
 * NVSS_41
-  - gs://kowalski/NVSS_41.20200326.dump.gz
+  - gs://kowalski-catalogs/NVSS_41.20200326.dump.gz
 * LAMOST_DR5_v3
-  - gs://kowalski/LAMOST_DR5_v3.20200326.dump.gz
+  - gs://kowalski-catalogs/LAMOST_DR5_v3.20200326.dump.gz
 * LAMOST_DR4_v2
 * Known_lenses_20180901
-  - gs://kowalski/Known_lenses_20180901.20191018.dump.gz
+  - gs://kowalski-catalogs/Known_lenses_20180901.20191018.dump.gz
 * IPHAS_DR2
-  - gs://kowalski/IPHAS_DR2.20200326.dump.gz
+  - gs://kowalski-catalogs/IPHAS_DR2.20200326.dump.gz
 * Gaia_DR2_light_curves
-  - gs://kowalski/Gaia_DR2_light_curves.20200326.dump.gz
+  - gs://kowalski-catalogs/Gaia_DR2_light_curves.20200326.dump.gz
 * Gaia_DR2_WD
-  - gs://kowalski/Gaia_DR2_WD.20200326.dump.gz
+  - gs://kowalski-catalogs/Gaia_DR2_WD.20200326.dump.gz
 * Gaia_DR2_2MASS_best_neighbour
 * Gaia_DR2
 * GALEX
-  - gs://kowalski/GALEX.20200326.dump.gz
+  - gs://kowalski-catalogs/GALEX.20200326.dump.gz
 * FIRST_20141217
-  - gs://kowalski/FIRST_20141217.20200326.dump.gz
+  - gs://kowalski-catalogs/FIRST_20141217.20200326.dump.gz
 * CLU_20190625
-  - gs://kowalski/CLU_20190625.20191018.dump.gz
+  - gs://kowalski-catalogs/CLU_20190625.20191018.dump.gz
 * CLU_20190406
-  - gs://kowalski/CLU_20190406.20191018.dump.gz
+  - gs://kowalski-catalogs/CLU_20190406.20191018.dump.gz
 * CLU_20181213V2
-  - gs://kowalski/CLU_20181213V2.20191018.dump.gz
+  - gs://kowalski-catalogs/CLU_20181213V2.20191018.dump.gz
 * AllWISE
 * 2MASS_XSC
 * 2MASS_PSC
