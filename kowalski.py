@@ -81,6 +81,23 @@ def down(_args):
     subprocess.run(cmd)
 
 
+def build(_args):
+    """
+        Build Kowalski's containers
+    :param _args:
+    :return:
+    """
+    print('Building Kowalski')
+    if args.traefik:
+        cmd = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "build"]
+    elif args.fritz:
+        cmd = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "build"]
+    else:
+        cmd = ["docker-compose", "-f", 'docker-compose.yaml', "build"]
+
+    subprocess.run(cmd)
+
+
 def test(_args):
     print('Running the test suite')
 
@@ -100,6 +117,7 @@ if __name__ == "__main__":
     commands = [
         ("up", "🚀 Launch Kowalski"),
         ("down", "✋ Shut Kowalski down"),
+        ("build", "Build Kowalski's containers"),
         ("test", "Run the test suite"),
         ("help", "Print this message"),
     ]
@@ -122,6 +140,12 @@ if __name__ == "__main__":
     )
     parsers["down"].add_argument(
         "--fritz", action="store_true", help="Shut down Kowalski running alongside locally-running SkyPortal"
+    )
+    parsers["build"].add_argument(
+        "--traefik", action="store_true", help="Build Kowalski to run behind traefik"
+    )
+    parsers["build"].add_argument(
+        "--fritz", action="store_true", help="Build Kowalski to run alongside locally-running SkyPortal"
     )
 
     args = parser.parse_args()
