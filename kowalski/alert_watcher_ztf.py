@@ -400,6 +400,9 @@ class AlertConsumer(object):
                                 f.write(msg.value())
 
                         # ingest decoded avro packet into db
+                        # todo: ?? restructure alerts even further?
+                        #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
+                        #       group by objectId similar to prv_candidates?? maybe this is too much
                         alert, prv_candidates = self.alert_mongify(record)
 
                         # ML models:
