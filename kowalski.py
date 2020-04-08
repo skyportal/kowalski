@@ -73,6 +73,8 @@ def down(_args):
     print('Shutting down Kowalski')
     if args.traefik:
         cmd = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "down"]
+    elif args.fritz:
+        cmd = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "down"]
     else:
         cmd = ["docker-compose", "-f", 'docker-compose.yaml', "down"]
 
@@ -117,6 +119,9 @@ if __name__ == "__main__":
     )
     parsers["down"].add_argument(
         "--traefik", action="store_true", help="Shut down Kowalski running behind traefik"
+    )
+    parsers["down"].add_argument(
+        "--fritz", action="store_true", help="Shut down Kowalski running alongside locally-running SkyPortal"
     )
 
     args = parser.parse_args()
