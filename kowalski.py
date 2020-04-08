@@ -44,16 +44,16 @@ def up(_args):
 
     if args.traefik:
         cfgs.append('docker-compose.traefik.defaults.yaml')
-        cmd = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "up", "-d"]
+        command = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "up", "-d"]
     elif args.fritz:
         cfgs.append('docker-compose.fritz.defaults.yaml')
-        cmd = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "up", "-d"]
+        command = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "up", "-d"]
     else:
         cfgs.append('docker-compose.defaults.yaml')
-        cmd = ["docker-compose", "-f", 'docker-compose.yaml', "up", "-d"]
+        command = ["docker-compose", "-f", 'docker-compose.yaml', "up", "-d"]
 
     if args.build:
-        cmd += ["--build"]
+        command += ["--build"]
 
     # check configuration
     print('Checking configuration')
@@ -61,7 +61,7 @@ def up(_args):
 
     # start up Kowalski
     print('Starting up')
-    subprocess.run(cmd)
+    subprocess.run(command)
 
 
 def down(_args):
@@ -72,13 +72,13 @@ def down(_args):
     """
     print('Shutting down Kowalski')
     if args.traefik:
-        cmd = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "down"]
+        command = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "down"]
     elif args.fritz:
-        cmd = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "down"]
+        command = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "down"]
     else:
-        cmd = ["docker-compose", "-f", 'docker-compose.yaml', "down"]
+        command = ["docker-compose", "-f", 'docker-compose.yaml', "down"]
 
-    subprocess.run(cmd)
+    subprocess.run(command)
 
 
 def build(_args):
@@ -88,26 +88,42 @@ def build(_args):
     :return:
     """
     print('Building Kowalski')
-    if args.traefik:
-        cmd = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "build"]
-    elif args.fritz:
-        cmd = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "build"]
-    else:
-        cmd = ["docker-compose", "-f", 'docker-compose.yaml', "build"]
 
-    subprocess.run(cmd)
+    cfgs = [
+        'secrets.defaults.json',
+        'kowalski/config_api.defaults.json',
+        'kowalski/config_ingester.defaults.json',
+        'kowalski/supervisord_api.defaults.conf',
+        'kowalski/supervisord_ingester.defaults.conf',
+    ]
+
+    if args.traefik:
+        cfgs.append('docker-compose.traefik.defaults.yaml')
+        command = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "build"]
+    elif args.fritz:
+        cfgs.append('docker-compose.fritz.defaults.yaml')
+        command = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "build"]
+    else:
+        cfgs.append('docker-compose.defaults.yaml')
+        command = ["docker-compose", "-f", 'docker-compose.yaml', "build"]
+
+    # check configuration
+    print('Checking configuration')
+    check_configs(cfgs=cfgs)
+
+    subprocess.run(command)
 
 
 def test(_args):
     print('Running the test suite')
 
     print('Testing ZTF alert ingestion')
-    cmd = ["docker", "exec", "-it", "kowalski_ingester_1", "python", "-m", "pytest", "-s", "test_ingester.py"]
-    subprocess.run(cmd)
+    command = ["docker", "exec", "-it", "kowalski_ingester_1", "python", "-m", "pytest", "-s", "test_ingester.py"]
+    subprocess.run(command)
 
     print('Testing API')
-    cmd = ["docker", "exec", "-it", "kowalski_api_1", "python", "-m", "pytest", "-s", "test_api.py"]
-    subprocess.run(cmd)
+    command = ["docker", "exec", "-it", "kowalski_api_1", "python", "-m", "pytest", "-s", "test_api.py"]
+    subprocess.run(command)
 
 
 if __name__ == "__main__":
