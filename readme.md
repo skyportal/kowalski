@@ -2,7 +2,7 @@
 
 Enhancing time-domain astronomy with the [Zwicky Transient Facility](https://ztf.caltech.edu).
 
-## Spin up kowalski
+## Spin up `kowalski`
 
 Clone the repo and cd to the cloned directory:
 ```bash
@@ -10,71 +10,73 @@ git clone https://github.com/dmitryduev/kowalski-dev.git kowalski
 cd kowalski
 ```
 
-Create `secrets.json` with the secrets. Come up with strong passwords!
-```json
-{
-  "server" : {
-    "admin_username": "admin",
-    "admin_password": "admin",
-    "SECRET_KEY": "abc0123",
-    "JWT_SECRET_KEY": "abc0123",
-    "fernet_key": "irjsxvfJdqSJ2fcnpPacbH972dt-RPMMLE48PQ8J5Hg="
-  },
+Use the `kowalski.py` utility to manage `kowalski`.
 
-  "database": {
-    "admin_username": "mongoadmin",
-    "admin_password": "mongoadminsecret",
-    "username": "ztf",
-    "password": "ztf"
-  },
+```bash
+chmod 755 kowalski.py
+```
 
-  "kafka": {
-    "bootstrap.servers": "192.168.0.64:9092,192.168.0.65:9092,192.168.0.66:9092",
-    "zookeeper": "192.168.0.64:2181",
-    "bootstrap.test.servers": "localhost:9092",
-    "zookeeper.test": "localhost:2181"
-  },
+Start up `kowalski` using the default configs and secrets (copying them over):
+
+```bash
+./kowalski.py up
+```
+
+### Config files and secrets
+
+The secrets are kept in `secrets.json`; you may want to `cp secrets.defaults.json secrets.json`. 
+Make sure to choose strong passwords!  
+
+It strongly recommended to review (and adjust if necessary) the config files:
+
+- `kowalski/config_api.defaults.json`: API config
   
-  "skyportal": {
-    "protocol": "http",
-    "host": "0.0.0.0",
-    "port": 443,
-    "username": "kowalski",
-    "token": "<token>"
-  },
+  `cp kowalski/config_api.defaults.json kowalski/config_api.json`
+  
+- `kowalski/config_ingester.defaults.json`: ingester config
 
-  "ztf_depot": {
-    "username": "username",
-    "password": "password"
-  },
+  `cp kowalski/config_ingester.defaults.json kowalski/config_ingester.json`
 
-  "ztf_ops": {
-    "url": "http://site/allexp.tbl",
-    "username": "username",
-    "password": "password"
-  }
-}
-```
+- `kowalski/supervisord_api.defaults.conf`: `supevisord` config for the API container
 
-Copy `docker-compose.yaml` to e.g. `docker-compose.deploy.yaml` and change the environment variables for `mongo` 
-to match `admin_*` under `database` in `secrets.json`:
+  `cp kowalski/supervisord_api.defaults.conf kowalski/supervisord_api.conf`
+  
+- `kowalski/supervisord_ingester.defaults.conf`: `supevisord` config for the ingester container
+
+  `cp kowalski/supervisord_ingester.defaults.conf kowalski/supervisord_ingester.conf`
+  
+### Deployment scenarios
+
+`Kowalski` uses `docker-compose` under the hood. There are several available deployment scenarios:
+
+- Bare-bones
+- Bare-bones alongside locally-running `SkyPortal`
+- Behind `traefik`
+- todo: `k8s`
+
+#### Bare-bones
+
 ```bash
-cp docker-compose.yaml docker-compose.deploy.yaml
+./kowalski.py up
 ```
 
-### docker-compose
+Uses `docker-compose.yaml`. Note that the environment variables for the `mongo` service must match 
+`admin_*` under `database` in `secrets.json`
 
-Run `docker-compose` to fire up `kowalski`:
+#### Bare-bones alongside locally-running [`SkyPortal`](https://skyportal.io/)
+
 ```bash
-docker-compose -f docker-compose.deploy.yaml up --build -d
+./kowalski.py up --fritz
 ```
 
-Shut down `kowalski`:
+If you want the alert ingester to post (filtered) alerts to `SkyPortal`, make sure 
+`{"misc": {"post_to_skyportal": true}}` in `kowalski/config_ingester.json`
+
+#### Behind `traefik`
+
 ```bash
-docker-compose down
+./kowalski.py up --traefik
 ```
-
-### docker-compose: deploying behind `traefik`
 
 If you have a publicly accessible host allowing connections on port `443` and a DNS record with the domain 
 you want to expose pointing to this host, you can deploy `kowalski` behind [`traefik`](http://traefik.io), 
@@ -85,47 +87,41 @@ In `docker-compose.traefik.yaml`:
 - Replace `kowalski@caltech.edu` with your email.
 - Replace `private.caltech.edu` with your domain.
 
-Spin up `kowalski` behind `traefik`:
-
-```bash
-docker-compose -f docker-compose.traefik.yaml up -d
-```
-
-### kubernetes
-
-todo:
+### todo: kubernetes
 
 Use [`kompose`](https://kompose.io/). 
 It will try to upload images to your space on Docker Hub 
-so you need to replace `dmitryduev` with your docker username in `docker-compose.deploy.yaml`.
+so you need to replace `dmitryduev` with your docker username in `docker-compose.yaml`.
 
 To create services and deployments for k8s:
 ```bash
-kompose -f docker-compose.deploy.yaml convert
+kompose -f docker-compose.yaml convert
 kubectl create -f ...
 ```
 
 Alternatively, simply do:
 ```bash
-kompose -f docker-compose.deploy.yaml up
+kompose -f docker-compose.yaml up
 ```
 
 
 ## Run tests
 
-Ingester:
 ```bash
-docker exec -it kowalski_ingester_1 python -m pytest -s test_ingester.py
+./kowalski.py test
 ```
 
-API:
-```bash
-docker exec -it kowalski_api_1 python -m pytest -s test_api.py
-```
+## API docs
+
+OpenAPI specs are to be found under `/docs/api` once `kowalski` is up and running.
 
 ---
 
-`TODO:` The first test ingests 11 (real!) test alerts. Try out a few queries:
+## Miscellaneous
+
+### Query `kowalski` using the API
+
+The first test in the test suite ingests some real alerts. Try out a few queries on them:
 
 `/api/auth`
 
@@ -190,8 +186,6 @@ Body:
   }
 }
 ```
-
-## Miscellaneous
 
 ### Filtering for `fritz`
 
