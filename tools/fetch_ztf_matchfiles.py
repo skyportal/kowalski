@@ -13,7 +13,8 @@ from utils import deg2dms, deg2hms, great_circle_distance, in_ellipse, load_conf
 config = load_config(config_file='config_ingester.json')
 
 
-def fetch_url(url, rc, source='ipac'):
+def fetch_url(urlrc, source='ipac'):
+    url, rc = urlrc
 
     p = os.path.join(path, rc, os.path.basename(url))
     if not os.path.exists(p):
@@ -94,8 +95,9 @@ if __name__ == '__main__':
 
     # download
     for rc, urls_rc in tqdm(urls.items(), total=n_rc):
+        url_list = [(u, rc) for u in urls_rc]
         with mp.Pool(processes=4) as p:
-            list(tqdm(p.imap(fetch_url, urls_rc), total=len(urls_rc)))
+            list(tqdm(p.imap(fetch_url, url_list), total=len(urls_rc)))
 
     # for url in tqdm(urls):
     #     fetch_url(url, source='supernova')
