@@ -16,7 +16,7 @@ config = load_config(config_file='config_ingester.json')
 def fetch_url(urlrc, source='ipac'):
     url, rc = urlrc
 
-    p = os.path.join(path, rc, os.path.basename(url))
+    p = os.path.join(path, str(rc), os.path.basename(url))
     if not os.path.exists(p):
         if source == 'ipac':
             subprocess.run(['wget',
