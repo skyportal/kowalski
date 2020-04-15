@@ -19,8 +19,8 @@ def fetch_url(url, rc, source='ipac'):
     if not os.path.exists(p):
         if source == 'ipac':
             subprocess.run(['wget',
-                            f"--http-user={config['ztf_depot']['user']}",
-                            f"--http-passwd={config['ztf_depot']['pwd']}",
+                            f"--http-user={config['ztf_depot']['username']}",
+                            f"--http-passwd={config['ztf_depot']['password']}",
                             '-q', '--timeout=600', '--waitretry=10',
                             '--tries=5', '-O', p, url])
         elif source == 'supernova':
@@ -61,7 +61,7 @@ if __name__ == '__main__':
 
         bu = os.path.join(base_url, f'rc{rc:02d}')
 
-        response = requests.get(bu, auth=(config['ztf_depot']['user'], config['ztf_depot']['pwd']))
+        response = requests.get(bu, auth=(config['ztf_depot']['username'], config['ztf_depot']['password']))
         html = response.text
 
         # link_list = []
@@ -75,7 +75,8 @@ if __name__ == '__main__':
 
                 bu_fr = os.path.join(bu, txt)
 
-                response_fr = requests.get(bu_fr, auth=(config['ztf_depot']['user'], config['ztf_depot']['pwd']))
+                response_fr = requests.get(bu_fr,
+                                           auth=(config['ztf_depot']['username'], config['ztf_depot']['password']))
                 html_fr = response_fr.text
 
                 soup_fr = BeautifulSoup(html_fr, 'html.parser')
