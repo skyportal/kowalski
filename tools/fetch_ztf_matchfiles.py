@@ -16,9 +16,6 @@ config = load_config(config_file='config_ingester.json')
 def fetch_url(urlrc, source='ipac'):
     url, rc = urlrc
 
-    if not os.path.exists(os.path.join(path, str(rc))):
-        os.makedirs(os.path.join(path, str(rc)))
-
     p = os.path.join(path, str(rc), os.path.basename(url))
     if not os.path.exists(p):
         if source == 'ipac':
@@ -45,6 +42,10 @@ t_tag = '20200401'
 path = f'/_tmp/ztf_matchfiles_{t_tag}/'
 if not os.path.exists(path):
     os.makedirs(path)
+
+for rc in range(0, 64):
+    if not os.path.exists(os.path.join(path, str(rc))):
+        os.makedirs(os.path.join(path, str(rc)))
 
 
 if __name__ == '__main__':
