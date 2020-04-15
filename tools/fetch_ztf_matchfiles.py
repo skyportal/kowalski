@@ -57,11 +57,11 @@ if __name__ == '__main__':
 
     print('Collecting urls of matchfiles to download:')
 
-    n_rc = 1
-    # n_rc = 64
+    # n_rc = 1
+    n_rc = 64
 
     # collect urls of matchfiles to download
-    for rc in tqdm(range(0, n_rc), total=n_rc):
+    for rc in tqdm(range(1, 2), total=n_rc):
         urls[rc] = []
 
         bu = os.path.join(base_url, f'rc{rc:02d}')
@@ -92,16 +92,21 @@ if __name__ == '__main__':
                     if txt_fr.endswith('.pytable'):
                         # print('\t', txt_fr)
                         urls[rc].append(os.path.join(bu_fr, txt_fr))
+                        break
 
     n_matchfiles = sum([len(urls_rc) for urls_rc in urls.values()])
 
     print(f'Downloading {n_matchfiles} matchfiles:')
 
-    # download
     for rc, urls_rc in tqdm(urls.items(), total=n_rc):
+        # download
         url_list = [(u, rc) for u in urls_rc]
         with mp.Pool(processes=4) as p:
             list(tqdm(p.imap(fetch_url, url_list), total=len(urls_rc)))
-
-    # for url in tqdm(urls):
-    #     fetch_url(url, source='supernova')
+        # copy to gs
+        subprocess.run(["/usr/local/bin/gsutil",
+                        "-m", "cp",
+                        f"/_tmp/ztf_matchfiles_{t_tag}/{rc}/*.pytable",
+                        "gs://ztf-matchfiles-{t_tag}/{rc}/"])
+        # remove locally
+        subprocess.run(["rm", "rf", f"/_tmp/ztf_matchfiles_{t_tag}/{rc}/"])
