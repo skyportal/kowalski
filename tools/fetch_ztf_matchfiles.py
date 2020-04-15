@@ -16,6 +16,9 @@ config = load_config(config_file='config_ingester.json')
 def fetch_url(urlrc, source='ipac'):
     url, rc = urlrc
 
+    if not os.path.exists(os.path.join(path, str(rc))):
+        os.makedirs(os.path.join(path, str(rc)))
+
     p = os.path.join(path, str(rc), os.path.basename(url))
     if not os.path.exists(p):
         if source == 'ipac':
