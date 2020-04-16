@@ -20,7 +20,8 @@ if __name__ == '__main__':
         subprocess.run([
             "docker", "exec", "-it", "kowalski_ingester_1", #"/bin/bash", "-c",
             "/usr/local/bin/gsutil",
-            "-m", "cp",
+            # "-m", "cp",
+            "cp",
             f"gs://ztf-matchfiles-{args.tag}/{rc}/ztf_00024*_z*_c01_q1_match.pytable",  # test
             # f"gs://ztf-matchfiles-{t_tag}/{rc}/*.pytable",
             f"/_tmp/ztf_matchfiles_{args.tag}/",
