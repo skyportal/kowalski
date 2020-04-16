@@ -107,6 +107,6 @@ if __name__ == '__main__':
         subprocess.run(["/usr/local/bin/gsutil",
                         "-m", "mv",
                         f"/_tmp/ztf_matchfiles_{t_tag}/{rc}/*.pytable",
-                        "gs://ztf-matchfiles-{t_tag}/{rc}/"])
+                        f"gs://ztf-matchfiles-{t_tag}/{rc}/"])
         # remove locally
         # subprocess.run(["rm", "rf", f"/_tmp/ztf_matchfiles_{t_tag}/{rc}/"])
