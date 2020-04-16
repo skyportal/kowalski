@@ -18,7 +18,7 @@ if __name__ == '__main__':
     for rc in range(0, 1):
         # fetch matchfiles from gs://ztf-matchfiles-t_tag/rc/ to /_tmp/ztf-matchfiles-t_tag/
         subprocess.run([
-            "docker", "exec", "-it", "kowalski_ingester_1", "/bin/bash", "-c",
+            "docker", "exec", "-it", "kowalski_ingester_1", #"/bin/bash", "-c",
             "/usr/local/bin/gsutil",
             "-m", "cp",
             f"gs://ztf-matchfiles-{args.tag}/{rc}/ztf_00024*_z*_c01_q1_match.pytable",  # test
