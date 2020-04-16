@@ -28,7 +28,7 @@ if __name__ == '__main__':
         ])
         # run ingest_ztf_matchfiles.py
         subprocess.run([
-            "docker", "exec", "-it", "kowalski_ingester_1", "/bin/bash", "-c",
+            "docker", "exec", "-it", "kowalski_ingester_1",
             "python",
             "ingest_ztf_matchfiles.py",
             "--rm",
