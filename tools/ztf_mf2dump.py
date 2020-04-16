@@ -32,8 +32,8 @@ if __name__ == '__main__':
             "ingest_ztf_matchfiles.py",
             "--rm",
             "--tag", args.tag,
-            "--np", args.np,
-            "--bs", args.bs,
+            "--np", str(args.np),
+            "--bs", str(args.bs),
         ])
         # dump to /_tmp/
         subprocess.run([
@@ -45,7 +45,7 @@ if __name__ == '__main__':
         # lbzip2 the dump
         subprocess.run([
             "lbzip2", "-v",
-            "-n", args.np,
+            "-n", str(args.np),
             f"/home/dmitryduev/tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump"
         ])
         # mv to gs://ztf-sources-20200401
