@@ -61,7 +61,7 @@ if __name__ == '__main__':
     n_rc = 64
 
     # collect urls of matchfiles to download
-    for rc in tqdm(range(1, n_rc), total=n_rc):
+    for rc in tqdm(range(0, n_rc), total=n_rc):
         urls[rc] = []
 
         bu = os.path.join(base_url, f'rc{rc:02d}')
