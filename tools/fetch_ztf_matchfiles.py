@@ -61,7 +61,7 @@ if __name__ == '__main__':
     n_rc = 64
 
     # collect urls of matchfiles to download
-    for rc in tqdm(range(0, n_rc), total=n_rc):
+    for rc in tqdm(range(1, n_rc), total=n_rc):
         urls[rc] = []
 
         bu = os.path.join(base_url, f'rc{rc:02d}')
@@ -92,7 +92,7 @@ if __name__ == '__main__':
                     if txt_fr.endswith('.pytable'):
                         # print('\t', txt_fr)
                         urls[rc].append(os.path.join(bu_fr, txt_fr))
-                        break
+                        # break
 
     n_matchfiles = sum([len(urls_rc) for urls_rc in urls.values()])
 
