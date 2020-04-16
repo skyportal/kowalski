@@ -21,15 +21,15 @@ if __name__ == '__main__':
     ])
 
     # cli argument - rc#: [0, 63] ? no, just iterate over range(0, 64) for the stuff below:
-    for rc in range(0, 1):
+    for rc in range(0, 64):
         # fetch matchfiles from gs://ztf-matchfiles-t_tag/rc/ to /_tmp/ztf-matchfiles-t_tag/
         subprocess.run([
             "docker", "exec", "-it", "kowalski_ingester_1",
             "/usr/local/bin/gsutil",
-            # "-m", "cp",
-            # f"gs://ztf-matchfiles-{args.tag}/{rc}/",
-            "cp",
-            f"gs://ztf-matchfiles-{args.tag}/{rc}/ztf_000245_zg_c01_q1_match.pytable",  # test
+            "-m", "cp",
+            f"gs://ztf-matchfiles-{args.tag}/{rc}/",
+            # "cp",
+            # f"gs://ztf-matchfiles-{args.tag}/{rc}/ztf_000245_zg_c01_q1_match.pytable",  # test
             f"/_tmp/ztf_matchfiles_{args.tag}/",
         ])
         # run ingest_ztf_matchfiles.py
