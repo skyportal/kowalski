@@ -45,7 +45,7 @@ def connect_to_db():
         raise ConnectionRefusedError
     try:
         # authenticate
-        _db.authenticate(config['database']['user'], config['database']['pwd'])
+        _db.authenticate(config['database']['username'], config['database']['password'])
     except Exception as _e:
         raise ConnectionRefusedError
 
