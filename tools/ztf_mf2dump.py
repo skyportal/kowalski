@@ -16,7 +16,7 @@ if __name__ == '__main__':
 
     subprocess.run([
         "docker", "exec", "-it", "kowalski_ingester_1",  # "/bin/bash", "-c",
-        "mkdir",
+        "mkdir", "-p",
         f"/_tmp/ztf_matchfiles_{args.tag}/",
     ])
 
@@ -44,7 +44,7 @@ if __name__ == '__main__':
         ])
         # dump to /_tmp/
         subprocess.run([
-            "docker", "exec", "kowalski_mongo_1", "sh", "-c",
+            "docker", "exec", "kowalski_mongo_1",
             f"mongodump", "-u=mongoadmin", "-p=mongoadminsecret", "--authenticationDatabase=admin",
             "--archive", "--db=kowalski", "--collection=ZTF_sources_{args.tag}",
             ">", f"/home/dmitryduev/tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump",
