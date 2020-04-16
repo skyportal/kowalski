@@ -60,7 +60,7 @@ if __name__ == '__main__':
         subprocess.run([
             "docker", "exec", "kowalski_mongo_1", "sh", "-c",
             "mongo", "-u=mongoadmin", "-p=mongoadminsecret", "--authenticationDatabase=admin",
-            "kowalski", "--eval", f"db.ZTF_sources_{args.tag}.drop()"
+            "kowalski", "--eval", "'db.ZTF_sources_"f"{args.tag}"".drop()'"
         ])
         # export exposures
         pass
