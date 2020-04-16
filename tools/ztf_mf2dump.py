@@ -43,12 +43,12 @@ if __name__ == '__main__':
             "--bs", str(args.bs),
         ])
         # dump to /_tmp/
-        subprocess.run([
-            "docker", "exec", "kowalski_mongo_1",
-            f"mongodump", "-u=mongoadmin", "-p=mongoadminsecret", "--authenticationDatabase=admin",
-            "--archive", "--db=kowalski", "--collection=ZTF_sources_{args.tag}",
-            ">", f"/home/dmitryduev/tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump",
-        ])
+        with open(f"/home/dmitryduev/tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump", 'w') as f:
+            subprocess.run([
+                "docker", "exec", "kowalski_mongo_1",
+                f"mongodump", "-u=mongoadmin", "-p=mongoadminsecret", "--authenticationDatabase=admin",
+                "--archive", "--db=kowalski", "--collection=ZTF_sources_{args.tag}",
+            ], stdout=f)
         # lbzip2 the dump
         subprocess.run([
             "lbzip2", "-v",
