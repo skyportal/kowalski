@@ -451,6 +451,9 @@ if __name__ == '__main__':
     parser.add_argument('--keepall', action='store_true', help='keep all fields from the matchfiles?')
     parser.add_argument('--rm', action='store_true', help='remove matchfiles after ingestion?')
     parser.add_argument('--dryrun', action='store_true', help='dry run?')
+    parser.add_argument('--np', type=int, default=96, help='number of processes for parallel ingestion')
+    parser.add_argument('--bs', type=int, default=2048, help='batch size for ingestion')
+    parser.add_argument('--tag', type=str, default='20200401', help='batch size for ingestion')
 
     args = parser.parse_args()
 
@@ -467,7 +470,9 @@ if __name__ == '__main__':
     # t_tag = '20190412'
     # t_tag = '20190614'
     # t_tag = '20190718'
-    t_tag = '20191101'
+    # t_tag = '20191101'
+    # t_tag = '20200401'
+    t_tag = args.tag
 
     collections = {'exposures': f'ZTF_exposures_{t_tag}',
                    'sources': f'ZTF_sources_{t_tag}'}
@@ -487,47 +492,16 @@ if __name__ == '__main__':
         # db[collections['sources']].create_index([('data.expid', pymongo.ASCENDING)], background=True)
 
     # number of records to insert
-    batch_size = 2048
+    batch_size = args.bs
     # batch_size = 1
 
-    # fixme:
-    # test
-    # _location = '/_tmp/ztf_matchfiles_20181219/'
-    # files = glob.glob(os.path.join(_location, 'ztf_*.pytable'))
-
-    # production
-    # _location = f'/_tmp/ztf_matchfiles_{t_tag}/ztfweb.ipac.caltech.edu/ztf/ops/srcmatch/'
-    # files = glob.glob(os.path.join(_location, '*', '*', 'ztf_*.pytable'))
-    # files = glob.glob(os.path.join(_location, '*', '*', 'ztf_*.pytable'))[:2]
     _location = f'/_tmp/ztf_matchfiles_{t_tag}/'
     files = glob.glob(os.path.join(_location, 'ztf_*.pytable'))
 
-    # files = ['/matchfiles/rc63/fr000301-000350/ztf_000303_zr_c16_q4_match.pytable',
-    #          '/matchfiles/rc63/fr000301-000350/ztf_000303_zg_c16_q4_match.pytable']
-    # print(files)
-    # file_sizes = [os.path.getsize(ff) for ff in files]
-    # total_file_size = np.sum(file_sizes) / 1e6
-    # print(f'Total file size: {total_file_size} MB')
-
     print(f'# files to process: {len(files)}')
 
-    # init threaded operations
-    # pool = ThreadPoolExecutor(2)
-    # pool = ProcessPoolExecutor(1)
-    # # pool = ProcessPoolExecutor(30)
-    #
-    # # for ff in files[::-1]:
-    # for ff in sorted(files):
-    #     # process_file(_file=ff, _collections=collections, _batch_size=batch_size,
-    #     #              _keep_all=keep_all, _rm_file=rm_file, verbose=True, _dry_run=dry_run)
-    #     pool.submit(process_file, _file=ff, _collections=collections, _batch_size=batch_size,
-    #                 _keep_all=keep_all, _rm_file=rm_file, verbose=True, _dry_run=dry_run)
-    #
-    # # wait for everything to finish
-    # pool.shutdown(wait=True)
-
     input_list = [[f, collections, batch_size, keep_all, rm_file, False, dry_run] for f in sorted(files)]
-    with mp.Pool(processes=96) as p:
+    with mp.Pool(processes=args.np) as p:
         list(tqdm(p.starmap(process_file, input_list), total=len(files)))
 
     print('All done')
