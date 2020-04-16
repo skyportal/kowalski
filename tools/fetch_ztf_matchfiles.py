@@ -103,10 +103,10 @@ if __name__ == '__main__':
         url_list = [(u, rc) for u in urls_rc]
         with mp.Pool(processes=4) as p:
             list(tqdm(p.imap(fetch_url, url_list), total=len(urls_rc)))
-        # copy to gs
+        # move to gs
         subprocess.run(["/usr/local/bin/gsutil",
-                        "-m", "cp",
+                        "-m", "mv",
                         f"/_tmp/ztf_matchfiles_{t_tag}/{rc}/*.pytable",
                         "gs://ztf-matchfiles-{t_tag}/{rc}/"])
         # remove locally
-        subprocess.run(["rm", "rf", f"/_tmp/ztf_matchfiles_{t_tag}/{rc}/"])
+        # subprocess.run(["rm", "rf", f"/_tmp/ztf_matchfiles_{t_tag}/{rc}/"])
