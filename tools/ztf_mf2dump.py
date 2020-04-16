@@ -27,9 +27,9 @@ if __name__ == '__main__':
             "docker", "exec", "-it", "kowalski_ingester_1",
             "/usr/local/bin/gsutil",
             # "-m", "cp",
+            # f"gs://ztf-matchfiles-{args.tag}/{rc}/",
             "cp",
             f"gs://ztf-matchfiles-{args.tag}/{rc}/ztf_000245_zg_c01_q1_match.pytable",  # test
-            # f"gs://ztf-matchfiles-{t_tag}/{rc}/*.pytable",
             f"/_tmp/ztf_matchfiles_{args.tag}/",
         ])
         # run ingest_ztf_matchfiles.py
@@ -60,7 +60,7 @@ if __name__ == '__main__':
             "docker", "exec", "-it", "kowalski_ingester_1",
             "/usr/local/bin/gsutil",
             "mv",
-            f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2"
+            f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
             f"gs://ztf-sources-{args.tag}/",
         ])
         # drop the sources collection, keep the exposures collection
@@ -89,7 +89,7 @@ if __name__ == '__main__':
         "docker", "exec", "-it", "kowalski_ingester_1",
         "/usr/local/bin/gsutil",
         "mv",
-        f"/_tmp/ZTF_exposures_{args.tag}.dump.bz2"
+        f"/_tmp/ZTF_exposures_{args.tag}.dump.bz2",
         f"gs://ztf-sources-{args.tag}/",
     ])
     # drop the exposures collection
