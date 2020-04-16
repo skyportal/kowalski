@@ -30,7 +30,7 @@ if __name__ == '__main__':
         subprocess.run([
             "docker", "exec", "-it", "kowalski_ingester_1",
             "python",
-            "ingest_ztf_matchfiles.py",
+            "/app/ingest_ztf_matchfiles.py",
             "--rm",
             "--tag", args.tag,
             "--np", str(args.np),
