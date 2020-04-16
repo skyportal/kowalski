@@ -14,6 +14,12 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    subprocess.run([
+        "docker", "exec", "-it", "kowalski_ingester_1",  # "/bin/bash", "-c",
+        "mkdir",
+        f"/_tmp/ztf_matchfiles_{args.tag}/",
+    ])
+
     # cli argument - rc#: [0, 63] ? no, just iterate over range(0, 64) for the stuff below:
     for rc in range(0, 1):
         # fetch matchfiles from gs://ztf-matchfiles-t_tag/rc/ to /_tmp/ztf-matchfiles-t_tag/
