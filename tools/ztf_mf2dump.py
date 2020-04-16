@@ -58,7 +58,7 @@ if __name__ == '__main__':
         # mv to gs://ztf-sources-20200401
         # drop the sources collection, keep the exposures collection
         subprocess.run([
-            "docker", "exec", "kowalski_mongo_1", "sh", "-c",
+            "docker", "exec", "kowalski_mongo_1",
             "mongo", "-u", "mongoadmin", "-p", "mongoadminsecret", "--authenticationDatabase", "admin",
             "kowalski", "--eval", f"'db.ZTF_sources_{args.tag}.drop()'"
         ])
