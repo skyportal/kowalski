@@ -38,7 +38,8 @@ if __name__ == '__main__':
         # dump to /_tmp/
         subprocess.run([
             "docker", "exec", "kowalski_mongo_1", "sh", "-c",
-            f"'mongodump -u=mongoadmin -p=mongoadminsecret --authenticationDatabase=admin --archive --db=kowalski --collection=ZTF_sources_{args.tag}'",
+            f"mongodump", "-u=mongoadmin", "-p=mongoadminsecret", "--authenticationDatabase=admin",
+            "--archive", "--db=kowalski", "--collection=ZTF_sources_{args.tag}",
             ">", f"/home/dmitryduev/tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump",
         ])
         # lbzip2 the dump
@@ -49,5 +50,10 @@ if __name__ == '__main__':
         ])
         # mv to gs://ztf-sources-20200401
         # drop the sources collection, keep the exposures collection
+        subprocess.run([
+            "docker", "exec", "kowalski_mongo_1", "sh", "-c",
+            "mongo", "-u=mongoadmin", "-p=mongoadminsecret", "--authenticationDatabase=admin",
+            "kowalski", "--eval", f"'db.ZTF_sources_{args.tag}.drop()'"
+        ])
         # export exposures
         pass
