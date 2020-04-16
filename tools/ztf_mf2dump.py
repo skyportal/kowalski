@@ -22,7 +22,7 @@ if __name__ == '__main__':
             "/usr/local/bin/gsutil",
             # "-m", "cp",
             "cp",
-            f"gs://ztf-matchfiles-{args.tag}/{rc}/ztf_00024*_c01_q1_match.pytable",  # test
+            f"gs://ztf-matchfiles-{args.tag}/{rc}/ztf_000245_zg_c01_q1_match.pytable",  # test
             # f"gs://ztf-matchfiles-{t_tag}/{rc}/*.pytable",
             f"/_tmp/ztf_matchfiles_{args.tag}/",
         ])
