@@ -7,6 +7,7 @@ import time
 import numpy as np
 import pandas as pd
 import pymongo
+import random
 import json
 import argparse
 import traceback
@@ -501,6 +502,9 @@ if __name__ == '__main__':
     print(f'# files to process: {len(files)}')
 
     input_list = [[f, collections, batch_size, keep_all, rm_file, False, dry_run] for f in sorted(files)]
+    # for a more even job distribution:
+    random.shuffle(input_list)
+
     with mp.Pool(processes=args.np) as p:
         list(tqdm(p.starmap(process_file, input_list), total=len(files)))
 
