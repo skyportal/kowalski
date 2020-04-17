@@ -27,7 +27,7 @@ if __name__ == '__main__':
             "docker", "exec", "-it", "kowalski_ingester_1",
             "/usr/local/bin/gsutil",
             "-m", "cp",
-            f"gs://ztf-matchfiles-{args.tag}/{rc}/",
+            f"gs://ztf-matchfiles-{args.tag}/{rc}/*.pytable",
             # "cp",
             # f"gs://ztf-matchfiles-{args.tag}/{rc}/ztf_000245_zg_c01_q1_match.pytable",  # test
             f"/_tmp/ztf_matchfiles_{args.tag}/",
