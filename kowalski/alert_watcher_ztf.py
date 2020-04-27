@@ -477,6 +477,7 @@ class AlertConsumer(object):
                         # fixme: ?if no filters are found, dumps all alerts?
                         # if config['misc']['post_to_skyportal'] and (len(passed_filters) > 0):
                         if config['misc']['post_to_skyportal']:
+                            # post metadata
                             # fixme: pass annotations, cross-matches, ml scores etc.
                             alert_thin = {
                                 "id": alert['objectId'],
@@ -490,8 +491,17 @@ class AlertConsumer(object):
                                 "/api/sources",
                                 json=alert_thin, headers=self.session_headers, timeout=1,
                             )
-                            print(f"{time_stamp()}: Posted {alert['candid']} to SkyPortal")
-                            # print(resp.json())
+                            print(f"{time_stamp()}: Posted {alert['candid']} metadata to SkyPortal")
+                            print(resp.json())
+
+                            # post thumbnails
+                            # with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
+                            #     with fits.open(io.BytesIO(f.read())) as hdu:
+                            #         header = hdu[0].header
+                            #         data_flipped_y = np.flipud(hdu[0].data)
+
+
+
 
             except Exception as e:
                 print(f"{time_stamp()}: {str(e)}")

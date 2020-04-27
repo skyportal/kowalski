@@ -2,6 +2,7 @@ from confluent_kafka import Producer
 import datetime
 import os
 import pathlib
+import requests
 import subprocess
 import time
 
@@ -107,7 +108,28 @@ class TestIngester(object):
         # spin up Kafka producer
         producer = Producer({'bootstrap.servers': config['kafka']['bootstrap.test.servers']})
 
+        # small number of alerts that come with kowalski
         path_alerts = pathlib.Path('/app/data/ztf_alerts/20200202/')
+        # grab some more alerts from gs://ztf-fritz/sample-public-alerts
+        try:
+            print(f'{time_stamp()}: Grabbing more alerts from gs://ztf-fritz/sample-public-alerts')
+            r = requests.get('https://www.googleapis.com/storage/v1/b/ztf-fritz/o')
+            aa = r.json()['items']
+            ids = [pathlib.Path(a['id']).parent for a in aa if 'avro' in a['id']]
+        except Exception as e:
+            print(f'{time_stamp()}: Grabbing alerts from gs://ztf-fritz/sample-public-alerts failed, but it is ok')
+            ids = []
+        for i in ids:
+            p = pathlib.Path(f'/app/data/ztf_alerts/20200202/{i.stem}.avro')
+            if not p.exists():
+                subprocess.run([
+                    'wget',
+                    f'https://storage.googleapis.com/ztf-fritz/sample-public-alerts/{i.stem}.avro',
+                    '-O',
+                    str(p)
+                ])
+        print(f'{time_stamp()}: Fetched {len(ids)} alerts from gs://ztf-fritz/sample-public-alerts')
+        # push!
         for p in path_alerts.glob('*.avro'):
             with open(str(p), 'rb') as data:
                 # Trigger any available delivery report callbacks from previous produce() calls
