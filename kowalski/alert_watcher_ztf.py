@@ -481,9 +481,18 @@ class AlertConsumer(object):
                             # fixme: pass annotations, cross-matches, ml scores etc.
                             alert_thin = {
                                 "id": alert['objectId'],
-                                "ra": alert['candidate']['ra'],
-                                "dec": alert['candidate']['dec'],
-                                "score": alert['candidate']['drb'],
+                                "ra": alert['candidate'].get('ra'),
+                                "dec": alert['candidate'].get('dec'),
+                                'dist_nearest_source': alert["candidate"].get("distnr"),
+                                'mag_nearest_source': alert["candidate"].get("magnr"),
+                                'e_mag_nearest_source': alert["candidate"].get("sigmagnr"),
+                                'sgmag1': alert["candidate"].get("sgmag1"),
+                                'srmag1': alert["candidate"].get("srmag1"),
+                                'simag1': alert["candidate"].get("simag1"),
+                                'objectidps1': alert["candidate"].get("objectidps1"),
+                                'sgscore1': alert["candidate"].get("sgscore1"),
+                                'distpsnr1': alert["candidate"].get("distpsnr1"),
+                                "score": alert['candidate'].get('drb', alert['candidate']['rb']),
                             }
                             resp = self.session.post(
                                 f"{config['skyportal']['protocol']}://"
