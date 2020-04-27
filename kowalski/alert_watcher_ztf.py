@@ -1,6 +1,7 @@
 import argparse
 from ast import literal_eval
 from astropy.io import fits
+import base64
 from bson.json_util import dumps, loads
 import confluent_kafka
 from copy import deepcopy
@@ -8,6 +9,8 @@ import datetime
 import fastavro
 import gzip
 import io
+from matplotlib.colors import LogNorm
+import matplotlib.pyplot as plt
 import multiprocessing
 import numpy as np
 import os
@@ -483,15 +486,15 @@ class AlertConsumer(object):
                                 "id": alert['objectId'],
                                 "ra": alert['candidate'].get('ra'),
                                 "dec": alert['candidate'].get('dec'),
-                                'dist_nearest_source': alert["candidate"].get("distnr"),
-                                'mag_nearest_source': alert["candidate"].get("magnr"),
-                                'e_mag_nearest_source': alert["candidate"].get("sigmagnr"),
-                                'sgmag1': alert["candidate"].get("sgmag1"),
-                                'srmag1': alert["candidate"].get("srmag1"),
-                                'simag1': alert["candidate"].get("simag1"),
-                                'objectidps1': alert["candidate"].get("objectidps1"),
-                                'sgscore1': alert["candidate"].get("sgscore1"),
-                                'distpsnr1': alert["candidate"].get("distpsnr1"),
+                                # 'dist_nearest_source': alert["candidate"].get("distnr"),
+                                # 'mag_nearest_source': alert["candidate"].get("magnr"),
+                                # 'e_mag_nearest_source': alert["candidate"].get("sigmagnr"),
+                                # 'sgmag1': alert["candidate"].get("sgmag1"),
+                                # 'srmag1': alert["candidate"].get("srmag1"),
+                                # 'simag1': alert["candidate"].get("simag1"),
+                                # 'objectidps1': alert["candidate"].get("objectidps1"),
+                                # 'sgscore1': alert["candidate"].get("sgscore1"),
+                                # 'distpsnr1': alert["candidate"].get("distpsnr1"),
                                 "score": alert['candidate'].get('drb', alert['candidate']['rb']),
                             }
                             resp = self.session.post(
@@ -504,13 +507,53 @@ class AlertConsumer(object):
                             print(resp.json())
 
                             # post thumbnails
-                            # with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
-                            #     with fits.open(io.BytesIO(f.read())) as hdu:
-                            #         header = hdu[0].header
-                            #         data_flipped_y = np.flipud(hdu[0].data)
+                            for ttype, ztftype in [('new', 'Science'), ('ref', 'Template'), ('sub', 'Difference')]:
 
+                                cutout_data = alert[f'cutout{ztftype}']['stampData']
+                                with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
+                                    with fits.open(io.BytesIO(f.read())) as hdu:
+                                        header = hdu[0].header
+                                        data_flipped_y = np.flipud(hdu[0].data)
+                                # fixme: png, switch to fits eventually
+                                buff = io.BytesIO()
+                                plt.close('all')
+                                fig = plt.figure()
+                                fig.set_size_inches(4, 4, forward=False)
+                                ax = plt.Axes(fig, [0., 0., 1., 1.])
+                                ax.set_axis_off()
+                                fig.add_axes(ax)
 
+                                # remove nans:
+                                img = np.array(data_flipped_y)
+                                img = np.nan_to_num(img)
 
+                                if ztftype != 'Difference':
+                                    # img += np.min(img)
+                                    img[img <= 0] = np.median(img)
+                                    # plt.imshow(img, cmap='gray', norm=LogNorm(), origin='lower')
+                                    plt.imshow(img, cmap=plt.cm.bone, norm=LogNorm(), origin='lower')
+                                else:
+                                    # plt.imshow(img, cmap='gray', origin='lower')
+                                    plt.imshow(img, cmap=plt.cm.bone, origin='lower')
+                                plt.savefig(buff, dpi=42)
+
+                                buff.seek(0)
+                                plt.close('all')
+
+                                thumb = {
+                                    "source_id": alert["id"],
+                                    "data": base64.b64encode(buff),
+                                    "ttype": ttype,
+                                }
+
+                                resp = self.session.post(
+                                    f"{config['skyportal']['protocol']}://"
+                                    f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                                    "/api/thumbnail",
+                                    json=thumb, headers=self.session_headers, timeout=1,
+                                )
+                                print(f"{time_stamp()}: Posted {alert['candid']} {ztftype} cutout to SkyPortal")
+                                print(resp.json())
 
             except Exception as e:
                 print(f"{time_stamp()}: {str(e)}")
