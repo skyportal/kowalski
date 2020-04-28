@@ -5,6 +5,7 @@ import pathlib
 import requests
 import subprocess
 import time
+from tqdm import tqdm
 
 from alert_watcher_ztf import ingester
 from utils import load_config, time_stamp
@@ -119,12 +120,13 @@ class TestIngester(object):
         except Exception as e:
             print(f'{time_stamp()}: Grabbing alerts from gs://ztf-fritz/sample-public-alerts failed, but it is ok')
             ids = []
-        for i in ids:
+        for i in tqdm(ids):
             p = pathlib.Path(f'/app/data/ztf_alerts/20200202/{i.stem}.avro')
             if not p.exists():
                 subprocess.run([
                     'wget',
                     f'https://storage.googleapis.com/ztf-fritz/sample-public-alerts/{i.stem}.avro',
+                    '-q',
                     '-O',
                     str(p)
                 ])
@@ -153,7 +155,7 @@ class TestIngester(object):
         print(f'{time_stamp()}: Digested and ingested: all done!')
 
         # shut down Kafka server and ZooKeeper
-        time.sleep(15)
+        time.sleep(60)
 
         print(f'{time_stamp()}: Shutting down Kafka Server at localhost:9092')
         # start the Kafka server:

@@ -541,7 +541,7 @@ class AlertConsumer(object):
                                 plt.close('all')
 
                                 thumb = {
-                                    "source_id": alert["id"],
+                                    "source_id": alert["objectId"],
                                     "data": base64.b64encode(buff),
                                     "ttype": ttype,
                                 }
