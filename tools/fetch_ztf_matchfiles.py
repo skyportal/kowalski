@@ -2,6 +2,7 @@ import argparse
 from bs4 import BeautifulSoup
 import multiprocessing as mp
 import os
+import pandas as pd
 import pathlib
 import requests
 import subprocess
@@ -104,6 +105,9 @@ if __name__ == '__main__':
                             break
 
         # n_matchfiles = len(urls)
+
+    df_mf = pd.DataFrame.from_records(urls)
+    print(df_mf)
 
     # print(f'Downloading {n_matchfiles} matchfiles:')
     #
