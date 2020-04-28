@@ -18,7 +18,7 @@
     "path_queries": "/data/queries",
     "path_tess": "/data/tess",
     "path_tmp": "/_tmp",
-    "path_kafka": "/kafka_2.11-2.2.0"
+    "path_kafka": "/kafka_2.13-2.5.0"
   },
 
   "kafka": {
