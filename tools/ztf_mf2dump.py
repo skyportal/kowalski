@@ -10,7 +10,7 @@ if __name__ == '__main__':
     # parser.add_argument('--test', action='store_true', help='test')
     parser.add_argument('--np', type=int, default=96, help='number of processes for parallel ingestion')
     parser.add_argument('--bs', type=int, default=2048, help='batch size for ingestion')
-    parser.add_argument('--tag', type=str, default='20200401', help='batch size for ingestion')
+    parser.add_argument('--tag', type=str, default='20200401', help='mf release time tag')
 
     args = parser.parse_args()
 
