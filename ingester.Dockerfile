@@ -1,23 +1,24 @@
 FROM python:3.7
 #FROM python:3.7-slim
 
+ARG kafka_version=2.13-2.5.0
+
 # Install vim, git, cron, and jdk
 #RUN apt-get update && apt-get -y install apt-file && apt-file update && apt-get -y install vim && \
 #    apt-get -y install git && apt-get install -y default-jdk
 
-# Install jdk
-RUN apt-get update && apt-get install -y default-jdk
-
-# place to keep our app and the data:
-RUN mkdir -p /app /data /data/logs /_tmp /kafka
+# Install jdk, mkdirs, fetch and install Kafka
+RUN apt-get update && apt-get install -y default-jdk \
+    mkdir -p /app /data /data/logs /_tmp /kafka \
+    wget https://storage.googleapis.com/ztf-fritz/kafka_$kafka_version.tgz -O /kafka/kafka_$kafka_version.tgz \
+    tar -xzf /kafka/kafka_$kafka_version.tgz
 
 # Kafka:
-ADD http://apache.claz.org/kafka/2.2.0/kafka_2.11-2.2.0.tgz /kafka
-#ADD http://apache.claz.org/kafka/2.4.0/kafka_2.12-2.4.0.tgz /kafka
-RUN tar -xzf /kafka/kafka_2.11-2.2.0.tgz
+#ADD http://apache.claz.org/kafka/2.5.0/kafka_$kafka_version.tgz /kafka
+#RUN tar -xzf /kafka/kafka_$kafka_version.tgz
 
 # Test Kafka server properties:
-COPY kowalski/server.properties /kafka_2.11-2.2.0/config/
+COPY kowalski/server.properties /kafka_$kafka_version/config/
 
 # ML models:
 ADD https://github.com/dmitryduev/kowalski/raw/master/kowalski/models/braai_d6_m9.h5 /app/models/
