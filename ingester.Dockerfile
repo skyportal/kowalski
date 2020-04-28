@@ -8,9 +8,9 @@ ARG kafka_version=2.13-2.5.0
 #    apt-get -y install git && apt-get install -y default-jdk
 
 # Install jdk, mkdirs, fetch and install Kafka
-RUN apt-get update && apt-get install -y default-jdk \
-    mkdir -p /app /data /data/logs /_tmp /kafka \
-    wget https://storage.googleapis.com/ztf-fritz/kafka_$kafka_version.tgz -O /kafka/kafka_$kafka_version.tgz \
+RUN apt-get update && apt-get install -y default-jdk && \
+    mkdir -p /app /data /data/logs /_tmp /kafka && \
+    wget https://storage.googleapis.com/ztf-fritz/kafka_$kafka_version.tgz -O /kafka/kafka_$kafka_version.tgz && \
     tar -xzf /kafka/kafka_$kafka_version.tgz
 
 # Kafka:
