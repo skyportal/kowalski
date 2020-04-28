@@ -106,8 +106,12 @@ if __name__ == '__main__':
 
         # n_matchfiles = len(urls)
 
-    df_mf = pd.DataFrame.from_records(urls)
-    print(df_mf)
+        df_mf = pd.DataFrame.from_records(urls)
+        print(df_mf)
+
+    else:
+        df_mf = pd.read_csv(path_urls)
+        print(df_mf)
 
     # print(f'Downloading {n_matchfiles} matchfiles:')
     #
