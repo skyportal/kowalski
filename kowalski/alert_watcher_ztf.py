@@ -542,7 +542,7 @@ class AlertConsumer(object):
 
                                 thumb = {
                                     "source_id": alert["objectId"],
-                                    "data": base64.b64encode(buff),
+                                    "data": base64.b64encode(buff.read()),
                                     "ttype": ttype,
                                 }
 
