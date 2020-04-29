@@ -1012,7 +1012,7 @@ def ingester(obs_date=None, save_packets=True, test=False):
 
             if test:
                 # print('aloha')
-                time.sleep(60)
+                time.sleep(120)
                 # when testing, wait for topic listeners to pull all the data, then break
                 for t in topics_on_watch:
                     topics_on_watch[t].kill()
