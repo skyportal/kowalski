@@ -358,13 +358,14 @@ class AlertConsumer(object):
 
         return doc, prv_candidates
 
-    def poll(self, path_alerts=None, path_tess=None, datestr=None, save_packets=True):
+    def poll(self, path_alerts=None, path_tess=None, datestr=None, save_packets=False, verbose=1):
         """
             Polls Kafka broker to consume topic.
         :param path_alerts:
         :param path_tess:
         :param datestr:
         :param save_packets:
+        :param verbose: 1 - main, 2 - debug
         :return:
         """
         # msg = self.consumer.poll(timeout=timeout)
@@ -407,14 +408,26 @@ class AlertConsumer(object):
                         # todo: ?? restructure alerts even further?
                         #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
                         #       group by objectId similar to prv_candidates?? maybe this is too much
+                        tic = time.time()
                         alert, prv_candidates = self.alert_mongify(record)
+                        toc = time.time()
+                        if verbose > 1:
+                            print(f'{time_stamp()}: mongification took {toc - tic} s')
 
                         # ML models:
+                        tic = time.time()
                         scores = alert_filter__ml(record, ml_models=self.ml_models)
                         alert['classifications'] = scores
+                        toc = time.time()
+                        if verbose > 1:
+                            print(f'{time_stamp()}: mling took {toc - tic} s')
 
                         print(f'{time_stamp()}: ingesting {alert["candid"]} into db')
+                        tic = time.time()
                         self.insert_db_entry(_collection=self.collection_alerts, _db_entry=alert)
+                        toc = time.time()
+                        if verbose > 1:
+                            print(f'{time_stamp()}: ingesting took {toc - tic} s')
 
                         # prv_candidates: pop nulls - save space
                         prv_candidates = [{kk: vv for kk, vv in prv_candidate.items() if vv is not None}
@@ -423,9 +436,17 @@ class AlertConsumer(object):
                         # cross-match with external catalogs if objectId not in collection_alerts_aux:
                         if self.db['db'][self.collection_alerts_aux].count_documents({'_id': objectId}, limit=1) == 0:
                             # tic = time.time()
+                            tic = time.time()
                             xmatches = alert_filter__xmatch(self.db['db'], alert)
+                            toc = time.time()
+                            if verbose > 1:
+                                print(f'{time_stamp()}: xmatch took {toc - tic} s')
                             # CLU cross-match:
+                            tic = time.time()
                             xmatches = {**xmatches, **alert_filter__xmatch_clu(self.db['db'], alert)}
+                            toc = time.time()
+                            if verbose > 1:
+                                print(f'{time_stamp()}: clu xmatch took {toc - tic} s')
                             # alert['cross_matches'] = xmatches
                             # toc = time.time()
                             # print(f'xmatch for {alert["candid"]} took {toc-tic:.2f} s')
@@ -434,14 +455,22 @@ class AlertConsumer(object):
                                          'cross_matches': xmatches,
                                          'prv_candidates': prv_candidates}
 
+                            tic = time.time()
                             self.insert_db_entry(_collection=self.collection_alerts_aux, _db_entry=alert_aux)
+                            toc = time.time()
+                            if verbose > 1:
+                                print(f'{time_stamp()}: aux ingesting took {toc - tic} s')
 
                         else:
+                            tic = time.time()
                             self.db['db'][self.collection_alerts_aux].update_one({'_id': objectId},
                                                                                  {'$addToSet':
                                                                                       {'prv_candidates':
                                                                                            {'$each': prv_candidates}}},
                                                                                  upsert=True)
+                            toc = time.time()
+                            if verbose > 1:
+                                print(f'{time_stamp()}: aux updating took {toc - tic} s')
 
                         # dump packet as json to disk if in a public TESS sector
                         if 'TESS' in alert['candidate']['programpi']:
@@ -475,13 +504,17 @@ class AlertConsumer(object):
                                     print(f'{time_stamp()}: {str(_err)}')
 
                         # execute user-defined alert filters
+                        tic = time.time()
                         passed_filters = alert_filter__user_defined(self.db['db'], self.filter_templates, alert)
+                        toc = time.time()
+                        if verbose > 1:
+                            print(f'{time_stamp()}: filtering took {toc-tic} s')
 
                         # fixme: for an early demo, post the alerts directly to /api/sources (change to /api/candidates)
                         #        eventually, should only post passed_filters to a fritz-specific endpoint
 
-                        # if config['misc']['post_to_skyportal'] and (len(passed_filters) > 0):
-                        if config['misc']['post_to_skyportal']:
+                        # if config['misc']['post_to_skyportal']:
+                        if config['misc']['post_to_skyportal'] and (len(passed_filters) > 0):
                             # post metadata
                             # fixme: pass annotations, cross-matches, ml scores etc.
                             alert_thin = {
@@ -509,39 +542,59 @@ class AlertConsumer(object):
                             #     headers=self.session_headers, timeout=2,
                             # )
 
+                            tic = time.time()
                             resp = self.session.post(
                                 f"{config['skyportal']['protocol']}://"
                                 f"{config['skyportal']['host']}:{config['skyportal']['port']}"
                                 "/api/sources",
                                 json=alert_thin, headers=self.session_headers, timeout=1,
                             )
+                            toc = time.time()
+                            if verbose > 1:
+                                print(f'{time_stamp()}: posting metadata to skyportal took {toc - tic} s')
                             print(f"{time_stamp()}: Posted {alert['candid']} metadata to SkyPortal")
                             print(resp.json())
 
                             # post photometry
                             alert['prv_candidates'] = prv_candidates
+                            tic = time.time()
                             photometry = make_photometry(deepcopy(alert))
+                            toc = time.time()
+                            if verbose > 1:
+                                print(f'{time_stamp()}: making alert photometry took {toc - tic} s')
 
+                            tic = time.time()
                             resp = self.session.post(
                                 f"{config['skyportal']['protocol']}://"
                                 f"{config['skyportal']['host']}:{config['skyportal']['port']}"
                                 "/api/photometry",
                                 json=photometry, headers=self.session_headers, timeout=1,
                             )
+                            toc = time.time()
+                            if verbose > 1:
+                                print(f'{time_stamp()}: posting photometry to skyportal took {toc - tic} s')
                             print(f"{time_stamp()}: Posted {alert['candid']} photometry to SkyPortal")
                             print(resp.json())
 
                             # post thumbnails
                             for ttype, ztftype in [('new', 'Science'), ('ref', 'Template'), ('sub', 'Difference')]:
 
+                                tic = time.time()
                                 thumb = make_thumbnail(deepcopy(alert), ttype, ztftype)
+                                toc = time.time()
+                                if verbose > 1:
+                                    print(f'{time_stamp()}: making {ztftype} thumbnail took {toc - tic} s')
 
+                                tic = time.time()
                                 resp = self.session.post(
                                     f"{config['skyportal']['protocol']}://"
                                     f"{config['skyportal']['host']}:{config['skyportal']['port']}"
                                     "/api/thumbnail",
                                     json=thumb, headers=self.session_headers, timeout=1,
                                 )
+                                toc = time.time()
+                                if verbose > 1:
+                                    print(f'{time_stamp()}: posting {ztftype} thumbnail to skyportal took {toc - tic} s')
                                 print(f"{time_stamp()}: Posted {alert['candid']} {ztftype} cutout to SkyPortal")
                                 print(resp.json())
 
@@ -879,7 +932,7 @@ def alert_filter__user_defined(database, filter_templates, alert,
 
 
 def listener(topic, bootstrap_servers='', offset_reset='earliest',
-             group=None, path_alerts=None, path_tess=None, save_packets=True,
+             group=None, path_alerts=None, path_tess=None, save_packets=False,
              test=False):
     """
         Listen to a topic
@@ -938,7 +991,7 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest',
             sys.exit()
 
 
-def ingester(obs_date=None, save_packets=True, test=False):
+def ingester(obs_date=None, save_packets=False, test=False):
     """
         Watchdog for topic listeners
 
