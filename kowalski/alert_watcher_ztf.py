@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import multiprocessing
 import numpy as np
 import os
+import pandas as pd
 import pymongo
 import requests
 # from requests.adapters import HTTPAdapter, DEFAULT_POOLBLOCK, DEFAULT_POOLSIZE, DEFAULT_RETRIES
@@ -476,8 +477,9 @@ class AlertConsumer(object):
                         # execute user-defined alert filters
                         passed_filters = alert_filter__user_defined(self.db['db'], self.filter_templates, alert)
 
-                        # todo: submit alerts that passed at least one filter to SkyPortal
-                        # fixme: ?if no filters are found, dumps all alerts?
+                        # fixme: for an early demo, post the alerts directly to /api/sources (change to /api/candidates)
+                        #        eventually, should only post passed_filters to a fritz-specific endpoint
+
                         # if config['misc']['post_to_skyportal'] and (len(passed_filters) > 0):
                         if config['misc']['post_to_skyportal']:
                             # post metadata
@@ -497,6 +499,16 @@ class AlertConsumer(object):
                                 # 'distpsnr1': alert["candidate"].get("distpsnr1"),
                                 "score": alert['candidate'].get('drb', alert['candidate']['rb']),
                             }
+
+                            # fixme: delete the source for a clean start
+                            # fixme: this is for the early demo only
+                            resp = self.session.delete(
+                                f"{config['skyportal']['protocol']}://"
+                                f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                                f"/api/sources/{alert['objectId']}",
+                                headers=self.session_headers, timeout=1,
+                            )
+
                             resp = self.session.post(
                                 f"{config['skyportal']['protocol']}://"
                                 f"{config['skyportal']['host']}:{config['skyportal']['port']}"
@@ -506,45 +518,23 @@ class AlertConsumer(object):
                             print(f"{time_stamp()}: Posted {alert['candid']} metadata to SkyPortal")
                             print(resp.json())
 
+                            # post photometry
+                            alert['prv_candidates'] = prv_candidates
+                            photometry = make_photometry(deepcopy(alert))
+
+                            resp = self.session.post(
+                                f"{config['skyportal']['protocol']}://"
+                                f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                                "/api/photometry",
+                                json=photometry, headers=self.session_headers, timeout=1,
+                            )
+                            print(f"{time_stamp()}: Posted {alert['candid']} photometry to SkyPortal")
+                            print(resp.json())
+
                             # post thumbnails
                             for ttype, ztftype in [('new', 'Science'), ('ref', 'Template'), ('sub', 'Difference')]:
 
-                                cutout_data = alert[f'cutout{ztftype}']['stampData']
-                                with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
-                                    with fits.open(io.BytesIO(f.read())) as hdu:
-                                        header = hdu[0].header
-                                        data_flipped_y = np.flipud(hdu[0].data)
-                                # fixme: png, switch to fits eventually
-                                buff = io.BytesIO()
-                                plt.close('all')
-                                fig = plt.figure()
-                                fig.set_size_inches(4, 4, forward=False)
-                                ax = plt.Axes(fig, [0., 0., 1., 1.])
-                                ax.set_axis_off()
-                                fig.add_axes(ax)
-
-                                # remove nans:
-                                img = np.array(data_flipped_y)
-                                img = np.nan_to_num(img)
-
-                                if ztftype != 'Difference':
-                                    # img += np.min(img)
-                                    img[img <= 0] = np.median(img)
-                                    # plt.imshow(img, cmap='gray', norm=LogNorm(), origin='lower')
-                                    plt.imshow(img, cmap=plt.cm.bone, norm=LogNorm(), origin='lower')
-                                else:
-                                    # plt.imshow(img, cmap='gray', origin='lower')
-                                    plt.imshow(img, cmap=plt.cm.bone, origin='lower')
-                                plt.savefig(buff, dpi=42)
-
-                                buff.seek(0)
-                                plt.close('all')
-
-                                thumb = {
-                                    "source_id": alert["objectId"],
-                                    "data": base64.b64encode(buff.read()).decode("utf-8"),
-                                    "ttype": ttype,
-                                }
+                                thumb = make_thumbnail(deepcopy(alert), ttype, ztftype)
 
                                 resp = self.session.post(
                                     f"{config['skyportal']['protocol']}://"
@@ -592,6 +582,76 @@ class AlertConsumer(object):
             decoded_msg = message
         finally:
             return decoded_msg
+
+
+def make_photometry(a):
+    df = pd.DataFrame(a['candidate'], index=[0])
+
+    df_prv = pd.DataFrame(a['prv_candidates'])
+    dflc = pd.concat(
+        [df, df_prv],
+        ignore_index=True,
+        sort=False
+    ).drop_duplicates(subset='jd').reset_index(drop=True).sort_values(by=['jd']).fillna(99)
+
+    ztf_filters = {1: 'g', 2: 'r', 3: 'i'}
+    dflc['ztf_filter'] = dflc['fid'].apply(lambda x: ztf_filters[x])
+
+    photometry = {
+        "source_id": a['objectId'],
+        "time_format": "jd",
+        "time_scale": "utc",
+        "instrument_id": 1,
+        "observed_at": dflc.jd.tolist(),
+        "mag": dflc.magpsf.tolist(),
+        "e_mag": dflc.sigmapsf.tolist(),
+        "lim_mag": dflc.diffmaglim.tolist(),
+        "filter": dflc.ztf_filter.tolist(),
+    }
+
+    return photometry
+
+
+def make_thumbnail(a, ttype, ztftype):
+
+    cutout_data = a[f'cutout{ztftype}']['stampData']
+    with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
+        with fits.open(io.BytesIO(f.read())) as hdu:
+            header = hdu[0].header
+            data_flipped_y = np.flipud(hdu[0].data)
+    # fixme: png, switch to fits eventually
+    buff = io.BytesIO()
+    plt.close('all')
+    fig = plt.figure()
+    fig.set_size_inches(4, 4, forward=False)
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+
+    # remove nans:
+    img = np.array(data_flipped_y)
+    img = np.nan_to_num(img)
+
+    if ztftype != 'Difference':
+        # img += np.min(img)
+        img[img <= 0] = np.median(img)
+        # plt.imshow(img, cmap='gray', norm=LogNorm(), origin='lower')
+        plt.imshow(img, cmap=plt.cm.bone, norm=LogNorm(), origin='lower')
+    else:
+        # plt.imshow(img, cmap='gray', origin='lower')
+        plt.imshow(img, cmap=plt.cm.bone, origin='lower')
+    plt.savefig(buff, dpi=42)
+
+    buff.seek(0)
+    plt.close('all')
+
+    thumb = {
+        "source_id": a["objectId"],
+        "data": base64.b64encode(buff.read()).decode("utf-8"),
+        "ttype": ttype,
+    }
+
+    return thumb
 
 
 ''' Alert filters '''

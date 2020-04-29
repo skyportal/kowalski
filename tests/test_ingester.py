@@ -12,7 +12,94 @@ from utils import load_config, time_stamp
 
 
 ''' load config and secrets '''
-config = load_config(config_file='config_ingester.json')
+config = load_config(config_file='config_ingester.json', secrets_file='secrets.json')
+
+
+class Filter(object):
+    def __init__(self):
+        self.access_token = self.get_api_token()
+        self.headers = {'Authorization': f'Bearer {self.access_token}'}
+        self.filter_id = self.save()
+
+    @staticmethod
+    def get_api_token():
+        a = requests.post(
+            f"http://kowalski_api_1:{config['server']['port']}/api/auth",
+            json={
+                "username": config['server']['admin_username'],
+                "password": config['server']['admin_password']
+            }
+        )
+        credentials = a.json()
+        token = credentials.get('token', None)
+
+        return token
+
+    def save(self, collection: str = 'ZTF_alerts', user_filter=None):
+
+        if user_filter is None:
+            user_filter = {
+                "group_id": 0,
+                "science_program_id": 0,
+                "catalog": collection,
+                "pipeline": [
+                    {
+                        "$match": {
+                            "candidate.drb": {
+                                "$gt": 0.9
+                            },
+                            "cross_matches.CLU_20190625.0": {
+                                "$exists": False
+                            }
+                        }
+                    },
+                    {
+                        "$addFields": {
+                            "annotations.author": "dd",
+                            "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                        }
+                    },
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "candid": 1,
+                            "objectId": 1,
+                            "annotations": 1
+                        }
+                    }
+                ]
+            }
+
+        # save:
+        resp = requests.post(
+            f"http://kowalski_api_1:{config['server']['port']}/api/filters",
+            json=user_filter,
+            headers=self.headers,
+            timeout=5,
+        )
+        assert resp.status_code == requests.codes.ok
+        result = resp.json()
+        # print(result)
+        assert result['status'] == 'success'
+        assert 'data' in result
+        assert '_id' in result['data']
+        filter_id = result['data']['_id']
+
+        return filter_id
+
+    def remove(self):
+        if self.filter_id is not None:
+            resp = requests.delete(
+                f"http://kowalski_api_1:{config['server']['port']}/api/filters/{self.filter_id}",
+                headers=self.headers,
+                timeout=5,
+            )
+            assert resp.status_code == requests.codes.ok
+            result = resp.json()
+            assert result['status'] == 'success'
+            assert result['message'] == f'removed filter: {self.filter_id}'
+
+            self.filter_id = None
 
 
 def delivery_report(err, msg):
@@ -31,9 +118,10 @@ class TestIngester(object):
             - Spin up Kafka server
             - create topic
             - publish test alerts to topic
-            - fixme: create test filter?
+            - create test filter
             - spin up ingester
-            - digest and ingest alert stream
+            - digest and ingest alert stream, post to Fritz
+            - delete test filter
     """
 
     def test_ingester(self):
@@ -148,6 +236,9 @@ class TestIngester(object):
                 # callbacks to be triggered.
         producer.flush()
 
+        print(f'{time_stamp()}: Creating a test filter')
+        test_filter = Filter()
+
         print(f'{time_stamp()}: Starting up Ingester')
 
         # digest and ingest
@@ -156,6 +247,9 @@ class TestIngester(object):
 
         # shut down Kafka server and ZooKeeper
         time.sleep(60)
+
+        print(f'{time_stamp()}: Removing the test filter')
+        test_filter.remove()
 
         print(f'{time_stamp()}: Shutting down Kafka Server at localhost:9092')
         # start the Kafka server:
