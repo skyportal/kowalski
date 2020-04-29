@@ -647,7 +647,7 @@ def make_photometry(a):
         sort=False
     ).drop_duplicates(subset='jd').reset_index(drop=True).sort_values(by=['jd']).fillna(99)
 
-    ztf_filters = {1: 'g', 2: 'r', 3: 'i'}
+    ztf_filters = {1: 'g', 2: 'rpr', 3: 'ipr'}
     dflc['ztf_filter'] = dflc['fid'].apply(lambda x: ztf_filters[x])
 
     photometry = {
