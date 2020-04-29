@@ -502,12 +502,12 @@ class AlertConsumer(object):
 
                             # fixme: delete the source for a clean start
                             # fixme: this is for the early demo only
-                            resp = self.session.delete(
-                                f"{config['skyportal']['protocol']}://"
-                                f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                f"/api/sources/{alert['objectId']}",
-                                headers=self.session_headers, timeout=1,
-                            )
+                            # resp = self.session.delete(
+                            #     f"{config['skyportal']['protocol']}://"
+                            #     f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                            #     f"/api/sources/{alert['objectId']}",
+                            #     headers=self.session_headers, timeout=2,
+                            # )
 
                             resp = self.session.post(
                                 f"{config['skyportal']['protocol']}://"

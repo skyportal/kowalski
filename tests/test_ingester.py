@@ -246,7 +246,7 @@ class TestIngester(object):
         print(f'{time_stamp()}: Digested and ingested: all done!')
 
         # shut down Kafka server and ZooKeeper
-        time.sleep(60)
+        time.sleep(10)
 
         print(f'{time_stamp()}: Removing the test filter')
         test_filter.remove()
