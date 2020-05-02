@@ -131,7 +131,7 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers(title="commands", dest="command")
 
     commands = [
-        ("up", "🚀 Launch Kowalski"),
+        ("up", "🐧🚀 Launch Kowalski"),
         ("down", "✋ Shut Kowalski down"),
         ("build", "Build Kowalski's containers"),
         ("test", "Run the test suite"),
