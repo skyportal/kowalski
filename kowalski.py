@@ -5,11 +5,7 @@ import subprocess
 from pathlib import Path
 
 
-def check_configs(cfgs=('secrets.defaults.json',
-                        'kowalski/config_api.defaults.json',
-                        'kowalski/config_ingester.defaults.json',
-                        'kowalski/supervisord_api.defaults.conf',
-                        'kowalski/supervisord_ingester.defaults.conf',
+def check_configs(cfgs=('config.defaults.yaml',
                         'docker-compose.defaults.yaml',
                         'docker-compose.traefik.defaults.yaml',
                         )
@@ -35,11 +31,7 @@ def up(_args):
     print('Spinning up Kowalski 🚀')
 
     cfgs = [
-        'secrets.defaults.json',
-        'kowalski/config_api.defaults.json',
-        'kowalski/config_ingester.defaults.json',
-        'kowalski/supervisord_api.defaults.conf',
-        'kowalski/supervisord_ingester.defaults.conf',
+        'config.defaults.yaml',
     ]
 
     if args.traefik:
@@ -90,11 +82,7 @@ def build(_args):
     print('Building Kowalski')
 
     cfgs = [
-        'secrets.defaults.json',
-        'kowalski/config_api.defaults.json',
-        'kowalski/config_ingester.defaults.json',
-        'kowalski/supervisord_api.defaults.conf',
-        'kowalski/supervisord_ingester.defaults.conf',
+        'config.defaults.yaml',
     ]
 
     if args.traefik:
