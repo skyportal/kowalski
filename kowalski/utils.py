@@ -2,7 +2,6 @@ import bcrypt
 import base64
 import datetime
 import hashlib
-import json
 from motor.motor_asyncio import AsyncIOMotorClient
 from numba import jit
 import numpy as np
@@ -10,26 +9,18 @@ import os
 import secrets
 import string
 import traceback
+import yaml
 
 
 pi = 3.141592653589793
 
 
-def load_config(path='/app', config_file='config.json', secrets_file='secrets.json'):
+def load_config(path='/app', config_file='config.yaml'):
     """
         Load config and secrets
     """
-    with open(os.path.join(path, config_file)) as cjson:
-        config = json.load(cjson)
-
-    with open(os.path.join(path, secrets_file)) as sjson:
-        secrets = json.load(sjson)
-
-    for k in secrets:
-        if k in config:
-            config[k].update(secrets.get(k, {}))
-        else:
-            config[k] = secrets.get(k, {})
+    with open(os.path.join(path, config_file)) as cyaml:
+        config = yaml.load(cyaml)
 
     return config
 

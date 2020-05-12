@@ -12,10 +12,6 @@ cd kowalski
 
 Use the `kowalski.py` utility to manage `kowalski`.
 
-```bash
-chmod 755 kowalski.py
-```
-
 Start up `kowalski` using the default configs and secrets (copying them over):
 
 ```bash
