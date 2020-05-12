@@ -5,26 +5,26 @@ kowalski:
     description: "Kowalski: a toolkit for Time-Domain Astronomy"
     host: "0.0.0.0"
     port: "4000"
-    # use a strong password
     admin_username: "admin"
+    # fixme: use a strong password
     admin_password: "admin"
-    # use ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(32))
+    # fixme: use ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(32))
     SECRET_KEY: "abc0123"
     JWT_SECRET_KEY: "abc0123"
-    # use cryptography.fernet.Fernet.generate_key().decode()
+    # fixme: use cryptography.fernet.Fernet.generate_key().decode()
     fernet_key: "irjsxvfJdqSJ2fcnpPacbH972dt-RPMMLE48PQ8J5Hg="
 
   path:
-    path_app: "/app"
-    path_docs: "/app/docs"
-    path_ml_models: "/app/models/"
-    path_logs: "/data/logs/"
-    path_data: "/data"
-    path_alerts: "/data/alerts"
-    path_queries: "/data/queries"
-    path_tess: "/data/tess"
-    path_tmp: "/_tmp"
-    path_kafka: "/kafka_2.13-2.5.0"
+    app: "/app"
+    docs: "/app/docs"
+    ml_models: "/app/models/"
+    logs: "/data/logs/"
+    data: "/data"
+    alerts: "/data/alerts"
+    queries: "/data/queries"
+    tess: "/data/tess"
+    tmp: "/_tmp"
+    kafka: "/kafka_2.13-2.5.0"
 
   kafka:
     default.topic.config:
@@ -41,10 +41,11 @@ kowalski:
     host: "kowalski_mongo_1"
     port: 27017
     db: "kowalski"
-    # use strong passwords if exposing the database to the world
     admin_username: "mongoadmin"
+    # fixme: use strong password if exposing the database to the world
     admin_password: "mongoadminsecret"
     username: "ztf"
+    # fixme: use strong password if exposing the database to the world
     password: "ztf"
 
     collections:
@@ -238,15 +239,18 @@ kowalski:
     token: "<token>"
 
   ztf_depot:
+    # fixme:
     username: "username"
     password: "password"
 
   ztf_ops:
+    # fixme: Tom Barlow's ops db
     url: "http://site/allexp.tbl"
     username: "username"
     password: "password"
 
   misc:
+    post_to_skyportal: True
     supported_penquins_versions: ["2.0.0", "2.0.1", "2.0.2"]
     query_expiration_interval: 5
     max_time_ms: 300000
@@ -254,6 +258,7 @@ kowalski:
     logging_level: "debug"
     openapi_validate:  False
 
+  # this is used to make supervisord.conf files at build time
   supervisord:
     api:
       unix_http_server:

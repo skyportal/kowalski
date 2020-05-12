@@ -24,7 +24,7 @@ from utils import deg2dms, deg2hms, great_circle_distance, in_ellipse, load_conf
 
 
 ''' load config and secrets '''
-config = load_config(config_file='config_ingester.json')
+config = load_config(config_file='config.yaml')['kowalski']
 
 
 def utc_now():

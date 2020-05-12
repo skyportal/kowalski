@@ -29,16 +29,15 @@ COPY data/ztf_alerts/ /app/data/ztf_alerts/
 # copy over the config and the code
 COPY ["config.yaml", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py",\
       "kowalski/alert_watcher_ztf.py",\
-      "tests/test_ingester.py",\
+      "kowalski/requirements_ingester.txt", "tests/test_ingester.py",\
       "/app/"]
 
 # change working directory to /app
 WORKDIR /app
 
-# install python libs and generate supervisord conf
+# install python libs and generate supervisord config file
 RUN pip install -r /app/requirements_ingester.txt --no-cache-dir && \
     python generate_supervisord_conf.py ingester
-
 
 # run container
 CMD /usr/local/bin/supervisord -n -c supervisord_ingester.conf

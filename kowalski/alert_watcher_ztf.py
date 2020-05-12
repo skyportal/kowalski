@@ -28,7 +28,7 @@ from utils import deg2dms, deg2hms, great_circle_distance, in_ellipse, load_conf
 
 
 ''' load config and secrets '''
-config = load_config(config_file='config_ingester.json')
+config = load_config(config_file='config.yaml')['kowalski']
 
 
 ''' Utilities for manipulating Avro data and schemas. '''
@@ -183,15 +183,14 @@ class AlertConsumer(object):
         #                                           max_retries=mr, pool_block=pb))
 
         # MongoDB collections to store the alerts:
-        self.collection_alerts = self.config['database']['collection_alerts_ztf']
-        self.collection_alerts_aux = self.config['database']['collection_alerts_ztf_aux']
+        self.collection_alerts = self.config['database']['collections']['alerts_ztf']
+        self.collection_alerts_aux = self.config['database']['collections']['alerts_ztf_aux']
 
         self.db = None
         self.connect_to_db()
 
         # create indexes
-        # print(self.config['indexes'][self.collection_alerts])
-        for index_name, index in self.config['indexes'][self.collection_alerts].items():
+        for index_name, index in self.config['database']['indexes'][self.collection_alerts].items():
             # print(index_name, index)
             ind = [tuple(ii) for ii in index]
             self.db['db'][self.collection_alerts].create_index(keys=ind, name=index_name, background=True)
@@ -201,7 +200,8 @@ class AlertConsumer(object):
         for m in config['ml_models']:
             try:
                 m_v = config["ml_models"][m]["version"]
-                mf = os.path.join(config["path"]["path_ml_models"], f'{m}_{m_v}.h5')
+                # fixme: allow other formats such as SavedModel
+                mf = os.path.join(config["path"]["ml_models"], f'{m}_{m_v}.h5')
                 self.ml_models[m] = {'model': load_model(mf), 'version': m_v}
             except Exception as e:
                 print(f'{time_stamp()}: Error loading ML model {m}: {str(e)}')
@@ -211,7 +211,7 @@ class AlertConsumer(object):
 
         # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
         # including archival photometry and cross-matches:
-        self.filter_pipeline_upstream = config['filters'][self.collection_alerts]
+        self.filter_pipeline_upstream = config['database']['filters'][self.collection_alerts]
         print('Upstream filtering pipeline:')
         print(self.filter_pipeline_upstream)
 
@@ -220,8 +220,10 @@ class AlertConsumer(object):
         # load only the latest filter for each group_id. the assumption is that there is only one filter per group_id
         # as far as the end user is concerned
         # self.filter_templates = \
-        #     list(self.db['db'][config['database']['collection_filters']].find({'catalog': self.collection_alerts}))
-        self.filter_templates = list(self.db['db'][config['database']['collection_filters']].\
+        #     list(self.db['db'][config['database']['collections']['filters']].find(
+        #         {'catalog': self.collection_alerts}
+        #     ))
+        self.filter_templates = list(self.db['db'][config['database']['collections']['filters']].\
             aggregate([{'$match': {'catalog': self.collection_alerts}},
                        {'$group': {'_id': 'science_program_id',
                                    'created': {'$max': '$created'}, 'tmp': {'$last': '$$ROOT'}}},
@@ -769,15 +771,15 @@ def alert_filter__ml(alert, ml_models: dict = None) -> dict:
 
 
 # cone search radius:
-cone_search_radius = float(config['xmatch']['cone_search_radius'])
+cone_search_radius = float(config['database']['xmatch']['cone_search_radius'])
 # convert to rad:
-if config['xmatch']['cone_search_unit'] == 'arcsec':
+if config['database']['xmatch']['cone_search_unit'] == 'arcsec':
     cone_search_radius *= np.pi / 180.0 / 3600.
-elif config['xmatch']['cone_search_unit'] == 'arcmin':
+elif config['database']['xmatch']['cone_search_unit'] == 'arcmin':
     cone_search_radius *= np.pi / 180.0 / 60.
-elif config['xmatch']['cone_search_unit'] == 'deg':
+elif config['database']['xmatch']['cone_search_unit'] == 'deg':
     cone_search_radius *= np.pi / 180.0
-elif config['xmatch']['cone_search_unit'] == 'rad':
+elif config['database']['xmatch']['cone_search_unit'] == 'rad':
     cone_search_radius *= 1
 else:
     raise Exception('Unknown cone search unit. Must be in [deg, rad, arcsec, arcmin]')
@@ -797,9 +799,9 @@ def alert_filter__xmatch(database, alert) -> dict:
         dec_geojson = float(alert['candidate']['dec'])
 
         ''' catalogs '''
-        for catalog in config['xmatch']['catalogs']:
-            catalog_filter = config['xmatch']['catalogs'][catalog]['filter']
-            catalog_projection = config['xmatch']['catalogs'][catalog]['projection']
+        for catalog in config['database']['xmatch']['catalogs']:
+            catalog_filter = config['database']['xmatch']['catalogs'][catalog]['filter']
+            catalog_projection = config['database']['xmatch']['catalogs'][catalog]['projection']
 
             object_position_query = dict()
             object_position_query['coordinates.radec_geojson'] = {
@@ -1009,11 +1011,11 @@ def ingester(obs_date=None, save_packets=False, test=False):
             # get kafka topic names with kafka-topics command
             if not test:
                 # Production Kafka stream at IPAC
-                kafka_cmd = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
+                kafka_cmd = [os.path.join(config['path']['kafka'], 'bin', 'kafka-topics.sh'),
                              '--zookeeper', config['kafka']['zookeeper'], '-list']
             else:
                 # Local test stream
-                kafka_cmd = [os.path.join(config['path']['path_kafka'], 'bin', 'kafka-topics.sh'),
+                kafka_cmd = [os.path.join(config['path']['kafka'], 'bin', 'kafka-topics.sh'),
                              '--zookeeper', config['kafka']['zookeeper.test'], '-list']
             # print(kafka_cmd)
 
@@ -1039,8 +1041,8 @@ def ingester(obs_date=None, save_packets=False, test=False):
                         bootstrap_servers = config['kafka']['bootstrap.test.servers']
                     group = '{:s}'.format(config['kafka']['group'])
                     # print(group)
-                    path_alerts = config['path']['path_alerts']
-                    path_tess = config['path']['path_tess']
+                    path_alerts = config['path']['alerts']
+                    path_tess = config['path']['tess']
                     topics_on_watch[t] = multiprocessing.Process(target=listener,
                                                                  args=(t, bootstrap_servers,
                                                                        offset_reset, group,
