@@ -5,7 +5,7 @@ import jwt
 from utils import load_config
 
 
-config = load_config(config_file='config_api.json')
+config = load_config(config_file='config.yaml')['kowalski']
 
 
 @web.middleware

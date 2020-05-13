@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y default-jdk && \
 #ADD http://apache.claz.org/kafka/2.5.0/kafka_$kafka_version.tgz /kafka
 #RUN tar -xzf /kafka/kafka_$kafka_version.tgz
 
-# Test Kafka server properties:
+# Kafka test-server properties:
 COPY kowalski/server.properties /kafka_$kafka_version/config/
 
 # ML models:
@@ -26,24 +26,18 @@ ADD https://github.com/dmitryduev/kowalski/raw/master/kowalski/models/braai_d6_m
 # copy over the test alerts
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
 
-# copy over the secrets and the code
-COPY ["secrets.json", "kowalski/*_ingester.*", "kowalski/utils.py",\
+# copy over the config and the code
+COPY ["config.yaml", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py",\
       "kowalski/alert_watcher_ztf.py",\
-      "tests/test_ingester.py",\
+      "kowalski/requirements_ingester.txt", "tests/test_ingester.py",\
       "/app/"]
-#COPY ["secrets.json", "kowalski/*_ingester.*", "kowalski/utils.py",\
-#      "/app/"]
 
 # change working directory to /app
 WORKDIR /app
 
-# install python libs and generate keys
-RUN pip install -r /app/requirements_ingester.txt --no-cache-dir
-
-#COPY kowalski/alert_watcher_ztf.py /app/
-
-# run tests
-#RUN python -m pytest -s test_ingester.py
+# install python libs and generate supervisord config file
+RUN pip install -r /app/requirements_ingester.txt --no-cache-dir && \
+    python generate_supervisord_conf.py ingester
 
 # run container
 CMD /usr/local/bin/supervisord -n -c supervisord_ingester.conf

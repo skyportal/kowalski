@@ -26,7 +26,7 @@ from utils import add_admin, check_password_hash, compute_hash, generate_passwor
 import uvloop
 
 
-config = load_config(config_file='config_api.json')
+config = load_config(config_file='config.yaml')['kowalski']
 
 routes = web.RouteTableDef()
 
@@ -836,7 +836,7 @@ def parse_query(task, save: bool = False):
 
         # dump task_hashable to file, as potentially too big to store in mongo
         # save task:
-        user_tmp_path = os.path.join(config['path']['path_queries'], task['user'])
+        user_tmp_path = os.path.join(config['path']['queries'], task['user'])
         # mkdir if necessary
         if not os.path.exists(user_tmp_path):
             os.makedirs(user_tmp_path)
@@ -986,9 +986,9 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
                 # get available catalog names
                 catalogs = await db.list_collection_names()
                 # exclude system collections
-                catalogs_system = (config['database']['collection_users'],
-                                   config['database']['collection_filters'],
-                                   config['database']['collection_queries'])
+                catalogs_system = (config['database']['collections']['users'],
+                                   config['database']['collections']['filters'],
+                                   config['database']['collections']['queries'])
 
                 query_result = [c for c in sorted(catalogs)[::-1] if c not in catalogs_system]
 
@@ -1023,7 +1023,7 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
 
         else:
             # save task result:
-            user_tmp_path = os.path.join(config['path']['path_queries'], _query['user'])
+            user_tmp_path = os.path.join(config['path']['queries'], _query['user'])
             # print(user_tmp_path)
             # mkdir if necessary
             if not os.path.exists(user_tmp_path):
@@ -1059,7 +1059,7 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
         # book-keeping:
         if save:
             # save task result with error message:
-            user_tmp_path = os.path.join(config['path']['path_queries'], _query['user'])
+            user_tmp_path = os.path.join(config['path']['queries'], _query['user'])
             # print(user_tmp_path)
             # mkdir if necessary
             if not os.path.exists(user_tmp_path):
@@ -1418,7 +1418,7 @@ async def queries_get(request):
                                                               'task_id': {'$eq': task_id}}, {'status': 1})
 
         if part == 'task':
-            task_file = os.path.join(config['path']['path_queries'], user, f'{task_id}.task.json')
+            task_file = os.path.join(config['path']['queries'], user, f'{task_id}.task.json')
             async with aiofiles.open(task_file, 'r') as f_task_file:
                 return web.json_response(await f_task_file.read(), status=200)
 
@@ -1426,7 +1426,7 @@ async def queries_get(request):
             if _query['status'] == 'enqueued':
                 return web.json_response({'status': 'success', 'message': f'query not finished yet'}, status=200)
 
-            task_result_file = os.path.join(config['path']['path_queries'], user, f'{task_id}.result.json')
+            task_result_file = os.path.join(config['path']['queries'], user, f'{task_id}.result.json')
 
             async with aiofiles.open(task_result_file, 'r') as f_task_result_file:
                 return web.json_response(await f_task_result_file.read(), status=200)
@@ -1461,15 +1461,15 @@ async def queries_delete(request):
             await request.app['mongo'].queries.delete_one({'user': user, 'task_id': {'$eq': task_id}})
 
             # remove files containing task and result
-            for p in pathlib.Path(os.path.join(config['path']['path_queries'], user)).glob(f'{task_id}*'):
+            for p in pathlib.Path(os.path.join(config['path']['queries'], user)).glob(f'{task_id}*'):
                 p.unlink()
 
         else:
             await request.app['mongo'].queries.delete_many({'user': user})
 
             # remove all files containing task and result
-            if os.path.exists(os.path.join(config['path']['path_queries'], user)):
-                shutil.rmtree(os.path.join(config['path']['path_queries'], user))
+            if os.path.exists(os.path.join(config['path']['queries'], user)):
+                shutil.rmtree(os.path.join(config['path']['queries'], user))
 
         return web.json_response({'status': 'success', 'message': f'removed query: {task_id}'}, status=200)
 
@@ -1563,7 +1563,9 @@ async def filters_get(request):
         # get query params
         filter_id = request.match_info['filter_id']
 
-        user_filter = await request.app['mongo'][config['database']['collection_filters']].find_one({'_id': filter_id})
+        user_filter = await request.app['mongo'][config['database']['collections']['filters']].find_one(
+            {'_id': filter_id}
+        )
 
         return web.json_response({'status': 'success',
                                   'message': f'retrieved filter_id {filter_id}',
@@ -1803,7 +1805,7 @@ async def filters_post(request):
 
             # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
             # including archival photometry and cross-matches:
-            filter_pipeline_upstream = config['filters'][catalog]
+            filter_pipeline_upstream = config['database']['filters'][catalog]
             filter_template = filter_pipeline_upstream + loads(doc['pipeline'])
             filter_template[0]["$match"]["candid"] = alert['candid']
             # print(filter_template)
@@ -2051,7 +2053,7 @@ async def filters_test_post(request):
 
             # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
             # including archival photometry and cross-matches:
-            filter_pipeline_upstream = config['filters'][catalog]
+            filter_pipeline_upstream = config['database']['filters'][catalog]
             filter_template = filter_pipeline_upstream + loads(doc['pipeline'])
             filter_template[0]["$match"]["candid"] = alert['candid']
             # print(f'{datetime.datetime.utcnow()} {filter_template}')

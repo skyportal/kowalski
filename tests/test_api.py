@@ -5,7 +5,7 @@ import pytest
 from utils import load_config, uid
 
 
-config = load_config(config_file='config_api.json')
+config = load_config(config_file='config.yaml')['kowalski']
 
 
 class TestAPIs(object):
