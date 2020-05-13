@@ -126,18 +126,29 @@ class TestIngester(object):
 
     def test_ingester(self):
 
-        if not os.path.exists(config['path']['logs']):
-            os.makedirs(config['path']['logs'])
+        path_kafka = pathlib.Path(config['path']['kafka'])
+
+        path_logs = pathlib.Path(config['path']['logs'])
+        if not path_logs.exists():
+            path_logs.mkdir(parents=True, exist_ok=True)
+
+        # clean up old Kafka logs
+        subprocess.run([
+            'rm',
+            '-rf',
+            path_logs / "kafka-logs",
+            "/tmp/zookeeper"
+        ])
 
         print(f'{time_stamp()}: Starting up ZooKeeper at localhost:2181')
 
-        # start ZooKeeper in the background (using Popen and not run with shell=True for safety)
+        # start ZooKeeper in the background
         cmd_zookeeper = [os.path.join(config['path']['kafka'], 'bin', 'zookeeper-server-start.sh'),
+                         '-daemon',
                          os.path.join(config['path']['kafka'], 'config', 'zookeeper.properties')]
 
-        # subprocess.Popen(cmd_zookeeper, stdout=subprocess.PIPE)
-        with open(os.path.join(config['path']['logs'], 'zookeeper.stdout'), 'w') as stdout_zookeeper:
-            p_zookeeper = subprocess.Popen(cmd_zookeeper, stdout=stdout_zookeeper, stderr=subprocess.STDOUT)
+        with open(path_logs / 'zookeeper.stdout', 'w') as stdout_zookeeper:
+            p_zookeeper = subprocess.run(cmd_zookeeper, stdout=stdout_zookeeper, stderr=subprocess.STDOUT)
 
         # take a nap while it fires up
         time.sleep(3)
@@ -146,12 +157,12 @@ class TestIngester(object):
 
         # start the Kafka server:
         cmd_kafka_server = [os.path.join(config['path']['kafka'], 'bin', 'kafka-server-start.sh'),
+                            '-daemon',
                             os.path.join(config['path']['kafka'], 'config', 'server.properties')]
 
-        # subprocess.Popen(cmd_kafka_server, stdout=subprocess.PIPE)
-        # p_kafka_server = subprocess.Popen(cmd_kafka_server, stdout=subprocess.PIPE)
         with open(os.path.join(config['path']['logs'], 'kafka_server.stdout'), 'w') as stdout_kafka_server:
-            p_kafka_server = subprocess.Popen(cmd_kafka_server, stdout=stdout_kafka_server, stderr=subprocess.STDOUT)
+            # p_kafka_server = subprocess.Popen(cmd_kafka_server, stdout=stdout_kafka_server, stderr=subprocess.STDOUT)
+            p_kafka_server = subprocess.run(cmd_kafka_server)
 
         # take a nap while it fires up
         time.sleep(3)
@@ -208,16 +219,11 @@ class TestIngester(object):
         except Exception as e:
             print(f'{time_stamp()}: Grabbing alerts from gs://ztf-fritz/sample-public-alerts failed, but it is ok')
             ids = []
-        for i in tqdm(ids):
-            p = pathlib.Path(f'/app/data/ztf_alerts/20200202/{i.stem}.avro')
-            if not p.exists():
-                subprocess.run([
-                    'wget',
-                    f'https://storage.googleapis.com/ztf-fritz/sample-public-alerts/{i.stem}.avro',
-                    '-q',
-                    '-O',
-                    str(p)
-                ])
+        subprocess.run([
+            "gsutil", "-m", "cp", "-n",
+            "gs://ztf-fritz/sample-public-alerts/*.avro",
+            "/app/data/ztf_alerts/20200202/"
+        ])
         print(f'{time_stamp()}: Fetched {len(ids)} alerts from gs://ztf-fritz/sample-public-alerts')
         # push!
         for p in path_alerts.glob('*.avro'):
@@ -268,6 +274,3 @@ class TestIngester(object):
 
         with open(os.path.join(config['path']['logs'], 'zookeeper.stdout'), 'w') as stdout_zookeeper:
             p_zookeeper_stop = subprocess.run(cmd_zookeeper_stop, stdout=stdout_zookeeper, stderr=subprocess.STDOUT)
-
-        p_zookeeper.kill()
-        p_kafka_server.kill()

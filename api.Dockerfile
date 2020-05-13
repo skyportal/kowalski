@@ -8,8 +8,8 @@ RUN mkdir -p /app /data /data/logs /_tmp
 
 # copy over the config and the code
 COPY ["config.yaml", "kowalski/generate_supervisord_conf.py",\
-      "kowalski/middlewares.py", "kowalski/utils.py", "kowalski/api.py",\
-      "kowalski/requirements_api.txt", "tests/test_api.py",\
+      "kowalski/middlewares.py", "kowalski/utils.py",\
+      "kowalski/components_api.yaml", "kowalski/api.py", "kowalski/requirements_api.txt", "tests/test_api.py",\
       "/app/"]
 
 # change working directory to /app

@@ -1,0 +1,286 @@
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    token:
+      type: apiKey
+      in: header
+      name: Authorization
+
+  schemas:
+    aggregate:
+      type: object
+      required:
+        - catalog
+        - pipeline
+      properties:
+        catalog:
+          type: string
+          description: "catalog name. use info query_type to get available catalogs."
+        pipeline:
+          type: array
+          items:
+            type: object
+          description: "aggregation pipeline stages in MQL"
+          minItems: 1
+    aggregate_kwargs:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
+          allowDiskUse:
+            type: boolean
+            description: "enables writing to temporary files for things that exceed mongodb memory limits for aggregation pipeline stages"
+          batchSize:
+            type: boolean
+            description: "specify an initial batch size for the cursor"
+
+    cone_search:
+      type: object
+      required:
+        - catalogs
+        - object_coordinates
+      properties:
+        catalogs:
+          type: object
+          additionalProperties:
+            type: object
+            required:
+              - "<catalog_name>"
+            properties:
+              "<catalog_name>":
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    filter:
+                      type: object
+                      description: "filter expression in MQL"
+                    projection:
+                      type: object
+                      description: "projection expression (document fields to return/ditch) in MQL"
+                description: "define filter and projection per catalog."
+        object_coordinates:
+          type: object
+          additionalProperties:
+            type: object
+            required:
+              - cone_search_radius
+              - cone_search_unit
+              - radec
+            properties:
+              cone_search_radius:
+                oneOf:
+                  - type: number
+                  - type: string
+                description: "cone search radius. converted to float internally"
+              cone_search_unit:
+                type: string
+                enum: [arcsec, arcmin, deg, rad]
+                description: "cone search unit"
+              radec:
+                oneOf:
+                  - type: array
+                    items:
+                      type: array
+                      items:
+                        oneOf:
+                          - type: string
+                            description: "('HH:MM:SS', 'DD:MM:SS') or ('HHhMMmSSs', 'DDdMMmSSs')"
+                          - type: number
+                            description: "(deg, deg)"
+                        minItems: 2
+                        maxItems: 2
+                      minItems: 1
+                  - type: object
+                    description: "{'object_name': [<ra>, <dec>], ...} <ra/dec> could be either strings or numbers [deg]"
+                  - type: string
+                description: "ICRF position(s): R.A. and Decl."
+    cone_search_kwargs:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
+          filter_first:
+            type: boolean
+            default: false
+            description: "apply filter before positional query?"
+          skip:
+            type: integer
+            description: "number of matched documents to skip"
+            minimum: 0
+          hint:
+            type: string
+            description: "index name to use"
+          limit:
+            type: integer
+            description: "maximum number of matched documents to return"
+            minimum: 1
+          sort:
+            type: array
+            description: "sorting order"
+
+    count_documents:
+      type: object
+      required:
+        - catalog
+        - filter
+      properties:
+        catalog:
+          type: string
+          description: "catalog name. use info query_type to get available catalogs."
+        filter:
+          type: object
+          description: "filter expression in MQL"
+      description: "count documents in a collection/catalog matching a particular filter expression"
+    count_documents_kwargs:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
+          skip:
+            type: integer
+            description: "number of matched documents to skip"
+            minimum: 0
+          hint:
+            type: string
+            description: "index name to use"
+          limit:
+            type: integer
+            description: "maximum number of matched documents to return"
+            minimum: 1
+
+    estimated_document_count:
+      type: object
+      required:
+        - catalog
+      properties:
+        catalog:
+          type: string
+          description: "catalog name. use info query_type to get available catalogs."
+      description: "estimated count of documents in a collection/catalog using average document size"
+    estimated_document_count_kwargs:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
+
+    find:
+      type: object
+      required:
+        - catalog
+        - filter
+      properties:
+        catalog:
+          type: string
+          description: "catalog name. use info query_type to get available catalogs."
+        filter:
+          type: object
+          description: "filter expression in MQL"
+        projection:
+          type: object
+          description: "projection expression (document fields to return/ditch) in MQL"
+    find_kwargs:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
+          skip:
+            type: integer
+            description: "number of matched documents to skip"
+            minimum: 0
+          hint:
+            type: string
+            description: "index name to use"
+          limit:
+            type: integer
+            description: "maximum number of matched documents to return"
+            minimum: 1
+          sort:
+            type: array
+            description: "sorting order"
+
+    find_one:
+      type: object
+      required:
+        - catalog
+        - filter
+      properties:
+        catalog:
+          type: string
+          description: "catalog name. use info query_type to get available catalogs."
+        filter:
+          type: object
+          description: "filter expression in MQL"
+    find_one_kwargs:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
+          skip:
+            type: integer
+            description: "number of matched documents to skip"
+            minimum: 0
+          hint:
+            type: string
+            description: "index name to use"
+          limit:
+            type: integer
+            description: "maximum number of matched documents to return"
+            minimum: 1
+          sort:
+            type: array
+            description: "sorting order"
+
+    info:
+      type: object
+      required:
+        - command
+      properties:
+        command:
+          type: string
+          enum: [catalog_info, index_info, db_info]
+          description: "info command to run"
+        catalog:
+          type: object
+    info_kwargs:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1

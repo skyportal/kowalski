@@ -20,7 +20,7 @@ def load_config(path='/app', config_file='config.yaml'):
         Load config and secrets
     """
     with open(os.path.join(path, config_file)) as cyaml:
-        config = yaml.load(cyaml)
+        config = yaml.load(cyaml, Loader=yaml.FullLoader)
 
     return config
 

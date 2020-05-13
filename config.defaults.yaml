@@ -250,6 +250,7 @@ kowalski:
     password: "password"
 
   misc:
+    # fixme: set to False if running stand-alone
     post_to_skyportal: True
     supported_penquins_versions: ["2.0.0", "2.0.1", "2.0.2"]
     query_expiration_interval: 5
