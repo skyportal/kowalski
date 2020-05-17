@@ -18,29 +18,15 @@ Start up `kowalski` using the default configs and secrets (copying them over):
 ./kowalski.py up
 ```
 
-### Config files and secrets
+### Config file
 
-The secrets are kept in `secrets.json`; you may want to `cp secrets.defaults.json secrets.json`. 
-Make sure to choose strong passwords!  
+You should `cp config.defaults.yaml config.yaml` instead of using the default config in a production setting. 
+Make sure to choose strong passwords!
 
-It strongly recommended to review (and adjust if necessary) the config files:
+`config.yaml` contains the API and ingester configs, the `supevisord` config for the API and ingester containers,
+together with all the secrets, so be careful when committing code / pushing docker images.
 
-- `kowalski/config_api.defaults.json`: API config
-  
-  `cp kowalski/config_api.defaults.json kowalski/config_api.json`
-  
-- `kowalski/config_ingester.defaults.json`: ingester config
-
-  `cp kowalski/config_ingester.defaults.json kowalski/config_ingester.json`
-
-- `kowalski/supervisord_api.defaults.conf`: `supevisord` config for the API container
-
-  `cp kowalski/supervisord_api.defaults.conf kowalski/supervisord_api.conf`
-  
-- `kowalski/supervisord_ingester.defaults.conf`: `supevisord` config for the ingester container
-
-  `cp kowalski/supervisord_ingester.defaults.conf kowalski/supervisord_ingester.conf`
-  
+ 
 ### Deployment scenarios
 
 `Kowalski` uses `docker-compose` under the hood. There are several available deployment scenarios:
