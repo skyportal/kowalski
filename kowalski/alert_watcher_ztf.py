@@ -34,46 +34,6 @@ config = load_config(config_file='config.yaml')['kowalski']
 ''' Utilities for manipulating Avro data and schemas. '''
 
 
-def writeAvroData(json_data, json_schema):
-    """Encode json into Avro format given a schema.
-
-    Parameters
-    ----------
-    json_data : `dict`
-        The JSON data containing message content.
-    json_schema : `dict`
-        The writer Avro schema for encoding data.
-
-    Returns
-    -------
-    `_io.BytesIO`
-        Encoded data.
-    """
-    bytes_io = io.BytesIO()
-    fastavro.schemaless_writer(bytes_io, json_schema, json_data)
-    return bytes_io
-
-
-def readAvroData(bytes_io, json_schema):
-    """Read data and decode with a given Avro schema.
-
-    Parameters
-    ----------
-    bytes_io : `_io.BytesIO`
-        Data to be decoded.
-    json_schema : `dict`
-        The reader Avro schema for decoding data.
-
-    Returns
-    -------
-    `dict`
-        Decoded data.
-    """
-    bytes_io.seek(0)
-    message = fastavro.schemaless_reader(bytes_io, json_schema)
-    return message
-
-
 def readSchemaData(bytes_io):
     """Read data that already has an Avro schema.
 
@@ -858,16 +818,18 @@ def alert_filter__xmatch_clu(database, alert, size_margin=3, clu_version='CLU_20
         galaxies = list(s)
 
         # these guys are very big, so check them separately
-        M31 = {'_id': 596900, 'name': 'PGC2557',
-               'ra': 10.6847, 'dec': 41.26901, 'a': 6.35156, 'b2a': 0.32, 'pa': 35.0,
-               'sfr_fuv': None, 'mstar': 253816876.412914, 'sfr_ha': 0,
-               'coordinates': {'radec_geojson': ["00:42:44.3503", "41:16:08.634"]}
-               }
-        M33 = {'_id': 597543, 'name': 'PGC5818',
-               'ra': 23.46204, 'dec': 30.66022, 'a': 2.35983, 'b2a': 0.59, 'pa': 23.0,
-               'sfr_fuv': None, 'mstar': 4502777.420493, 'sfr_ha': 0,
-               'coordinates': {'radec_geojson': ["01:33:50.8900", "30:39:36.800"]}
-               }
+        M31 = {
+            '_id': 596900, 'name': 'PGC2557',
+            'ra': 10.6847, 'dec': 41.26901, 'a': 6.35156, 'b2a': 0.32, 'pa': 35.0,
+            'z': -0.00100100006, 'sfr_fuv': None, 'mstar': 253816876.412914, 'sfr_ha': 0,
+            'coordinates': {'radec_str': ["00:42:44.3503", "41:16:08.634"]}
+        }
+        M33 = {
+            '_id': 597543, 'name': 'PGC5818',
+            'ra': 23.46204, 'dec': 30.66022, 'a': 2.35983, 'b2a': 0.59, 'pa': 23.0,
+            'z': -0.000597000006, 'sfr_fuv': None, 'mstar': 4502777.420493, 'sfr_ha': 0,
+            'coordinates': {'radec_str': ["01:33:50.8900", "30:39:36.800"]}
+        }
 
         # do elliptical matches
         matches = []
@@ -951,7 +913,6 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest',
 
     # Configure consumer connection to Kafka broker
     conf = {'bootstrap.servers': bootstrap_servers,
-            # 'error_cb': error_cb,
             'default.topic.config': {'auto.offset.reset': offset_reset}}
     if group is not None:
         conf['group.id'] = group
@@ -1017,10 +978,8 @@ def ingester(obs_date=None, save_packets=False, test=False):
                 # Local test stream
                 kafka_cmd = [os.path.join(config['path']['kafka'], 'bin', 'kafka-topics.sh'),
                              '--zookeeper', config['kafka']['zookeeper.test'], '-list']
-            # print(kafka_cmd)
 
             topics = subprocess.run(kafka_cmd, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')[:-1]
-            # print(topics)
 
             if obs_date is None:
                 datestr = datetime.datetime.utcnow().strftime('%Y%m%d')
@@ -1040,7 +999,7 @@ def ingester(obs_date=None, save_packets=False, test=False):
                     else:
                         bootstrap_servers = config['kafka']['bootstrap.test.servers']
                     group = '{:s}'.format(config['kafka']['group'])
-                    # print(group)
+
                     path_alerts = config['path']['alerts']
                     path_tess = config['path']['tess']
                     topics_on_watch[t] = multiprocessing.Process(target=listener,
@@ -1066,7 +1025,6 @@ def ingester(obs_date=None, save_packets=False, test=False):
                         pass
 
             if test:
-                # print('aloha')
                 # fixme: (eventually this should be too much)
                 time.sleep(220)
                 # when testing, wait for topic listeners to pull all the data, then break
