@@ -5,16 +5,17 @@ import subprocess
 from pathlib import Path
 
 
-def check_configs(cfgs=('config.defaults.yaml',
-                        'docker-compose.defaults.yaml',
-                        'docker-compose.traefik.defaults.yaml',
-                        )
-                  ):
+def check_configs(
+        cfgs=('config.defaults.yaml', 'docker-compose.defaults.yaml', 'docker-compose.traefik.defaults.yaml'),
+        yes=False,
+):
     # use config defaults if configs do not exist
     for cfg in cfgs:
         c = cfg.replace('.defaults', '')
         if not Path(c).exists():
-            cd = input(f'{c} does not exist, do you want to use {cfg} (not recommended)? [y/N] ')
+            cd = input(
+                f'{c} does not exist, do you want to use {cfg} (not recommended)? [y/N] '
+            ) if not yes else 'y'
             if cd.lower() == 'y':
                 subprocess.run(["cp", f"{cfg}", f"{c}"])
             else:
@@ -49,7 +50,7 @@ def up(_args):
 
     # check configuration
     print('Checking configuration')
-    check_configs(cfgs=cfgs)
+    check_configs(cfgs=cfgs, yes=_args.yes)
 
     # start up Kowalski
     print('Starting up')
@@ -97,7 +98,7 @@ def build(_args):
 
     # check configuration
     print('Checking configuration')
-    check_configs(cfgs=cfgs)
+    check_configs(cfgs=cfgs, yes=_args.yes)
 
     subprocess.run(command)
 
@@ -118,6 +119,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title="commands", dest="command")
 
+    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser.add_argument(
+        "--yes", action="store_true", help="Answer yes for all questions"
+    )
+
     commands = [
         ("up", "🐧🚀 Launch Kowalski"),
         ("down", "✋ Shut Kowalski down"),
@@ -128,7 +134,7 @@ if __name__ == "__main__":
 
     parsers = {}
     for (cmd, desc) in commands:
-        parsers[cmd] = subparsers.add_parser(cmd, help=desc)
+        parsers[cmd] = subparsers.add_parser(cmd, help=desc, parents=[parent_parser])
 
     parsers["up"].add_argument(
         "--build", action="store_true", help="Force (re)building Kowalski's containers"
