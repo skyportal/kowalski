@@ -514,8 +514,11 @@ class AlertConsumer(object):
                             toc = time.time()
                             if verbose > 1:
                                 print(f'{time_stamp()}: posting metadata to skyportal took {toc - tic} s')
-                            print(f"{time_stamp()}: Posted {alert['candid']} metadata to SkyPortal")
-                            print(resp.json())
+                            if resp.json()['status'] == 'success':
+                                print(f"{time_stamp()}: Posted {alert['candid']} metadata to SkyPortal")
+                            else:
+                                print(f"{time_stamp()}: Failed to post {alert['candid']} metadata to SkyPortal")
+                                print(resp.json())
 
                             # post photometry
                             alert['prv_candidates'] = prv_candidates
@@ -535,8 +538,11 @@ class AlertConsumer(object):
                             toc = time.time()
                             if verbose > 1:
                                 print(f'{time_stamp()}: posting photometry to skyportal took {toc - tic} s')
-                            print(f"{time_stamp()}: Posted {alert['candid']} photometry to SkyPortal")
-                            print(resp.json())
+                            if resp.json()['status'] == 'success':
+                                print(f"{time_stamp()}: Posted {alert['candid']} photometry to SkyPortal")
+                            else:
+                                print(f"{time_stamp()}: Failed to post {alert['candid']} photometry to SkyPortal")
+                                print(resp.json())
 
                             # post thumbnails
                             for ttype, ztftype in [('new', 'Science'), ('ref', 'Template'), ('sub', 'Difference')]:
@@ -557,8 +563,13 @@ class AlertConsumer(object):
                                 toc = time.time()
                                 if verbose > 1:
                                     print(f'{time_stamp()}: posting {ztftype} thumbnail to skyportal took {toc - tic} s')
-                                print(f"{time_stamp()}: Posted {alert['candid']} {ztftype} cutout to SkyPortal")
-                                print(resp.json())
+
+                                if resp.json()['status'] == 'success':
+                                    print(f"{time_stamp()}: Posted {alert['candid']} {ztftype} cutout to SkyPortal")
+                                else:
+                                    print(f"{time_stamp()}: Failed to post {alert['candid']} {ztftype}"
+                                          " cutout to SkyPortal")
+                                    print(resp.json())
 
             except Exception as e:
                 print(f"{time_stamp()}: {str(e)}")
@@ -613,7 +624,7 @@ def make_photometry(a):
     dflc['ztf_filter'] = dflc['fid'].apply(lambda x: ztf_filters[x])
 
     photometry = {
-        "source_id": a['objectId'],
+        "obj_id": a['objectId'],
         "time_format": "jd",
         "time_scale": "utc",
         "instrument_id": 1,
@@ -661,7 +672,7 @@ def make_thumbnail(a, ttype, ztftype):
     plt.close('all')
 
     thumb = {
-        "source_id": a["objectId"],
+        "obj_id": a["objectId"],
         "data": base64.b64encode(buff.read()).decode("utf-8"),
         "ttype": ttype,
     }
