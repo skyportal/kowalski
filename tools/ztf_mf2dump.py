@@ -25,8 +25,10 @@ if __name__ == '__main__':
         f"/_tmp/ztf_matchfiles_{args.tag}/",
     ])
 
+    rc_start, rc_stop = 0, 63
+
     # cli argument - rc#: [0, 63] ? no, just iterate over range(0, 64) for the stuff below:
-    for rc in range(0, 64):
+    for rc in range(rc_start, rc_stop + 1):
         # fetch matchfiles from gs://ztf-matchfiles-t_tag/rc/ to /_tmp/ztf-matchfiles-t_tag/
         subprocess.run([
             "docker", "exec", "-it", "kowalski_ingester_1",
@@ -88,7 +90,7 @@ if __name__ == '__main__':
     subprocess.run([
         "lbzip2", "-v", "-f",
         "-n", str(args.np),
-        str(path_tmp / f"ZTF_exposures_{args.tag}.dump")
+        str(path_tmp / f"ZTF_exposures_{args.tag}.rc{rc_start:02d}_{rc_stop:02d}.dump")
     ])
     # mv to gs://ztf-sources-20200401
     subprocess.run([
@@ -96,8 +98,8 @@ if __name__ == '__main__':
         # "/usr/local/bin/gsutil",
         "gsutil",
         "mv",
-        # f"/_tmp/ZTF_exposures_{args.tag}.dump.bz2",
-        str(path_tmp / f"ZTF_exposures_{args.tag}.dump.bz2"),
+        # f"/_tmp/ZTF_exposures_{args.tag}.rc{rc_start:02d}_{rc_stop:02d}.dump.bz2",
+        str(path_tmp / f"ZTF_exposures_{args.tag}.rc{rc_start:02d}_{rc_stop:02d}.dump.bz2"),
         f"gs://ztf-sources-{args.tag}/",
     ])
     # drop the exposures collection
