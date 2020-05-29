@@ -1,6 +1,7 @@
 import argparse
 from bs4 import BeautifulSoup
 import multiprocessing as mp
+from multiprocessing.pool import ThreadPool
 import os
 import pandas as pd
 import pathlib
@@ -110,7 +111,7 @@ if __name__ == '__main__':
         print('Collecting urls of matchfiles to download:')
 
         # collect urls of matchfiles to download
-        with mp.pool.ThreadPool(processes=20) as pool:
+        with ThreadPool(processes=20) as pool:
             list(tqdm(pool.imap(collect_urls, range(0, n_rc)), total=n_rc))
 
         df_mf = pd.DataFrame.from_records(urls)
