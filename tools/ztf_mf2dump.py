@@ -1,4 +1,5 @@
 import argparse
+import pathlib
 import subprocess
 
 
@@ -10,8 +11,13 @@ if __name__ == '__main__':
     parser.add_argument('--np', type=int, default=96, help='number of processes for parallel ingestion')
     parser.add_argument('--bs', type=int, default=2048, help='batch size for ingestion')
     parser.add_argument('--tag', type=str, default='20200401', help='mf release time tag')
+    parser.add_argument('--path', type=str, default=str(pathlib.Path.home() / 'tmp'), help='local tmp path')
 
     args = parser.parse_args()
+
+    path_tmp = pathlib.Path(args.path)
+    if not path_tmp.exists():
+        path_tmp.mkdir(parents=True, exist_ok=True)
 
     subprocess.run([
         "docker", "exec", "-it", "kowalski_ingester_1",  # "/bin/bash", "-c",
@@ -27,7 +33,6 @@ if __name__ == '__main__':
             "/usr/local/bin/gsutil",
             "-m", "cp",
             f"gs://ztf-matchfiles-{args.tag}/{rc}/*.pytable",
-            # "cp",
             # f"gs://ztf-matchfiles-{args.tag}/{rc}/ztf_000245_zg_c01_q1_match.pytable",  # test
             f"/_tmp/ztf_matchfiles_{args.tag}/",
         ])
@@ -42,7 +47,7 @@ if __name__ == '__main__':
             "--bs", str(args.bs),
         ])
         # dump to /_tmp/
-        with open(f"/home/dmitryduev/tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump", 'w') as f:
+        with open(path_tmp / f"ZTF_sources_{args.tag}.rc{rc:02d}.dump", 'w') as f:
             subprocess.run([
                 "docker", "exec", "kowalski_mongo_1",
                 f"mongodump", "-u=mongoadmin", "-p=mongoadminsecret", "--authenticationDatabase=admin",
@@ -52,14 +57,16 @@ if __name__ == '__main__':
         subprocess.run([
             "lbzip2", "-v", "-f",
             "-n", str(args.np),
-            f"/home/dmitryduev/tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump"
+            str(path_tmp / f"ZTF_sources_{args.tag}.rc{rc:02d}.dump")
         ])
-        # mv to gs://ztf-sources-20200401
+        # mv to GCS
         subprocess.run([
-            "docker", "exec", "-it", "kowalski_ingester_1",
-            "/usr/local/bin/gsutil",
+            # "docker", "exec", "-it", "kowalski_ingester_1",
+            # "/usr/local/bin/gsutil",
+            "gsutil",
             "mv",
-            f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
+            # f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
+            str(path_tmp / f"ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2"),
             f"gs://ztf-sources-{args.tag}/",
         ])
         # drop the sources collection, keep the exposures collection
@@ -71,7 +78,7 @@ if __name__ == '__main__':
 
     # export exposures
     # dump to /_tmp/
-    with open(f"/home/dmitryduev/tmp/ZTF_exposures_{args.tag}.dump", 'w') as f:
+    with open(path_tmp / f"ZTF_exposures_{args.tag}.dump", 'w') as f:
         subprocess.run([
             "docker", "exec", "kowalski_mongo_1",
             f"mongodump", "-u=mongoadmin", "-p=mongoadminsecret", "--authenticationDatabase=admin",
@@ -81,14 +88,16 @@ if __name__ == '__main__':
     subprocess.run([
         "lbzip2", "-v", "-f",
         "-n", str(args.np),
-        f"/home/dmitryduev/tmp/ZTF_exposures_{args.tag}.dump"
+        str(path_tmp / f"ZTF_exposures_{args.tag}.dump")
     ])
     # mv to gs://ztf-sources-20200401
     subprocess.run([
-        "docker", "exec", "-it", "kowalski_ingester_1",
-        "/usr/local/bin/gsutil",
+        # "docker", "exec", "-it", "kowalski_ingester_1",
+        # "/usr/local/bin/gsutil",
+        "gsutil",
         "mv",
-        f"/_tmp/ZTF_exposures_{args.tag}.dump.bz2",
+        # f"/_tmp/ZTF_exposures_{args.tag}.dump.bz2",
+        str(path_tmp / f"ZTF_exposures_{args.tag}.dump.bz2"),
         f"gs://ztf-sources-{args.tag}/",
     ])
     # drop the exposures collection
