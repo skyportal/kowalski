@@ -86,6 +86,7 @@ def build(_args):
         'config.defaults.yaml',
     ]
 
+    # fixme: always use docker-compose.yaml
     if args.traefik:
         cfgs.append('docker-compose.traefik.defaults.yaml')
         command = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "build"]
