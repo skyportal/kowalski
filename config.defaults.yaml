@@ -227,6 +227,15 @@ kowalski:
             yMeanPSFMag: 1
             yMeanPSFMagErr: 1
 
+        galaxy_redshifts_20200522:
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            z: 1
+            l: 1
+            b: 1
+
   ml_models:
     braai:
       version:  "d6_m9"

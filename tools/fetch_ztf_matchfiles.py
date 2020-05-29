@@ -17,9 +17,9 @@ config = load_config(config_file='config.yaml')['kowalski']
 
 
 def fetch_url(urlrc, source='ipac'):
-    url, rc = urlrc
+    url, _rc = urlrc
 
-    p = os.path.join(path, str(rc), os.path.basename(url))
+    p = os.path.join(path, str(_rc), os.path.basename(url))
     if not os.path.exists(p):
         if source == 'ipac':
             subprocess.run(['wget',
@@ -41,9 +41,7 @@ def gunzip(f):
 
 
 if __name__ == '__main__':
-    ''' Create command line argument parser '''
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description='')
+    parser = argparse.ArgumentParser()
 
     parser.add_argument('--tag', type=str, default='20200401', help='matchfile release time tag')
 
