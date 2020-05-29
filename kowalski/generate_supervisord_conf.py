@@ -26,7 +26,7 @@ def ingester(args):
 
 
 with open('/app/config.yaml', 'r') as f:
-    config = yaml.load(f)
+    config = yaml.load(f, Loader=yaml.FullLoader)
 
 
 if __name__ == '__main__':

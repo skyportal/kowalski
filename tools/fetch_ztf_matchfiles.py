@@ -9,17 +9,51 @@ import subprocess
 from tqdm.auto import tqdm
 
 
-from utils import deg2dms, deg2hms, great_circle_distance, in_ellipse, load_config, radec2lb, time_stamp
+from utils import load_config
 
 
 ''' load config and secrets '''
+# config = load_config(path='../', config_file='config.yaml')['kowalski']
 config = load_config(config_file='config.yaml')['kowalski']
+
+
+def collect_urls(rc):
+    bu = os.path.join(base_url, f'rc{rc:02d}')
+
+    response = requests.get(bu, auth=(config['ztf_depot']['username'], config['ztf_depot']['password']))
+    html = response.text
+
+    # link_list = []
+    soup = BeautifulSoup(html, 'html.parser')
+    links = soup.findAll('a')
+
+    for link in links:
+        txt = link.getText()
+        if 'fr' in txt:
+            bu_fr = os.path.join(bu, txt)
+
+            response_fr = requests.get(
+                bu_fr,
+                auth=(config['ztf_depot']['username'], config['ztf_depot']['password'])
+            )
+            html_fr = response_fr.text
+
+            soup_fr = BeautifulSoup(html_fr, 'html.parser')
+            links_fr = soup_fr.findAll('a')
+
+            for link_fr in links_fr:
+                txt_fr = link_fr.getText()
+                if txt_fr.endswith('.pytable'):
+                    # print('\t', txt_fr)
+                    urls.append({'rc': rc, 'name': txt_fr, 'url': os.path.join(bu_fr, txt_fr)})
+                    # fixme:
+                    # break
 
 
 def fetch_url(urlrc, source='ipac'):
     url, _rc = urlrc
 
-    p = os.path.join(path, str(_rc), os.path.basename(url))
+    p = os.path.join(str(path), str(_rc), os.path.basename(url))
     if not os.path.exists(p):
         if source == 'ipac':
             subprocess.run(['wget',
@@ -49,15 +83,22 @@ if __name__ == '__main__':
 
     t_tag = args.tag
 
-    path = f'/_tmp/ztf_matchfiles_{t_tag}/'
-    if not os.path.exists(path):
-        os.makedirs(path)
+    path_base = pathlib.Path('./')
+    # path_base = pathlib.Path('/_tmp/')
+
+    path = path_base / f'ztf_matchfiles_{t_tag}/'
+    if not path.exists():
+        path.mkdir(exist_ok=True, parents=True)
 
     for rc in range(0, 64):
-        if not os.path.exists(os.path.join(path, str(rc))):
-            os.makedirs(os.path.join(path, str(rc)))
+        path_rc = path / str(rc)
+        if not path_rc.exists():
+            path_rc.mkdir(exist_ok=True, parents=True)
 
-    path_urls = pathlib.Path(f'/_tmp/ztf_matchfiles_{t_tag}.csv')
+    path_urls = path_base / f'ztf_matchfiles_{t_tag}.csv'
+
+    # n_rc = 1
+    n_rc = 64
 
     if not path_urls.exists():
 
@@ -68,60 +109,46 @@ if __name__ == '__main__':
 
         print('Collecting urls of matchfiles to download:')
 
-        n_rc = 1
-        # n_rc = 64
-
         # collect urls of matchfiles to download
-        for rc in tqdm(range(0, n_rc), total=n_rc):
-
-            bu = os.path.join(base_url, f'rc{rc:02d}')
-
-            response = requests.get(bu, auth=(config['ztf_depot']['username'], config['ztf_depot']['password']))
-            html = response.text
-
-            # link_list = []
-            soup = BeautifulSoup(html, 'html.parser')
-            links = soup.findAll('a')
-
-            for link in links:
-                txt = link.getText()
-                if 'fr' in txt:
-                    bu_fr = os.path.join(bu, txt)
-
-                    response_fr = requests.get(bu_fr,
-                                               auth=(config['ztf_depot']['username'], config['ztf_depot']['password']))
-                    html_fr = response_fr.text
-
-                    soup_fr = BeautifulSoup(html_fr, 'html.parser')
-                    links_fr = soup_fr.findAll('a')
-
-                    for link_fr in links_fr:
-                        txt_fr = link_fr.getText()
-                        if txt_fr.endswith('.pytable'):
-                            # print('\t', txt_fr)
-                            urls.append({'rc': rc, 'name': txt_fr, 'url': os.path.join(bu_fr, txt_fr)})
-                            break
-
-        # n_matchfiles = len(urls)
+        with mp.pool.ThreadPool(processes=20) as pool:
+            list(tqdm(pool.imap(collect_urls, range(0, n_rc)), total=n_rc))
 
         df_mf = pd.DataFrame.from_records(urls)
         print(df_mf)
+        df_mf.to_csv(path_urls, index=False)
 
     else:
         df_mf = pd.read_csv(path_urls)
         print(df_mf)
 
-    # print(f'Downloading {n_matchfiles} matchfiles:')
-    #
-    # for rc, urls_rc in tqdm(urls.items(), total=n_rc):
-    #     # download
-    #     url_list = [(u, rc) for u in urls_rc]
-    #     with mp.Pool(processes=4) as p:
-    #         list(tqdm(p.imap(fetch_url, url_list), total=len(urls_rc)))
-    #     # move to gs
-    #     subprocess.run(["/usr/local/bin/gsutil",
-    #                     "-m", "mv",
-    #                     f"/_tmp/ztf_matchfiles_{t_tag}/{rc}/*.pytable",
-    #                     f"gs://ztf-matchfiles-{t_tag}/{rc}/"])
-    #     # remove locally
-    #     # subprocess.run(["rm", "rf", f"/_tmp/ztf_matchfiles_{t_tag}/{rc}/"])
+    # check what's (already) on GCS:
+    ongs = []
+    for rc in tqdm(range(0, n_rc), total=n_rc):
+        ongs_rc = subprocess.check_output([
+            'gsutil', 'ls',
+            f'gs://ztf-matchfiles-{t_tag}/{rc}/',
+        ]).decode('utf-8').strip().split('\n')
+        ongs += [pathlib.Path(ong).name for ong in ongs_rc if ong.endswith('pytable')]
+    # print(ongs)
+
+    # matchfiles that are not on GCS:
+    # print(df_mf['name'].isin(ongs))
+    w = ~(df_mf['name'].isin(ongs))
+
+    print(f'Downloading {w.sum()} matchfiles:')
+
+    url_list = [(r.url, r.rc) for r in tqdm(df_mf.loc[w].itertuples())]
+
+    # download
+    with mp.Pool(processes=4) as pool:
+        list(tqdm(pool.imap(fetch_url, url_list), total=len(url_list)))
+
+    # move to GCS:
+    for rc in tqdm(range(0, n_rc), total=n_rc):
+        # move to gs
+        subprocess.run(["/usr/local/bin/gsutil",
+                        "-m", "mv",
+                        f"/_tmp/ztf_matchfiles_{t_tag}/{rc}/*.pytable",
+                        f"gs://ztf-matchfiles-{t_tag}/{rc}/"])
+        # remove locally
+        # subprocess.run(["rm", "rf", f"/_tmp/ztf_matchfiles_{t_tag}/{rc}/"])
