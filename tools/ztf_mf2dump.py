@@ -3,8 +3,7 @@ import subprocess
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description='')
+    parser = argparse.ArgumentParser()
 
     # parser.add_argument('--keepall', action='store_true', help='keep all fields from the matchfiles?')
     # parser.add_argument('--test', action='store_true', help='test')

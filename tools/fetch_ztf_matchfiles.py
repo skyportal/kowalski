@@ -136,9 +136,11 @@ if __name__ == '__main__':
     # print(df_mf['name'].isin(ongs))
     w = ~(df_mf['name'].isin(ongs))
 
+    # print(pd.unique(df_mf.loc[w, 'rc']))
+
     print(f'Downloading {w.sum()} matchfiles:')
 
-    url_list = [(r.url, r.rc) for r in tqdm(df_mf.loc[w].itertuples())]
+    url_list = [(r.url, r.rc) for r in df_mf.loc[w].itertuples()]
 
     # download
     with mp.Pool(processes=4) as pool:
