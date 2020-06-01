@@ -64,14 +64,14 @@ def ingest(arguments):
                 f"mongorestore", f"-u={u}", f"-p={p}", "--authenticationDatabase=admin",
                 "--db=kowalski",
                 f"--collection=ZTF_sources_{args.tag}",
-                f"--archive=/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
+                f"--archive=/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump",
             ])
 
             # remove dump
             subprocess.run([
                 "docker", "exec", "-it", "kowalski_ingester_1",
                 "rm", "-f",
-                f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
+                f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump",
             ])
 
     else:
