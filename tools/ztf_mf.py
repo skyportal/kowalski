@@ -24,11 +24,11 @@ def fetch(arguments):
     # todo: dissect fetch_ztf_matchfiles.py
 
 
-def ingest(arguments):
+def dump(arguments):
     pass
 
 
-def dump(arguments):
+def ingest(arguments):
     if arguments.gcs:
         # fixme: /_tmp must be properly mapped!
 
@@ -46,7 +46,15 @@ def dump(arguments):
                 "docker", "exec", "-it", "kowalski_ingester_1",
                 "/usr/local/bin/gsutil",
                 "-m", "cp",
-                f"gs://ztf-sources-{args.tag}/",
+                f"gs://ztf-sources-{args.tag}/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
+                f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
+            ])
+
+            # lbunzip2 the dump
+            subprocess.run([
+                "docker", "exec", "-it", "kowalski_ingester_1",
+                "lbunzip2", "-v", "-f",
+                "-n", str(arguments.np),
                 f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
             ])
 
@@ -95,6 +103,9 @@ if __name__ == "__main__":
     )
     parsers["ingest"].add_argument(
         "--gcs", action="store_true", help="ingest pre-made dumps from GCS"
+    )
+    parsers["ingest"].add_argument(
+        "--np", type=int, default=30, help="number of threads to use"
     )
 
     args = parser.parse_args()
