@@ -473,9 +473,6 @@ class AlertConsumer(object):
                         if verbose > 1:
                             print(f'{time_stamp()}: filtering took {toc-tic} s')
 
-                        # fixme: for an early demo, post the alerts directly to /api/sources (change to /api/candidates)
-                        #        eventually, should only post passed_filters to a fritz-specific endpoint
-
                         # if config['misc']['post_to_skyportal']:
                         # todo: if is_tracked, post new photometry to /sources
                         if config['misc']['post_to_skyportal'] and (len(passed_filters) > 0):
