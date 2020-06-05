@@ -15,17 +15,17 @@ def load_config(config_file='../config.yaml'):
 
 
 def meta(arguments):
-    pass
+    raise NotImplementedError()
     # todo: dissect fetch_ztf_matchfiles.py
 
 
 def fetch(arguments):
-    pass
+    raise NotImplementedError()
     # todo: dissect fetch_ztf_matchfiles.py
 
 
 def dump(arguments):
-    pass
+    raise NotImplementedError()
 
 
 def ingest(arguments):
@@ -76,7 +76,7 @@ def ingest(arguments):
 
     else:
         # todo: ingest a local copy of the matchfiles
-        pass
+        raise NotImplementedError()
 
 
 if __name__ == "__main__":
