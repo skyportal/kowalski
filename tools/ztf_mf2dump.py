@@ -80,7 +80,7 @@ if __name__ == '__main__':
 
     # export exposures
     # dump to /_tmp/
-    with open(path_tmp / f"ZTF_exposures_{args.tag}.dump", 'w') as f:
+    with open(path_tmp / f"ZTF_exposures_{args.tag}.rc{rc_start:02d}_{rc_stop:02d}.dump", 'w') as f:
         subprocess.run([
             "docker", "exec", "kowalski_mongo_1",
             f"mongodump", "-u=mongoadmin", "-p=mongoadminsecret", "--authenticationDatabase=admin",
