@@ -78,572 +78,6 @@ class EopError(AlertError):
         return self.message
 
 
-class AlertConsumer(object):
-    """
-        Creates an alert stream Kafka consumer for a given topic.
-
-    Parameters
-    ----------
-    topic : `str`
-        Name of the topic to subscribe to.
-    schema_files : Avro schema files
-        The reader Avro schema files for decoding data. Optional.
-    **kwargs
-        Keyword arguments for configuring confluent_kafka.Consumer().
-    """
-
-    def __init__(self, topic, **kwargs):
-
-        # keep track of disconnected partitions
-        self.num_disconnected_partitions = 0
-        self.topic = topic
-
-        def error_cb(err, _self=self):
-            print(f'{time_stamp()}: error_cb -------->', err)
-            # print(err.code())
-            if err.code() == -195:
-                _self.num_disconnected_partitions += 1
-                if _self.num_disconnected_partitions == _self.num_partitions:
-                    print(f'{time_stamp()}: all partitions got disconnected, killing thread')
-                    sys.exit()
-                else:
-                    print(f'{time_stamp()}: {_self.topic}: disconnected from partition.',
-                          'total:', _self.num_disconnected_partitions)
-
-        # 'error_cb': error_cb
-        kwargs['error_cb'] = error_cb
-
-        self.consumer = confluent_kafka.Consumer(**kwargs)
-        self.num_partitions = 0
-
-        def on_assign(consumer, partitions, _self=self):
-            # force-reset offsets when subscribing to a topic:
-            for part in partitions:
-                # -2 stands for beginning and -1 for end
-                part.offset = -2
-                # keep number of partitions. when reaching end of last partition, kill thread and start from beginning
-                _self.num_partitions += 1
-                print(consumer.get_watermark_offsets(part))
-
-        self.consumer.subscribe([topic], on_assign=on_assign)
-
-        self.config = config
-
-        # session to talk to SkyPortal
-        self.session = requests.Session()
-        self.session_headers = {'Authorization': f"token {config['skyportal']['token']}"}
-        # non-default settings:
-        # pc = pool_connections if pool_connections is not None else DEFAULT_POOLSIZE
-        # pm = pool_maxsize if pool_maxsize is not None else DEFAULT_POOLSIZE
-        # mr = max_retries if max_retries is not None else DEFAULT_RETRIES
-        # pb = pool_block if pool_block is not None else DEFAULT_POOLBLOCK
-        #
-        # self.session.mount('https://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
-        #                                            max_retries=mr, pool_block=pb))
-        # self.session.mount('http://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
-        #                                           max_retries=mr, pool_block=pb))
-
-        # MongoDB collections to store the alerts:
-        self.collection_alerts = self.config['database']['collections']['alerts_ztf']
-        self.collection_alerts_aux = self.config['database']['collections']['alerts_ztf_aux']
-
-        self.db = None
-        self.connect_to_db()
-
-        # create indexes
-        for index_name, index in self.config['database']['indexes'][self.collection_alerts].items():
-            # print(index_name, index)
-            ind = [tuple(ii) for ii in index]
-            self.db['db'][self.collection_alerts].create_index(keys=ind, name=index_name, background=True)
-
-        # ML models:
-        self.ml_models = dict()
-        for m in config['ml_models']:
-            try:
-                m_v = config["ml_models"][m]["version"]
-                # fixme: allow other formats such as SavedModel
-                mf = os.path.join(config["path"]["ml_models"], f'{m}_{m_v}.h5')
-                self.ml_models[m] = {'model': load_model(mf), 'version': m_v}
-            except Exception as e:
-                print(f'{time_stamp()}: Error loading ML model {m}: {str(e)}')
-                _err = traceback.format_exc()
-                print(_err)
-                continue
-
-        # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
-        # including archival photometry and cross-matches:
-        self.filter_pipeline_upstream = config['database']['filters'][self.collection_alerts]
-        print('Upstream filtering pipeline:')
-        print(self.filter_pipeline_upstream)
-
-        # load user-defined alert filter templates
-        # todo: implement magic variables such as <jd>, <jd_date>
-        # load only the latest filter for each group_id. the assumption is that there is only one filter per group_id
-        # as far as the end user is concerned
-        # self.filter_templates = \
-        #     list(self.db['db'][config['database']['collections']['filters']].find(
-        #         {'catalog': self.collection_alerts}
-        #     ))
-        self.filter_templates = list(self.db['db'][config['database']['collections']['filters']].\
-            aggregate([{'$match': {'catalog': self.collection_alerts}},
-                       {'$group': {'_id': 'science_program_id',
-                                   'created': {'$max': '$created'}, 'tmp': {'$last': '$$ROOT'}}},
-                       {'$group': {'_id': None, "filters": {"$push": "$tmp"}}}]))
-        if len(self.filter_templates) > 0:
-            self.filter_templates = self.filter_templates[0]['filters']
-
-        print('Science filters:')
-        print(self.filter_templates)
-
-        # prepend default upstream filter:
-        for filter_template in self.filter_templates:
-            filter_template['pipeline'] = self.filter_pipeline_upstream + loads(filter_template['pipeline'])
-
-    def connect_to_db(self):
-        """
-            Connect to mongodb
-        :return:
-        """
-
-        try:
-            # there's only one instance of DB, it's too big to be replicated
-            _client = pymongo.MongoClient(host=self.config['database']['host'],
-                                          port=self.config['database']['port'], connect=False)
-            # grab main database:
-            _db = _client[self.config['database']['db']]
-        except Exception as _e:
-            raise ConnectionRefusedError
-        try:
-            # authenticate
-            _db.authenticate(self.config['database']['username'], self.config['database']['password'])
-        except Exception as _e:
-            raise ConnectionRefusedError
-
-        self.db = dict()
-        self.db['client'] = _client
-        self.db['db'] = _db
-
-    def insert_db_entry(self, _collection=None, _db_entry=None):
-        """
-            Insert a document _doc to collection _collection in DB.
-            It is monitored for timeout in case DB connection hangs for some reason
-        :param _collection:
-        :param _db_entry:
-        :return:
-        """
-        assert _collection is not None, 'Must specify collection'
-        assert _db_entry is not None, 'Must specify document'
-        try:
-            self.db['db'][_collection].insert_one(_db_entry)
-        except Exception as _e:
-            print(f'{time_stamp()}: Error inserting {str(_db_entry["_id"])} into {_collection}')
-            traceback.print_exc()
-            print(_e)
-
-    def insert_multiple_db_entries(self, _collection=None, _db_entries=None):
-        """
-            Insert a document _doc to collection _collection in DB.
-            It is monitored for timeout in case DB connection hangs for some reason
-        :param _collection:
-        :param _db_entries:
-        :return:
-        """
-        assert _collection is not None, 'Must specify collection'
-        assert _db_entries is not None, 'Must specify documents'
-        try:
-            # ordered=False ensures that every insert operation will be attempted
-            # so that if, e.g., a document already exists, it will be simply skipped
-            self.db['db'][_collection].insert_many(_db_entries, ordered=False)
-        except pymongo.errors.BulkWriteError as bwe:
-            print(time_stamp(), bwe.details)
-        except Exception as _e:
-            traceback.print_exc()
-            print(_e)
-
-    def replace_db_entry(self, _collection=None, _filter=None, _db_entry=None):
-        """
-            Insert a document _doc to collection _collection in DB.
-            It is monitored for timeout in case DB connection hangs for some reason
-        :param _collection:
-        :param _filter:
-        :param _db_entry:
-        :return:
-        """
-        assert _collection is not None, 'Must specify collection'
-        assert _db_entry is not None, 'Must specify document'
-        try:
-            self.db['db'][_collection].replace_one(_filter, _db_entry, upsert=True)
-        except Exception as _e:
-            print(time_stamp(), 'Error replacing {:s} in {:s}'.format(str(_db_entry['_id']), _collection))
-            traceback.print_exc()
-            print(_e)
-
-    @staticmethod
-    def alert_mongify(alert):
-
-        doc = dict(alert)
-
-        # let mongo create a unique _id
-
-        # placeholders for classifications
-        doc['classifications'] = dict()
-
-        '''Coordinates:'''
-
-        # GeoJSON for 2D indexing
-        doc['coordinates'] = {}
-        _ra = doc['candidate']['ra']
-        _dec = doc['candidate']['dec']
-        _radec = [_ra, _dec]
-        # string format: H:M:S, D:M:S
-        # tic = time.time()
-        _radec_str = [deg2hms(_ra), deg2dms(_dec)]
-        # print(time.time() - tic)
-        # print(_radec_str)
-        doc['coordinates']['radec_str'] = _radec_str
-        # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
-        _radec_geojson = [_ra - 180.0, _dec]
-        doc['coordinates']['radec_geojson'] = {'type': 'Point',
-                                               'coordinates': _radec_geojson}
-        # radians and degrees:
-        # doc['coordinates']['radec_rad'] = [_ra * np.pi / 180.0, _dec * np.pi / 180.0]
-        # doc['coordinates']['radec_deg'] = [_ra, _dec]
-
-        # Galactic coordinates l and b
-        l, b = radec2lb(doc['candidate']['ra'], doc['candidate']['dec'])
-        doc['coordinates']['l'] = l
-        doc['coordinates']['b'] = b
-
-        prv_candidates = deepcopy(doc['prv_candidates'])
-        doc.pop('prv_candidates', None)
-        if prv_candidates is None:
-            prv_candidates = []
-
-        return doc, prv_candidates
-
-    def poll(self, path_alerts=None, path_tess=None, datestr=None, save_packets=False, verbose=1):
-        """
-            Polls Kafka broker to consume topic.
-        :param path_alerts:
-        :param path_tess:
-        :param datestr:
-        :param save_packets:
-        :param verbose: 1 - main, 2 - debug
-        :return:
-        """
-        # msg = self.consumer.poll(timeout=timeout)
-        msg = self.consumer.poll()
-
-        if msg is None:
-            print(time_stamp(), 'Caught error: msg is None')
-
-        if msg.error():
-            print(time_stamp(), 'Caught error:', msg.error())
-            raise EopError(msg)
-
-        elif msg is not None:
-            try:
-                # decode avro packet
-                msg_decoded = self.decodeMessage(msg)
-                for record in msg_decoded:
-
-                    candid = record['candid']
-                    objectId = record['objectId']
-
-                    print(f'{time_stamp()}: {self.topic} {objectId} {candid}')
-
-                    # check that candid not in collection_alerts
-                    if self.db['db'][self.collection_alerts].count_documents({'candid': candid}, limit=1) == 0:
-                        # candid not in db, ingest
-
-                        if save_packets:
-                            # save avro packet to disk
-                            path_alert_dir = os.path.join(path_alerts, datestr)
-                            # mkdir if does not exist
-                            if not os.path.exists(path_alert_dir):
-                                os.makedirs(path_alert_dir)
-                            path_avro = os.path.join(path_alert_dir, f'{candid}.avro')
-                            print(f'{time_stamp()}: saving {candid} to disk')
-                            with open(path_avro, 'wb') as f:
-                                f.write(msg.value())
-
-                        # ingest decoded avro packet into db
-                        # todo: ?? restructure alerts even further?
-                        #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
-                        #       group by objectId similar to prv_candidates?? maybe this is too much
-                        tic = time.time()
-                        alert, prv_candidates = self.alert_mongify(record)
-                        toc = time.time()
-                        if verbose > 1:
-                            print(f'{time_stamp()}: mongification took {toc - tic} s')
-
-                        # ML models:
-                        tic = time.time()
-                        scores = alert_filter__ml(record, ml_models=self.ml_models)
-                        alert['classifications'] = scores
-                        toc = time.time()
-                        if verbose > 1:
-                            print(f'{time_stamp()}: mling took {toc - tic} s')
-
-                        print(f'{time_stamp()}: ingesting {alert["candid"]} into db')
-                        tic = time.time()
-                        self.insert_db_entry(_collection=self.collection_alerts, _db_entry=alert)
-                        toc = time.time()
-                        if verbose > 1:
-                            print(f'{time_stamp()}: ingesting took {toc - tic} s')
-
-                        # prv_candidates: pop nulls - save space
-                        prv_candidates = [{kk: vv for kk, vv in prv_candidate.items() if vv is not None}
-                                          for prv_candidate in prv_candidates]
-
-                        # cross-match with external catalogs if objectId not in collection_alerts_aux:
-                        if self.db['db'][self.collection_alerts_aux].count_documents({'_id': objectId}, limit=1) == 0:
-                            # tic = time.time()
-                            tic = time.time()
-                            xmatches = alert_filter__xmatch(self.db['db'], alert)
-                            toc = time.time()
-                            if verbose > 1:
-                                print(f'{time_stamp()}: xmatch took {toc - tic} s')
-                            # CLU cross-match:
-                            tic = time.time()
-                            xmatches = {**xmatches, **alert_filter__xmatch_clu(self.db['db'], alert)}
-                            toc = time.time()
-                            if verbose > 1:
-                                print(f'{time_stamp()}: clu xmatch took {toc - tic} s')
-                            # alert['cross_matches'] = xmatches
-                            # toc = time.time()
-                            # print(f'xmatch for {alert["candid"]} took {toc-tic:.2f} s')
-
-                            alert_aux = {'_id': objectId,
-                                         'cross_matches': xmatches,
-                                         'prv_candidates': prv_candidates}
-
-                            tic = time.time()
-                            self.insert_db_entry(_collection=self.collection_alerts_aux, _db_entry=alert_aux)
-                            toc = time.time()
-                            if verbose > 1:
-                                print(f'{time_stamp()}: aux ingesting took {toc - tic} s')
-
-                        else:
-                            tic = time.time()
-                            self.db['db'][self.collection_alerts_aux].update_one({'_id': objectId},
-                                                                                 {'$addToSet':
-                                                                                      {'prv_candidates':
-                                                                                           {'$each': prv_candidates}}},
-                                                                                 upsert=True)
-                            toc = time.time()
-                            if verbose > 1:
-                                print(f'{time_stamp()}: aux updating took {toc - tic} s')
-
-                        # dump packet as json to disk if in a public TESS sector
-                        if 'TESS' in alert['candidate']['programpi']:
-                            # put prv_candidates back
-                            alert['prv_candidates'] = prv_candidates
-
-                            # get cross-matches
-                            # xmatches = self.db['db'][self.collection_alerts_aux].find_one({'_id': objectId})
-                            xmatches = self.db['db'][self.collection_alerts_aux].find({'_id': objectId},
-                                                                                      {'cross_matches': 1},
-                                                                                      limit=1)
-                            xmatches = list(xmatches)[0]
-                            # fixme: pop CLU:
-                            xmatches.pop('CLU_20190625', None)
-
-                            alert['cross_matches'] = xmatches['cross_matches']
-
-                            if save_packets:
-                                path_tess_dir = os.path.join(path_tess, datestr)
-                                # mkdir if does not exist
-                                if not os.path.exists(path_tess_dir):
-                                    os.makedirs(path_tess_dir)
-
-                                print(f'{time_stamp()}: saving {alert["candid"]} to disk')
-                                try:
-                                    with open(os.path.join(path_tess_dir, f"{alert['candid']}.json"), 'w') as f:
-                                        f.write(dumps(alert))
-                                except Exception as e:
-                                    print(f'{time_stamp()}: {str(e)}')
-                                    _err = traceback.format_exc()
-                                    print(f'{time_stamp()}: {str(_err)}')
-
-                        # execute user-defined alert filters
-                        tic = time.time()
-                        passed_filters = alert_filter__user_defined(self.db['db'], self.filter_templates, alert)
-                        toc = time.time()
-                        if verbose > 1:
-                            print(f'{time_stamp()}: filtering took {toc-tic} s')
-
-                        # if config['misc']['post_to_skyportal']:
-                        # todo: if is_tracked, post new photometry to /sources
-                        if config['misc']['post_to_skyportal'] and (len(passed_filters) > 0):
-                            # post metadata
-                            # todo: pass annotations, cross-matches, ml scores etc.
-                            alert_thin = {
-                                "id": alert['objectId'],
-                                "ra": alert['candidate'].get('ra'),
-                                "dec": alert['candidate'].get('dec'),
-                                # 'dist_nearest_source': alert["candidate"].get("distnr"),
-                                # 'mag_nearest_source': alert["candidate"].get("magnr"),
-                                # 'e_mag_nearest_source': alert["candidate"].get("sigmagnr"),
-                                # 'sgmag1': alert["candidate"].get("sgmag1"),
-                                # 'srmag1': alert["candidate"].get("srmag1"),
-                                # 'simag1': alert["candidate"].get("simag1"),
-                                # 'objectidps1': alert["candidate"].get("objectidps1"),
-                                # 'sgscore1': alert["candidate"].get("sgscore1"),
-                                # 'distpsnr1': alert["candidate"].get("distpsnr1"),
-                                "score": alert['candidate'].get('drb', alert['candidate']['rb']),
-
-                                "altdata": alert.get('annotations', dict()),
-
-                                "filter_ids": [ff.get("_id") for ff in passed_filters],
-                                # "passing_alert_id": alert['candid'],
-                            }
-
-                            # fixme: delete the source for a clean start
-                            # fixme: this is for the early demo only
-                            # resp = self.session.delete(
-                            #     f"{config['skyportal']['protocol']}://"
-                            #     f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                            #     f"/api/candidates/{alert['objectId']}",
-                            #     headers=self.session_headers, timeout=2,
-                            # )
-
-                            # check if candidate already exists:
-                            tic = time.time()
-                            resp = self.session.get(
-                                f"{config['skyportal']['protocol']}://"
-                                f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                f"/api/candidates/{alert['objectId']}",
-                                headers=self.session_headers, timeout=2,
-                            )
-                            toc = time.time()
-                            candidate_exists = resp.json()['status'] == 'success'
-                            if verbose > 1:
-                                print(f'{time_stamp()}: checking if candidate exists took {toc - tic} s')
-                            if candidate_exists:
-                                saved_candidate_meta = resp.json()['data']
-                                print(f"{time_stamp()}: Candidate {alert['candid']} exists in SkyPortal")
-                            else:
-                                saved_candidate_meta = dict()
-                                print(f"{time_stamp()}: Candidate {alert['candid']} does not exist in SkyPortal")
-                                # print(resp.json())
-
-                            if not candidate_exists:
-                                tic = time.time()
-                                resp = self.session.post(
-                                    f"{config['skyportal']['protocol']}://"
-                                    f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                    "/api/candidates",
-                                    json=alert_thin, headers=self.session_headers, timeout=2,
-                                )
-                                toc = time.time()
-                                if verbose > 1:
-                                    print(f'{time_stamp()}: posting metadata to skyportal took {toc - tic} s')
-                                if resp.json()['status'] == 'success':
-                                    print(f"{time_stamp()}: Posted {alert['candid']} metadata to SkyPortal")
-                                else:
-                                    print(f"{time_stamp()}: Failed to post {alert['candid']} metadata to SkyPortal")
-                                    print(resp.json())
-
-                            # post photometry
-                            tic = time.time()
-                            alert['prv_candidates'] = prv_candidates
-                            if candidate_exists:
-                                last_detected = datetime.datetime.fromisoformat(
-                                    saved_candidate_meta.get("last_detected")
-                                )
-                                last_detected_jd = datetime_to_jd(last_detected)
-                                photometry = make_photometry(deepcopy(alert), jd_start=last_detected_jd)
-                            else:
-                                photometry = make_photometry(deepcopy(alert))
-                            toc = time.time()
-                            if verbose > 1:
-                                print(f'{time_stamp()}: making alert photometry took {toc - tic} s')
-
-                            if len(photometry.get('mag', ())) > 0:
-                                tic = time.time()
-                                resp = self.session.post(
-                                    f"{config['skyportal']['protocol']}://"
-                                    f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                    "/api/photometry",
-                                    json=photometry, headers=self.session_headers, timeout=2,
-                                )
-                                toc = time.time()
-                                if verbose > 1:
-                                    print(f'{time_stamp()}: posting photometry to skyportal took {toc - tic} s')
-                                if resp.json()['status'] == 'success':
-                                    print(f"{time_stamp()}: Posted {alert['candid']} photometry to SkyPortal")
-                                else:
-                                    print(f"{time_stamp()}: Failed to post {alert['candid']} photometry to SkyPortal")
-                                    print(resp.json())
-
-                            # post thumbnails for new candidates only (fixme?)
-                            if not candidate_exists:
-                                for ttype, ztftype in [('new', 'Science'), ('ref', 'Template'), ('sub', 'Difference')]:
-
-                                    tic = time.time()
-                                    thumb = make_thumbnail(deepcopy(alert), ttype, ztftype)
-                                    toc = time.time()
-                                    if verbose > 1:
-                                        print(f'{time_stamp()}: making {ztftype} thumbnail took {toc - tic} s')
-
-                                    tic = time.time()
-                                    resp = self.session.post(
-                                        f"{config['skyportal']['protocol']}://"
-                                        f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                        "/api/thumbnail",
-                                        json=thumb, headers=self.session_headers, timeout=2,
-                                    )
-                                    toc = time.time()
-                                    if verbose > 1:
-                                        print(f'{time_stamp()}: posting {ztftype} thumbnail to skyportal took {toc - tic} s')
-
-                                    if resp.json()['status'] == 'success':
-                                        print(f"{time_stamp()}: Posted {alert['candid']} {ztftype} cutout to SkyPortal")
-                                    else:
-                                        print(f"{time_stamp()}: Failed to post {alert['candid']} {ztftype}"
-                                              " cutout to SkyPortal")
-                                        print(resp.json())
-
-            except Exception as e:
-                print(f"{time_stamp()}: {str(e)}")
-
-    def decodeMessage(self, msg):
-        """Decode Avro message according to a schema.
-
-        Parameters
-        ----------
-        msg : Kafka message
-            The Kafka message result from consumer.poll().
-
-        Returns
-        -------
-        `dict`
-            Decoded message.
-        """
-        # print(msg.topic(), msg.offset(), msg.error(), msg.key(), msg.value())
-        message = msg.value()
-        # print(message)
-        try:
-            bytes_io = io.BytesIO(message)
-            decoded_msg = readSchemaData(bytes_io)
-            # print(decoded_msg)
-            # decoded_msg = readAvroData(bytes_io, self.alert_schema)
-            # print(decoded_msg)
-        except AssertionError:
-            # FIXME this exception is raised but not sure if it matters yet
-            bytes_io = io.BytesIO(message)
-            decoded_msg = None
-        except IndexError:
-            literal_msg = literal_eval(str(message, encoding='utf-8'))  # works to give bytes
-            bytes_io = io.BytesIO(literal_msg)  # works to give <class '_io.BytesIO'>
-            decoded_msg = readSchemaData(bytes_io)  # yields reader
-        except Exception:
-            decoded_msg = message
-        finally:
-            return decoded_msg
-
-
 def make_photometry(a: dict, jd_start: float = None):
     df = pd.DataFrame(a['candidate'], index=[0])
 
@@ -652,7 +86,7 @@ def make_photometry(a: dict, jd_start: float = None):
         [df, df_prv],
         ignore_index=True,
         sort=False
-    ).drop_duplicates(subset='jd').reset_index(drop=True).sort_values(by=['jd']).fillna(99)
+    ).drop_duplicates(subset='jd').reset_index(drop=True).sort_values(by=['jd'])
 
     ztf_filters = {1: 'ztfg', 2: 'ztfr', 3: 'ztfi'}
     dflc['ztf_filter'] = dflc['fid'].apply(lambda x: ztf_filters[x])
@@ -664,6 +98,10 @@ def make_photometry(a: dict, jd_start: float = None):
     if jd_start is not None:
         w = dflc['jd'] > jd_start
         dflc = dflc.loc[w]
+
+    # replace NaN's with None's:
+    for col in ('magpsf', 'sigmapsf', 'diffmaglim'):
+        dflc[col] = dflc[col].replace({col: {np.nan: None}})
 
     photometry = {
         "obj_id": a['objectId'],
@@ -954,6 +392,557 @@ def alert_filter__user_defined(database, filter_templates, alert,
             continue
 
     return passed_filters
+
+
+class AlertConsumer(object):
+    """
+        Creates an alert stream Kafka consumer for a given topic.
+
+    Parameters
+    ----------
+    topic : `str`
+        Name of the topic to subscribe to.
+    schema_files : Avro schema files
+        The reader Avro schema files for decoding data. Optional.
+    **kwargs
+        Keyword arguments for configuring confluent_kafka.Consumer().
+    """
+
+    def __init__(self, topic, **kwargs):
+
+        # keep track of disconnected partitions
+        self.num_disconnected_partitions = 0
+        self.topic = topic
+
+        def error_cb(err, _self=self):
+            print(f'{time_stamp()}: error_cb -------->', err)
+            # print(err.code())
+            if err.code() == -195:
+                _self.num_disconnected_partitions += 1
+                if _self.num_disconnected_partitions == _self.num_partitions:
+                    print(f'{time_stamp()}: all partitions got disconnected, killing thread')
+                    sys.exit()
+                else:
+                    print(f'{time_stamp()}: {_self.topic}: disconnected from partition.',
+                          'total:', _self.num_disconnected_partitions)
+
+        # 'error_cb': error_cb
+        kwargs['error_cb'] = error_cb
+
+        self.consumer = confluent_kafka.Consumer(**kwargs)
+        self.num_partitions = 0
+
+        def on_assign(consumer, partitions, _self=self):
+            # force-reset offsets when subscribing to a topic:
+            for part in partitions:
+                # -2 stands for beginning and -1 for end
+                part.offset = -2
+                # keep number of partitions. when reaching end of last partition, kill thread and start from beginning
+                _self.num_partitions += 1
+                print(consumer.get_watermark_offsets(part))
+
+        self.consumer.subscribe([topic], on_assign=on_assign)
+
+        self.config = config
+
+        # session to talk to SkyPortal
+        self.session = requests.Session()
+        self.session_headers = {'Authorization': f"token {config['skyportal']['token']}"}
+        # non-default settings:
+        # pc = pool_connections if pool_connections is not None else DEFAULT_POOLSIZE
+        # pm = pool_maxsize if pool_maxsize is not None else DEFAULT_POOLSIZE
+        # mr = max_retries if max_retries is not None else DEFAULT_RETRIES
+        # pb = pool_block if pool_block is not None else DEFAULT_POOLBLOCK
+        #
+        # self.session.mount('https://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
+        #                                            max_retries=mr, pool_block=pb))
+        # self.session.mount('http://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
+        #                                           max_retries=mr, pool_block=pb))
+
+        # MongoDB collections to store the alerts:
+        self.collection_alerts = self.config['database']['collections']['alerts_ztf']
+        self.collection_alerts_aux = self.config['database']['collections']['alerts_ztf_aux']
+
+        self.db = None
+        self.connect_to_db()
+
+        # create indexes
+        for index_name, index in self.config['database']['indexes'][self.collection_alerts].items():
+            # print(index_name, index)
+            ind = [tuple(ii) for ii in index]
+            self.db['db'][self.collection_alerts].create_index(keys=ind, name=index_name, background=True)
+
+        # ML models:
+        self.ml_models = dict()
+        for m in config['ml_models']:
+            try:
+                m_v = config["ml_models"][m]["version"]
+                # fixme: allow other formats such as SavedModel
+                mf = os.path.join(config["path"]["ml_models"], f'{m}_{m_v}.h5')
+                self.ml_models[m] = {'model': load_model(mf), 'version': m_v}
+            except Exception as e:
+                print(f'{time_stamp()}: Error loading ML model {m}: {str(e)}')
+                _err = traceback.format_exc()
+                print(_err)
+                continue
+
+        # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
+        # including archival photometry and cross-matches:
+        self.filter_pipeline_upstream = config['database']['filters'][self.collection_alerts]
+        print('Upstream filtering pipeline:')
+        print(self.filter_pipeline_upstream)
+
+        # load user-defined alert filter templates
+        # todo: implement magic variables such as <jd>, <jd_date>
+        # load only the latest filter for each group_id. the assumption is that there is only one filter per group_id
+        # as far as the end user is concerned
+        # self.filter_templates = \
+        #     list(self.db['db'][config['database']['collections']['filters']].find(
+        #         {'catalog': self.collection_alerts}
+        #     ))
+        self.filter_templates = list(self.db['db'][config['database']['collections']['filters']].\
+            aggregate([{'$match': {'catalog': self.collection_alerts}},
+                       {'$group': {'_id': 'science_program_id',
+                                   'created': {'$max': '$created'}, 'tmp': {'$last': '$$ROOT'}}},
+                       {'$group': {'_id': None, "filters": {"$push": "$tmp"}}}]))
+        if len(self.filter_templates) > 0:
+            self.filter_templates = self.filter_templates[0]['filters']
+
+        print('Science filters:')
+        print(self.filter_templates)
+
+        # prepend default upstream filter:
+        for filter_template in self.filter_templates:
+            filter_template['pipeline'] = self.filter_pipeline_upstream + loads(filter_template['pipeline'])
+
+    def connect_to_db(self):
+        """
+            Connect to mongodb
+        :return:
+        """
+
+        try:
+            # there's only one instance of DB, it's too big to be replicated
+            _client = pymongo.MongoClient(host=self.config['database']['host'],
+                                          port=self.config['database']['port'], connect=False)
+            # grab main database:
+            _db = _client[self.config['database']['db']]
+        except Exception as _e:
+            raise ConnectionRefusedError
+        try:
+            # authenticate
+            _db.authenticate(self.config['database']['username'], self.config['database']['password'])
+        except Exception as _e:
+            raise ConnectionRefusedError
+
+        self.db = dict()
+        self.db['client'] = _client
+        self.db['db'] = _db
+
+    def insert_db_entry(self, _collection=None, _db_entry=None):
+        """
+            Insert a document _doc to collection _collection in DB.
+            It is monitored for timeout in case DB connection hangs for some reason
+        :param _collection:
+        :param _db_entry:
+        :return:
+        """
+        assert _collection is not None, 'Must specify collection'
+        assert _db_entry is not None, 'Must specify document'
+        try:
+            self.db['db'][_collection].insert_one(_db_entry)
+        except Exception as _e:
+            print(f'{time_stamp()}: Error inserting {str(_db_entry["_id"])} into {_collection}')
+            traceback.print_exc()
+            print(_e)
+
+    def insert_multiple_db_entries(self, _collection=None, _db_entries=None):
+        """
+            Insert a document _doc to collection _collection in DB.
+            It is monitored for timeout in case DB connection hangs for some reason
+        :param _collection:
+        :param _db_entries:
+        :return:
+        """
+        assert _collection is not None, 'Must specify collection'
+        assert _db_entries is not None, 'Must specify documents'
+        try:
+            # ordered=False ensures that every insert operation will be attempted
+            # so that if, e.g., a document already exists, it will be simply skipped
+            self.db['db'][_collection].insert_many(_db_entries, ordered=False)
+        except pymongo.errors.BulkWriteError as bwe:
+            print(time_stamp(), bwe.details)
+        except Exception as _e:
+            traceback.print_exc()
+            print(_e)
+
+    def replace_db_entry(self, _collection=None, _filter=None, _db_entry=None):
+        """
+            Insert a document _doc to collection _collection in DB.
+            It is monitored for timeout in case DB connection hangs for some reason
+        :param _collection:
+        :param _filter:
+        :param _db_entry:
+        :return:
+        """
+        assert _collection is not None, 'Must specify collection'
+        assert _db_entry is not None, 'Must specify document'
+        try:
+            self.db['db'][_collection].replace_one(_filter, _db_entry, upsert=True)
+        except Exception as _e:
+            print(time_stamp(), 'Error replacing {:s} in {:s}'.format(str(_db_entry['_id']), _collection))
+            traceback.print_exc()
+            print(_e)
+
+    @staticmethod
+    def alert_mongify(alert):
+
+        doc = dict(alert)
+
+        # let mongo create a unique _id
+
+        # placeholders for classifications
+        doc['classifications'] = dict()
+
+        '''Coordinates:'''
+
+        # GeoJSON for 2D indexing
+        doc['coordinates'] = {}
+        _ra = doc['candidate']['ra']
+        _dec = doc['candidate']['dec']
+        _radec = [_ra, _dec]
+        # string format: H:M:S, D:M:S
+        _radec_str = [deg2hms(_ra), deg2dms(_dec)]
+        doc['coordinates']['radec_str'] = _radec_str
+        # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
+        _radec_geojson = [_ra - 180.0, _dec]
+        doc['coordinates']['radec_geojson'] = {'type': 'Point',
+                                               'coordinates': _radec_geojson}
+
+        # Galactic coordinates l and b
+        l, b = radec2lb(doc['candidate']['ra'], doc['candidate']['dec'])
+        doc['coordinates']['l'] = l
+        doc['coordinates']['b'] = b
+
+        prv_candidates = deepcopy(doc['prv_candidates'])
+        doc.pop('prv_candidates', None)
+        if prv_candidates is None:
+            prv_candidates = []
+
+        return doc, prv_candidates
+
+    def poll(self, path_alerts=None, path_tess=None, datestr=None, save_packets=False, verbose=1):
+        """
+            Polls Kafka broker to consume topic.
+        :param path_alerts:
+        :param path_tess:
+        :param datestr:
+        :param save_packets:
+        :param verbose: 1 - main, 2 - debug
+        :return:
+        """
+        # msg = self.consumer.poll(timeout=timeout)
+        msg = self.consumer.poll()
+
+        if msg is None:
+            print(time_stamp(), 'Caught error: msg is None')
+
+        if msg.error():
+            print(time_stamp(), 'Caught error:', msg.error())
+            raise EopError(msg)
+
+        elif msg is not None:
+            try:
+                # decode avro packet
+                msg_decoded = self.decodeMessage(msg)
+                for record in msg_decoded:
+
+                    candid = record['candid']
+                    objectId = record['objectId']
+
+                    print(f'{time_stamp()}: {self.topic} {objectId} {candid}')
+
+                    # check that candid not in collection_alerts
+                    if self.db['db'][self.collection_alerts].count_documents({'candid': candid}, limit=1) == 0:
+                        # candid not in db, ingest
+
+                        if save_packets:
+                            # save avro packet to disk
+                            path_alert_dir = os.path.join(path_alerts, datestr)
+                            # mkdir if does not exist
+                            if not os.path.exists(path_alert_dir):
+                                os.makedirs(path_alert_dir)
+                            path_avro = os.path.join(path_alert_dir, f'{candid}.avro')
+                            print(f'{time_stamp()}: saving {candid} to disk')
+                            with open(path_avro, 'wb') as f:
+                                f.write(msg.value())
+
+                        # ingest decoded avro packet into db
+                        # todo: ?? restructure alerts even further?
+                        #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
+                        #       group by objectId similar to prv_candidates?? maybe this is too much
+                        tic = time.time()
+                        alert, prv_candidates = self.alert_mongify(record)
+                        toc = time.time()
+                        if verbose > 1:
+                            print(f'{time_stamp()}: mongification took {toc - tic} s')
+
+                        # ML models:
+                        tic = time.time()
+                        scores = alert_filter__ml(record, ml_models=self.ml_models)
+                        alert['classifications'] = scores
+                        toc = time.time()
+                        if verbose > 1:
+                            print(f'{time_stamp()}: mling took {toc - tic} s')
+
+                        print(f'{time_stamp()}: ingesting {alert["candid"]} into db')
+                        tic = time.time()
+                        self.insert_db_entry(_collection=self.collection_alerts, _db_entry=alert)
+                        toc = time.time()
+                        if verbose > 1:
+                            print(f'{time_stamp()}: ingesting took {toc - tic} s')
+
+                        # prv_candidates: pop nulls - save space
+                        prv_candidates = [{kk: vv for kk, vv in prv_candidate.items() if vv is not None}
+                                          for prv_candidate in prv_candidates]
+
+                        # cross-match with external catalogs if objectId not in collection_alerts_aux:
+                        if self.db['db'][self.collection_alerts_aux].count_documents({'_id': objectId}, limit=1) == 0:
+                            # tic = time.time()
+                            tic = time.time()
+                            xmatches = alert_filter__xmatch(self.db['db'], alert)
+                            toc = time.time()
+                            if verbose > 1:
+                                print(f'{time_stamp()}: xmatch took {toc - tic} s')
+                            # CLU cross-match:
+                            tic = time.time()
+                            xmatches = {**xmatches, **alert_filter__xmatch_clu(self.db['db'], alert)}
+                            toc = time.time()
+                            if verbose > 1:
+                                print(f'{time_stamp()}: clu xmatch took {toc - tic} s')
+                            # alert['cross_matches'] = xmatches
+                            # toc = time.time()
+                            # print(f'xmatch for {alert["candid"]} took {toc-tic:.2f} s')
+
+                            alert_aux = {'_id': objectId,
+                                         'cross_matches': xmatches,
+                                         'prv_candidates': prv_candidates}
+
+                            tic = time.time()
+                            self.insert_db_entry(_collection=self.collection_alerts_aux, _db_entry=alert_aux)
+                            toc = time.time()
+                            if verbose > 1:
+                                print(f'{time_stamp()}: aux ingesting took {toc - tic} s')
+
+                        else:
+                            tic = time.time()
+                            self.db['db'][self.collection_alerts_aux].update_one({'_id': objectId},
+                                                                                 {'$addToSet':
+                                                                                      {'prv_candidates':
+                                                                                           {'$each': prv_candidates}}},
+                                                                                 upsert=True)
+                            toc = time.time()
+                            if verbose > 1:
+                                print(f'{time_stamp()}: aux updating took {toc - tic} s')
+
+                        # dump packet as json to disk if in a public TESS sector
+                        if 'TESS' in alert['candidate']['programpi']:
+                            # put prv_candidates back
+                            alert['prv_candidates'] = prv_candidates
+
+                            # get cross-matches
+                            # xmatches = self.db['db'][self.collection_alerts_aux].find_one({'_id': objectId})
+                            xmatches = self.db['db'][self.collection_alerts_aux].find({'_id': objectId},
+                                                                                      {'cross_matches': 1},
+                                                                                      limit=1)
+                            xmatches = list(xmatches)[0]
+                            # fixme: pop CLU:
+                            xmatches.pop('CLU_20190625', None)
+
+                            alert['cross_matches'] = xmatches['cross_matches']
+
+                            if save_packets:
+                                path_tess_dir = os.path.join(path_tess, datestr)
+                                # mkdir if does not exist
+                                if not os.path.exists(path_tess_dir):
+                                    os.makedirs(path_tess_dir)
+
+                                print(f'{time_stamp()}: saving {alert["candid"]} to disk')
+                                try:
+                                    with open(os.path.join(path_tess_dir, f"{alert['candid']}.json"), 'w') as f:
+                                        f.write(dumps(alert))
+                                except Exception as e:
+                                    print(f'{time_stamp()}: {str(e)}')
+                                    _err = traceback.format_exc()
+                                    print(f'{time_stamp()}: {str(_err)}')
+
+                        # execute user-defined alert filters
+                        tic = time.time()
+                        passed_filters = alert_filter__user_defined(self.db['db'], self.filter_templates, alert)
+                        toc = time.time()
+                        if verbose > 1:
+                            print(f'{time_stamp()}: filtering took {toc-tic} s')
+
+                        # todo: if is_tracked, post new photometry to /sources
+                        if config['misc']['post_to_skyportal'] and (len(passed_filters) > 0):
+                            # post metadata
+                            # todo: pass annotations, cross-matches, ml scores etc.
+                            alert_thin = {
+                                "id": alert['objectId'],
+                                "ra": alert['candidate'].get('ra'),
+                                "dec": alert['candidate'].get('dec'),
+                                # 'dist_nearest_source': alert["candidate"].get("distnr"),
+                                # 'mag_nearest_source': alert["candidate"].get("magnr"),
+                                # 'e_mag_nearest_source': alert["candidate"].get("sigmagnr"),
+                                # 'sgmag1': alert["candidate"].get("sgmag1"),
+                                # 'srmag1': alert["candidate"].get("srmag1"),
+                                # 'simag1': alert["candidate"].get("simag1"),
+                                # 'objectidps1': alert["candidate"].get("objectidps1"),
+                                # 'sgscore1': alert["candidate"].get("sgscore1"),
+                                # 'distpsnr1': alert["candidate"].get("distpsnr1"),
+                                "score": alert['candidate'].get('drb', alert['candidate']['rb']),
+
+                                "altdata": alert.get('annotations', dict()),
+
+                                "filter_ids": [ff.get("_id") for ff in passed_filters],
+                                # fixme:
+                                # "passing_alert_id": alert['candid'],
+                            }
+
+                            # check if candidate already exists:
+                            tic = time.time()
+                            resp = self.session.get(
+                                f"{config['skyportal']['protocol']}://"
+                                f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                                f"/api/candidates/{alert['objectId']}",
+                                headers=self.session_headers, timeout=2,
+                            )
+                            toc = time.time()
+                            candidate_exists = resp.json()['status'] == 'success'
+                            if verbose > 1:
+                                print(f'{time_stamp()}: checking if candidate exists took {toc - tic} s')
+                            if candidate_exists:
+                                saved_candidate_meta = resp.json()['data']
+                                print(f"{time_stamp()}: Candidate {alert['candid']} exists in SkyPortal")
+                            else:
+                                saved_candidate_meta = dict()
+                                print(f"{time_stamp()}: Candidate {alert['candid']} does not exist in SkyPortal")
+                                # print(resp.json())
+
+                            if not candidate_exists:
+                                tic = time.time()
+                                resp = self.session.post(
+                                    f"{config['skyportal']['protocol']}://"
+                                    f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                                    "/api/candidates",
+                                    json=alert_thin, headers=self.session_headers, timeout=2,
+                                )
+                                toc = time.time()
+                                if verbose > 1:
+                                    print(f'{time_stamp()}: posting metadata to skyportal took {toc - tic} s')
+                                if resp.json()['status'] == 'success':
+                                    print(f"{time_stamp()}: Posted {alert['candid']} metadata to SkyPortal")
+                                else:
+                                    print(f"{time_stamp()}: Failed to post {alert['candid']} metadata to SkyPortal")
+                                    print(resp.json())
+
+                            # post photometry
+                            tic = time.time()
+                            alert['prv_candidates'] = prv_candidates
+                            if candidate_exists:
+                                last_detected = datetime.datetime.fromisoformat(
+                                    saved_candidate_meta.get("last_detected")
+                                )
+                                last_detected_jd = datetime_to_jd(last_detected)
+                                photometry = make_photometry(deepcopy(alert), jd_start=last_detected_jd)
+                            else:
+                                photometry = make_photometry(deepcopy(alert))
+                            toc = time.time()
+                            if verbose > 1:
+                                print(f'{time_stamp()}: making alert photometry took {toc - tic} s')
+
+                            if len(photometry.get('mag', ())) > 0:
+                                tic = time.time()
+                                resp = self.session.post(
+                                    f"{config['skyportal']['protocol']}://"
+                                    f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                                    "/api/photometry",
+                                    json=photometry, headers=self.session_headers, timeout=2,
+                                )
+                                toc = time.time()
+                                if verbose > 1:
+                                    print(f'{time_stamp()}: posting photometry to skyportal took {toc - tic} s')
+                                if resp.json()['status'] == 'success':
+                                    print(f"{time_stamp()}: Posted {alert['candid']} photometry to SkyPortal")
+                                else:
+                                    print(f"{time_stamp()}: Failed to post {alert['candid']} photometry to SkyPortal")
+                                    print(resp.json())
+
+                            # post thumbnails for new candidates only (fixme?)
+                            if not candidate_exists:
+                                for ttype, ztftype in [('new', 'Science'), ('ref', 'Template'), ('sub', 'Difference')]:
+
+                                    tic = time.time()
+                                    thumb = make_thumbnail(deepcopy(alert), ttype, ztftype)
+                                    toc = time.time()
+                                    if verbose > 1:
+                                        print(f'{time_stamp()}: making {ztftype} thumbnail took {toc - tic} s')
+
+                                    tic = time.time()
+                                    resp = self.session.post(
+                                        f"{config['skyportal']['protocol']}://"
+                                        f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                                        "/api/thumbnail",
+                                        json=thumb, headers=self.session_headers, timeout=2,
+                                    )
+                                    toc = time.time()
+                                    if verbose > 1:
+                                        print(f'{time_stamp()}: posting {ztftype} thumbnail to skyportal took {toc - tic} s')
+
+                                    if resp.json()['status'] == 'success':
+                                        print(f"{time_stamp()}: Posted {alert['candid']} {ztftype} cutout to SkyPortal")
+                                    else:
+                                        print(f"{time_stamp()}: Failed to post {alert['candid']} {ztftype}"
+                                              " cutout to SkyPortal")
+                                        print(resp.json())
+
+            except Exception as e:
+                print(f"{time_stamp()}: {str(e)}")
+
+    def decodeMessage(self, msg):
+        """Decode Avro message according to a schema.
+
+        Parameters
+        ----------
+        msg : Kafka message
+            The Kafka message result from consumer.poll().
+
+        Returns
+        -------
+        `dict`
+            Decoded message.
+        """
+        # print(msg.topic(), msg.offset(), msg.error(), msg.key(), msg.value())
+        message = msg.value()
+        # print(message)
+        try:
+            bytes_io = io.BytesIO(message)
+            decoded_msg = readSchemaData(bytes_io)
+            # print(decoded_msg)
+            # decoded_msg = readAvroData(bytes_io, self.alert_schema)
+            # print(decoded_msg)
+        except AssertionError:
+            # FIXME this exception is raised but not sure if it matters yet
+            bytes_io = io.BytesIO(message)
+            decoded_msg = None
+        except IndexError:
+            literal_msg = literal_eval(str(message, encoding='utf-8'))  # works to give bytes
+            bytes_io = io.BytesIO(literal_msg)  # works to give <class '_io.BytesIO'>
+            decoded_msg = readSchemaData(bytes_io)  # yields reader
+        except Exception:
+            decoded_msg = message
+        finally:
+            return decoded_msg
 
 
 def listener(topic, bootstrap_servers='', offset_reset='earliest',
