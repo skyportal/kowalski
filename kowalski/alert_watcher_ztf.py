@@ -105,6 +105,7 @@ def make_photometry(a: dict, jd_start: float = None):
 
     photometry = {
         "obj_id": a['objectId'],
+        "group_ids": [1, ],
         "instrument_id": 1,
         "mjd": dflc.mjd.tolist(),
         "mag": dflc.magpsf.tolist(),
@@ -850,11 +851,15 @@ class AlertConsumer(object):
                             tic = time.time()
                             alert['prv_candidates'] = prv_candidates
                             if candidate_exists:
-                                last_detected = datetime.datetime.fromisoformat(
-                                    saved_candidate_meta.get("last_detected")
-                                )
-                                last_detected_jd = datetime_to_jd(last_detected)
-                                photometry = make_photometry(deepcopy(alert), jd_start=last_detected_jd)
+                                last_detected = saved_candidate_meta.get("last_detected")
+                                if last_detected:
+                                    last_detected = datetime.datetime.fromisoformat(
+                                        saved_candidate_meta.get("last_detected")
+                                    )
+                                    last_detected_jd = datetime_to_jd(last_detected)
+                                    photometry = make_photometry(deepcopy(alert), jd_start=last_detected_jd)
+                                else:
+                                    photometry = make_photometry(deepcopy(alert))
                             else:
                                 photometry = make_photometry(deepcopy(alert))
                             toc = time.time()

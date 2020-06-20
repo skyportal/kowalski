@@ -2547,9 +2547,6 @@ async def app_factory():
     return app
 
 
-''' Tests: moved to ../tests/test_api.py '''
-
-
 uvloop.install()
 
 
