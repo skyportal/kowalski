@@ -371,11 +371,20 @@ def alert_filter__user_defined(database, filter_templates, alert,
             _filter = deepcopy(filter_template)
             # match candid
             _filter['pipeline'][0]["$match"]["candid"] = alert['candid']
+            # match permissions
+            _filter["pipeline"][0]["$match"]["candidate.programid"]["$in"] = filter_template["permissions"]
+            _filter["pipeline"][3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][1] =\
+                filter_template["permissions"]
             # todo: evaluate magic variables (such as "<jd>" or "<jd_date>") here with DFS for each pipeline stage
-            #       or serialize, replace, and de-serialize
-            filtered_data = list(database[catalog].aggregate(_filter['pipeline'],
-                                                             allowDiskUse=False, maxTimeMS=max_time_ms))
-            # passed filter? then len(passed_filter) should be = 1
+            #       or serialize, replace, and de-serialize?
+            filtered_data = list(
+                database[catalog].aggregate(
+                    _filter['pipeline'],
+                    allowDiskUse=False,
+                    maxTimeMS=max_time_ms
+                )
+            )
+            # passed filter? then len(passed_filter) must be = 1
             if len(filtered_data) == 1:
                 print(f'{time_stamp()}: {alert["candid"]} passed filter {_filter["_id"]}')
                 # passed_filters[_filter['_id']] = passed_filter[0]
@@ -384,7 +393,7 @@ def alert_filter__user_defined(database, filter_templates, alert,
                         'group_id': 1,
                         '_id': 1,
                         'fid': _filter['_id'],
-                        'data': filtered_data
+                        'data': filtered_data[0]
                     }
                 )
 
@@ -632,7 +641,7 @@ class AlertConsumer(object):
 
         return doc, prv_candidates
 
-    def poll(self, path_alerts=None, path_tess=None, datestr=None, save_packets=False, verbose=1):
+    def poll(self, path_alerts=None, path_tess=None, datestr=None, save_packets=False, verbose=2):
         """
             Polls Kafka broker to consume topic.
         :param path_alerts:
@@ -737,11 +746,11 @@ class AlertConsumer(object):
 
                         else:
                             tic = time.time()
-                            self.db['db'][self.collection_alerts_aux].update_one({'_id': objectId},
-                                                                                 {'$addToSet':
-                                                                                      {'prv_candidates':
-                                                                                           {'$each': prv_candidates}}},
-                                                                                 upsert=True)
+                            self.db['db'][self.collection_alerts_aux].update_one(
+                                {'_id': objectId},
+                                {'$addToSet': {'prv_candidates': {'$each': prv_candidates}}},
+                                upsert=True
+                            )
                             toc = time.time()
                             if verbose > 1:
                                 print(f'{time_stamp()}: aux updating took {toc - tic} s')
@@ -784,32 +793,8 @@ class AlertConsumer(object):
                         if verbose > 1:
                             print(f'{time_stamp()}: filtering took {toc-tic} s')
 
-                        # todo: if is_tracked, post new photometry to /sources
+                        # todo: if is_tracked, post new photometry to /api/sources or /api/candidates
                         if config['misc']['post_to_skyportal'] and (len(passed_filters) > 0):
-                            # post metadata
-                            # todo: pass annotations, cross-matches, ml scores etc.
-                            alert_thin = {
-                                "id": alert['objectId'],
-                                "ra": alert['candidate'].get('ra'),
-                                "dec": alert['candidate'].get('dec'),
-                                # 'dist_nearest_source': alert["candidate"].get("distnr"),
-                                # 'mag_nearest_source': alert["candidate"].get("magnr"),
-                                # 'e_mag_nearest_source': alert["candidate"].get("sigmagnr"),
-                                # 'sgmag1': alert["candidate"].get("sgmag1"),
-                                # 'srmag1': alert["candidate"].get("srmag1"),
-                                # 'simag1': alert["candidate"].get("simag1"),
-                                # 'objectidps1': alert["candidate"].get("objectidps1"),
-                                # 'sgscore1': alert["candidate"].get("sgscore1"),
-                                # 'distpsnr1': alert["candidate"].get("distpsnr1"),
-                                "score": alert['candidate'].get('drb', alert['candidate']['rb']),
-
-                                "altdata": alert.get('annotations', dict()),
-
-                                "filter_ids": [ff.get("_id") for ff in passed_filters],
-                                # fixme:
-                                # "passing_alert_id": alert['candid'],
-                            }
-
                             # check if candidate already exists:
                             tic = time.time()
                             resp = self.session.get(
@@ -830,7 +815,21 @@ class AlertConsumer(object):
                                 print(f"{time_stamp()}: Candidate {alert['candid']} does not exist in SkyPortal")
                                 # print(resp.json())
 
-                            if not candidate_exists:
+                            for passed_filter in passed_filters:
+                                # post metadata
+                                alert_thin = {
+                                    "id": alert['objectId'],
+                                    "ra": alert['candidate'].get('ra'),
+                                    "dec": alert['candidate'].get('dec'),
+                                    "score": alert['candidate'].get('drb', alert['candidate']['rb']),
+
+                                    "altdata": passed_filter.get('data', dict()).get('annotations', dict()),
+
+                                    "filter_ids": [passed_filter.get("_id")],
+                                    "passing_alert_id": alert['candid'],
+                                }
+
+                                # if not candidate_exists:
                                 tic = time.time()
                                 resp = self.session.post(
                                     f"{config['skyportal']['protocol']}://"
@@ -847,43 +846,45 @@ class AlertConsumer(object):
                                     print(f"{time_stamp()}: Failed to post {alert['candid']} metadata to SkyPortal")
                                     print(resp.json())
 
-                            # post photometry
-                            tic = time.time()
-                            alert['prv_candidates'] = prv_candidates
-                            if candidate_exists:
-                                last_detected = saved_candidate_meta.get("last_detected")
-                                if last_detected:
-                                    last_detected = datetime.datetime.fromisoformat(
-                                        saved_candidate_meta.get("last_detected")
-                                    )
-                                    last_detected_jd = datetime_to_jd(last_detected)
-                                    photometry = make_photometry(deepcopy(alert), jd_start=last_detected_jd)
+                                # post photometry
+                                tic = time.time()
+                                alert['prv_candidates'] = prv_candidates
+                                if candidate_exists:
+                                    last_detected = saved_candidate_meta.get("last_detected")
+                                    if last_detected:
+                                        last_detected = datetime.datetime.fromisoformat(
+                                            saved_candidate_meta.get("last_detected")
+                                        )
+                                        last_detected_jd = datetime_to_jd(last_detected)
+                                        photometry = make_photometry(deepcopy(alert), jd_start=last_detected_jd)
+                                    else:
+                                        photometry = make_photometry(deepcopy(alert))
                                 else:
                                     photometry = make_photometry(deepcopy(alert))
-                            else:
-                                photometry = make_photometry(deepcopy(alert))
-                            toc = time.time()
-                            if verbose > 1:
-                                print(f'{time_stamp()}: making alert photometry took {toc - tic} s')
-
-                            if len(photometry.get('mag', ())) > 0:
-                                tic = time.time()
-                                resp = self.session.post(
-                                    f"{config['skyportal']['protocol']}://"
-                                    f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                    "/api/photometry",
-                                    json=photometry, headers=self.session_headers, timeout=2,
-                                )
                                 toc = time.time()
                                 if verbose > 1:
-                                    print(f'{time_stamp()}: posting photometry to skyportal took {toc - tic} s')
-                                if resp.json()['status'] == 'success':
-                                    print(f"{time_stamp()}: Posted {alert['candid']} photometry to SkyPortal")
-                                else:
-                                    print(f"{time_stamp()}: Failed to post {alert['candid']} photometry to SkyPortal")
+                                    print(f'{time_stamp()}: making alert photometry took {toc - tic} s')
+
+                                if len(photometry.get('mag', ())) > 0:
+                                    tic = time.time()
+                                    resp = self.session.post(
+                                        f"{config['skyportal']['protocol']}://"
+                                        f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                                        "/api/photometry",
+                                        json=photometry, headers=self.session_headers, timeout=2,
+                                    )
+                                    toc = time.time()
+                                    if verbose > 1:
+                                        print(f'{time_stamp()}: posting photometry to skyportal took {toc - tic} s')
+                                    if resp.json()['status'] == 'success':
+                                        print(f"{time_stamp()}: Posted {alert['candid']} photometry to SkyPortal")
+                                    else:
+                                        print(
+                                            f"{time_stamp()}: Failed to post {alert['candid']} photometry to SkyPortal"
+                                        )
                                     print(resp.json())
 
-                            # post thumbnails for new candidates only (fixme?)
+                            # post thumbnails for new candidates only
                             if not candidate_exists:
                                 for ttype, ztftype in [('new', 'Science'), ('ref', 'Template'), ('sub', 'Difference')]:
 
@@ -902,7 +903,10 @@ class AlertConsumer(object):
                                     )
                                     toc = time.time()
                                     if verbose > 1:
-                                        print(f'{time_stamp()}: posting {ztftype} thumbnail to skyportal took {toc - tic} s')
+                                        print(
+                                            f'{time_stamp()}: posting {ztftype} '
+                                            f'thumbnail to skyportal took {toc - tic} s'
+                                        )
 
                                     if resp.json()['status'] == 'success':
                                         print(f"{time_stamp()}: Posted {alert['candid']} {ztftype} cutout to SkyPortal")
@@ -1093,7 +1097,7 @@ def ingester(obs_date=None, save_packets=False, test=False):
             print(f'{time_stamp()}: {str(_err)}')
 
         if obs_date is None:
-            time.sleep(300)
+            time.sleep(60)
 
 
 if __name__ == '__main__':

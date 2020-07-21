@@ -1622,6 +1622,7 @@ async def filters_post(request):
               - group_id
               - science_program_id
               - catalog
+              - permissions
               - pipeline
             properties:
               group_id:
@@ -1634,13 +1635,19 @@ async def filters_post(request):
                 minimum: 1
               catalog:
                 type: string
-                description: "alert stream to filter: ZTF or ZUDS"
+                description: "alert stream to filter"
                 enum: [ZTF_alerts, ZUDS_alerts]
+              permissions:
+                type: array
+                items:
+                  type: int
+                description: "permissions to access candidate.programid"
+                minItems: 1
               pipeline:
                 type: array
                 items:
                   type: object
-                description: "aggregation pipeline stages in MQL"
+                description: "user-defined aggregation pipeline stages in MQL"
                 minItems: 1
           examples:
             filter_1:
@@ -1648,6 +1655,7 @@ async def filters_post(request):
                 "group_id": 1
                 "science_program_id": 1
                 "catalog": ZTF_alerts
+                "permissions": [1, 2]
                 "pipeline": [
                     {
                         "$match": {
@@ -1679,6 +1687,7 @@ async def filters_post(request):
                 "group_id": 2
                 "science_program_id": 1
                 "catalog": ZTF_alerts
+                "permissions": [1, 2, 3]
                 "pipeline": [
                     {
                         "$match": {
@@ -1770,15 +1779,11 @@ async def filters_post(request):
             print(f'{datetime.datetime.utcnow()}: Cannot extract json() from request, trying post(): {str(_e)}')
             filter_spec = await request.post()
 
-        # filter_spec = {'group_id': group_id,
-        #                'science_program_id': science_program_id,
-        #                'catalog': 'ZTF_alerts',
-        #                'pipeline': [list of <json|dict>]}
-
         # checks:
         group_id = filter_spec.get('group_id', None)
         science_program_id = filter_spec.get('science_program_id', None)
         catalog = filter_spec.get('catalog', None)
+        permissions = filter_spec.get('permissions', None)
         pipeline = filter_spec.get('pipeline', None)
         if group_id is None:
             return web.json_response({'status': 'error', 'message': 'group_id must be set'}, status=400)
@@ -1786,6 +1791,8 @@ async def filters_post(request):
             return web.json_response({'status': 'error', 'message': 'science_program_id must be set'}, status=400)
         if catalog is None:
             return web.json_response({'status': 'error', 'message': 'catalog must be set'}, status=400)
+        if permissions is None:
+            return web.json_response({'status': 'error', 'message': 'permissions must be set'}, status=400)
         if pipeline is None:
             return web.json_response({'status': 'error', 'message': 'pipeline must be set'}, status=400)
 
@@ -1807,7 +1814,11 @@ async def filters_post(request):
             # including archival photometry and cross-matches:
             filter_pipeline_upstream = config['database']['filters'][catalog]
             filter_template = filter_pipeline_upstream + loads(doc['pipeline'])
+            # match candid
             filter_template[0]["$match"]["candid"] = alert['candid']
+            # match permissions
+            filter_template[0]["$match"]["candidate.programid"]["$in"] = permissions
+            filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][1] = permissions
             # print(filter_template)
             cursor = request.app['mongo'][catalog].aggregate(filter_template, allowDiskUse=False, maxTimeMS=1000)
             passed_filter = await cursor.to_list(length=None)
@@ -1865,6 +1876,7 @@ async def filters_test_post(request):
               - group_id
               - science_program_id
               - catalog
+              - permissions
               - pipeline
             properties:
               group_id:
@@ -1877,8 +1889,14 @@ async def filters_test_post(request):
                 minimum: 1
               catalog:
                 type: string
-                description: "alert stream to filter: ZTF or ZUDS"
+                description: "alert stream to filter"
                 enum: [ZTF_alerts, ZUDS_alerts]
+              permissions:
+                type: array
+                items:
+                  type: int
+                description: "permissions to access candidate.programid"
+                minItems: 1
               pipeline:
                 type: array
                 items:
@@ -1891,6 +1909,7 @@ async def filters_test_post(request):
                 "group_id": 1
                 "science_program_id": 1
                 "catalog": ZTF_alerts
+                "permissions": [1, 2]
                 "pipeline": [
                     {
                         "$match": {
@@ -1922,6 +1941,7 @@ async def filters_test_post(request):
                 "group_id": 2
                 "science_program_id": 1
                 "catalog": ZTF_alerts
+                "permissions": [1, 2]
                 "pipeline": [
                     {
                         "$match": {
@@ -2027,6 +2047,7 @@ async def filters_test_post(request):
         group_id = filter_spec.get('group_id', None)
         science_program_id = filter_spec.get('science_program_id', None)
         catalog = filter_spec.get('catalog', None)
+        permissions = filter_spec.get('permissions', None)
         pipeline = filter_spec.get('pipeline', None)
         if group_id is None:
             return web.json_response({'status': 'error', 'message': 'group_id must be set'}, status=400)
@@ -2034,6 +2055,8 @@ async def filters_test_post(request):
             return web.json_response({'status': 'error', 'message': 'science_program_id must be set'}, status=400)
         if catalog is None:
             return web.json_response({'status': 'error', 'message': 'catalog must be set'}, status=400)
+        if permissions is None:
+            return web.json_response({'status': 'error', 'message': 'permissions must be set'}, status=400)
         if pipeline is None:
             return web.json_response({'status': 'error', 'message': 'pipeline must be set'}, status=400)
 
@@ -2055,7 +2078,11 @@ async def filters_test_post(request):
             # including archival photometry and cross-matches:
             filter_pipeline_upstream = config['database']['filters'][catalog]
             filter_template = filter_pipeline_upstream + loads(doc['pipeline'])
+            # match candid
             filter_template[0]["$match"]["candid"] = alert['candid']
+            # match permissions
+            filter_template[0]["$match"]["candidate.programid"]["$in"] = permissions
+            filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][1] = permissions
             # print(f'{datetime.datetime.utcnow()} {filter_template}')
             cursor = request.app['mongo'][catalog].aggregate(filter_template, allowDiskUse=False, maxTimeMS=500)
             passed_filter = await cursor.to_list(length=None)

@@ -42,6 +42,7 @@ class Filter(object):
                 "group_id": 0,
                 "science_program_id": 0,
                 "catalog": collection,
+                "permissions": [1, 2],
                 "pipeline": [
                     {
                         "$match": {
