@@ -34,7 +34,7 @@ routes = web.RouteTableDef()
 ''' authentication and authorization '''
 
 
-@routes.post('/api/auth')
+# @routes.post('/api/auth')
 async def auth_post(request: web.Request) -> web.Response:
     """
     Authentication
@@ -196,7 +196,7 @@ async def auth_post(request: web.Request) -> web.Response:
         return web.json_response({'status': 'error', 'message': 'auth failed'}, status=500)
 
 
-@routes.get('/', name='root', allow_head=False)
+# @routes.get('/', name='root', allow_head=False)
 @auth_required
 async def root(request: web.Request) -> web.Response:
     """
@@ -235,7 +235,7 @@ async def root(request: web.Request) -> web.Response:
 ''' users api '''
 
 
-@routes.post('/api/users')
+# @routes.post('/api/users')
 @admin_required
 async def users_post(request: web.Request) -> web.Response:
     """
@@ -356,7 +356,7 @@ async def users_post(request: web.Request) -> web.Response:
         return web.json_response({'status': 'error', 'message': f'failed to add user: {_e}'}, status=500)
 
 
-@routes.delete('/api/users/{username}')
+# @routes.delete('/api/users/{username}')
 @admin_required
 async def users_delete(request: web.Request) -> web.Response:
     """
@@ -452,7 +452,7 @@ async def users_delete(request: web.Request) -> web.Response:
         return web.json_response({'status': 'error', 'message': f'failed to remove user: {_e}'}, status=500)
 
 
-@routes.put('/api/users/{username}')
+# @routes.put('/api/users/{username}')
 @admin_required
 async def users_put(request: web.Request) -> web.Response:
     """
@@ -1091,7 +1091,7 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
         raise Exception('query failed badly')
 
 
-@routes.post('/api/queries')
+# @routes.post('/api/queries')
 @admin_required
 async def queries_post(request: web.Request) -> web.Response:
     """
@@ -1395,7 +1395,7 @@ async def queries_post(request: web.Request) -> web.Response:
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
-@routes.get('/api/queries/{task_id}', allow_head=False)
+# @routes.get('/api/queries/{task_id}', allow_head=False)
 @auth_required
 async def queries_get(request):
     """
@@ -1441,7 +1441,7 @@ async def queries_get(request):
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
 
 
-@routes.delete('/api/queries/{task_id}')
+# @routes.delete('/api/queries/{task_id}')
 @auth_required
 async def queries_delete(request):
     """
@@ -1483,7 +1483,7 @@ async def queries_delete(request):
 ''' filters apis '''
 
 
-@routes.get('/api/filters/{filter_id}', allow_head=False)
+# @routes.get('/api/filters/{filter_id}', allow_head=False)
 @admin_required
 async def filters_get(request):
     """
@@ -1578,7 +1578,7 @@ async def filters_get(request):
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
-@routes.get('/api/filters')
+# @routes.get('/api/filters')
 @admin_required
 async def filters_query(request):
     """
@@ -1598,17 +1598,17 @@ async def filters_query(request):
     pass
 
 
-@routes.post('/api/filters')
+# @routes.post('/api/filters')
 @admin_required
 async def filters_post(request):
     """
-    Save user-defined filter assigning unique id
+    Create user-defined alert filter
     store as serialized extended json string, use literal_eval to convert to dict at execution
     run a simple sanity check before saving
     https://www.npmjs.com/package/bson
 
     ---
-    summary: Save user-defined filter
+    summary: Create user-defined alert filter
     tags:
       - filters
 
@@ -1620,18 +1620,18 @@ async def filters_post(request):
             type: object
             required:
               - group_id
-              - science_program_id
+              - filter_id
               - catalog
               - permissions
               - pipeline
             properties:
               group_id:
                 type: integer
-                description: "[fritz] user group id"
+                description: "[fritz] user group (science program) id"
                 minimum: 1
-              science_program_id:
+              filter_id:
                 type: integer
-                description: "[fritz] science program id for this user group id"
+                description: "[fritz] science program filter id for this user group id"
                 minimum: 1
               catalog:
                 type: string
@@ -1640,8 +1640,8 @@ async def filters_post(request):
               permissions:
                 type: array
                 items:
-                  type: int
-                description: "permissions to access candidate.programid"
+                  type: integer
+                description: "permissions to access streams"
                 minItems: 1
               pipeline:
                 type: array
@@ -1653,67 +1653,68 @@ async def filters_post(request):
             filter_1:
               value:
                 "group_id": 1
-                "science_program_id": 1
+                "filter_id": 1
                 "catalog": ZTF_alerts
                 "permissions": [1, 2]
                 "pipeline": [
-                    {
-                        "$match": {
-                            "candidate.drb": {
-                                "$gt": 0.9999
-                            },
-                            "cross_matches.CLU_20190625.0": {
-                                "$exists": False
-                            }
-                        }
+                {
+                  "$match": {
+                    "candidate.drb": {
+                      "$gt": 0.9999
                     },
-                    {
-                        "$addFields": {
-                            "annotations.author": "dd",
-                            "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
-                        }
-                    },
-                    {
-                        "$project": {
-                            "_id": 0,
-                            "candid": 1,
-                            "objectId": 1,
-                            "annotations": 1
-                        }
+                    "cross_matches.CLU_20190625.0": {
+                      "$exists": False
                     }
+                  }
+                },
+                {
+                  "$addFields": {
+                    "annotations.author": "dd",
+                    "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                  }
+                },
+                {
+                  "$project": {
+                    "_id": 0,
+                    "candid": 1,
+                    "objectId": 1,
+                    "annotations": 1
+                  }
+                }
                 ]
             filter_2:
               value:
                 "group_id": 2
-                "science_program_id": 1
+                "filter_id": 1
                 "catalog": ZTF_alerts
                 "permissions": [1, 2, 3]
                 "pipeline": [
-                    {
-                        "$match": {
-                            "candidate.drb": {
-                                "$gt": 0.9999
-                            },
-                            "cross_matches.CLU_20190625.0": {
-                                "$exists": True
-                            }
-                        }
+                {
+                  "$match": {
+                    "candidate.drb": {
+                      "$gt": 0.9999
                     },
-                    {
-                        "$addFields": {
-                            "annotations.author": "dd",
-                            "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
-                        }
-                    },
-                    {
-                        "$project": {
-                            "_id": 0,
-                            "candid": 1,
-                            "objectId": 1,
-                            "annotations": 1
-                        }
+                    "cross_matches.CLU_20190625.0": {
+                      "$exists": True
                     }
+                  }
+                },
+                {
+                  "$addFields": {
+                    "annotations.author": "dd",
+                    "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                  }
+                },
+                {
+                  "$project": {
+                    "_id": 0,
+                    "candid": 1,
+                    "objectId": 1,
+                    "annotations": 1
+                  }
+                }
                 ]
+
 
     responses:
       '200':
@@ -1735,21 +1736,21 @@ async def filters_post(request):
                 user:
                   type: string
                 data:
-                  description: "contains unique filter _id"
+                  description: "contains unique filter identifier"
                   type: object
                   additionalProperties:
                     type: object
                     properties:
-                      _id:
+                      fid:
                         type: string
-                        description: "generated unique filter _id"
+                        description: "generated unique filter identifier"
                         minLength: 6
                         maxLength: 6
             example:
               "status": "success"
               "message": "saved filter: c3ig1t"
               "data": {
-               "_id": "c3ig1t"
+               "fid": "c3ig1t"
               }
 
       '400':
@@ -1781,14 +1782,14 @@ async def filters_post(request):
 
         # checks:
         group_id = filter_spec.get('group_id', None)
-        science_program_id = filter_spec.get('science_program_id', None)
+        filter_id = filter_spec.get('filter_id', None)
         catalog = filter_spec.get('catalog', None)
         permissions = filter_spec.get('permissions', None)
         pipeline = filter_spec.get('pipeline', None)
         if group_id is None:
             return web.json_response({'status': 'error', 'message': 'group_id must be set'}, status=400)
-        if science_program_id is None:
-            return web.json_response({'status': 'error', 'message': 'science_program_id must be set'}, status=400)
+        if filter_id is None:
+            return web.json_response({'status': 'error', 'message': 'filter_id must be set'}, status=400)
         if catalog is None:
             return web.json_response({'status': 'error', 'message': 'catalog must be set'}, status=400)
         if permissions is None:
@@ -1796,9 +1797,16 @@ async def filters_post(request):
         if pipeline is None:
             return web.json_response({'status': 'error', 'message': 'pipeline must be set'}, status=400)
 
-        doc = deepcopy(filter_spec)
-        if not isinstance(doc['pipeline'], str):
-            doc['pipeline'] = dumps(doc['pipeline'])
+        # check if a filter for these (group_id, filter_id) already exists:
+        doc_saved = await request.app['mongo'].filters.find_one(
+            {
+                'group_id': group_id,
+                'filter_id': filter_id
+            }
+        )
+
+        if not isinstance(pipeline, str):
+            pipeline = dumps(pipeline)
 
         # try on most recently ingested alert
         n_docs = await request.app['mongo'][catalog].estimated_document_count()
@@ -1813,38 +1821,68 @@ async def filters_post(request):
             # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
             # including archival photometry and cross-matches:
             filter_pipeline_upstream = config['database']['filters'][catalog]
-            filter_template = filter_pipeline_upstream + loads(doc['pipeline'])
+            filter_template = filter_pipeline_upstream + loads(pipeline)
             # match candid
             filter_template[0]["$match"]["candid"] = alert['candid']
             # match permissions
             filter_template[0]["$match"]["candidate.programid"]["$in"] = permissions
             filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][1] = permissions
             # print(filter_template)
-            cursor = request.app['mongo'][catalog].aggregate(filter_template, allowDiskUse=False, maxTimeMS=1000)
+            cursor = request.app['mongo'][catalog].aggregate(filter_template, allowDiskUse=False, maxTimeMS=3000)
             passed_filter = await cursor.to_list(length=None)
         else:
             print(f'{datetime.datetime.utcnow()} No alerts in db, cannot test filter: '
-                  f'group_id {group_id}, science_program_id {science_program_id}')
+                  f'group_id {group_id}, filter_id {filter_id}')
             print(f'{datetime.datetime.utcnow()} Saving blindly, which is not great!')
 
-        # print(loads(doc['pipeline']))
+        # use a short fid and avoid random name collisions
+        fid = uid(length=6)
+        fv = {
+            'fid': fid,
+            'created_at': datetime.datetime.utcnow(),
+            'pipeline': pipeline
+        }
 
-        # use a short _id and avoid random name collisions
-        for nr in range(config['misc']['max_retries']):
-            try:
-                filter_id = uid(length=6)
-                doc['_id'] = filter_id
-                doc['created'] = datetime.datetime.utcnow()
-                await request.app['mongo'].filters.insert_one(doc)
-                return web.json_response({'status': 'success',
-                                          'message': f'saved filter: {filter_id}',
-                                          'data': {'_id': filter_id}}, status=200)
-            except DuplicateKeyError as e:
-                continue
+        if doc_saved is None:
+            # if a filter does not exist for (group_id, filter_id), create one:
+            doc = {
+                'group_id': group_id,
+                'filter_id': filter_id,
+                'catalog': catalog,
+                'permissions': permissions,
+                'active': True,
+                'active_fid': fid,
+                'fv': []
+            }
+            doc['fv'].append(fv)
+
+            r = await request.app['mongo'].filters.insert_one(doc)
+
         else:
-            return web.json_response({'status': 'error',
-                                      'message': f"name collision, {config['misc']['max_retries']} attempts"},
-                                     status=500)
+            # else, push a new entry to fv and set its fid as active
+            r = await request.app['mongo'].filters.update_one(
+                {'_id': doc_saved['_id']},
+                {
+                    "$set": {
+                        "active_fid": fid
+                    },
+                    "$push": {
+                        "fv": fv
+                    }
+                }
+            )
+
+            if r.modified_count == 0:
+                return web.json_response({'status': 'error', 'message': f'failed to create filter'}, status=400)
+
+        return web.json_response(
+            {
+                'status': 'success',
+                'message': f'saved filter: {fid}',
+                'data': {'fid': fid}
+            },
+            status=200
+        )
 
     except Exception as _e:
         print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
@@ -1853,16 +1891,16 @@ async def filters_post(request):
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
-@routes.post('/api/filters/test')
+# @routes.post('/api/filters/test')
 @admin_required
 async def filters_test_post(request):
     """
-        Test user-defined filter: check that is lexically correct, throws no errors and executes reasonably fast
+        Test user-defined filter: check that it is lexically correct, throws no errors and executes reasonably fast
     :param request:
     :return:
 
     ---
-    summary: Test user-defined filter
+    summary: Test user-defined alert filter
     tags:
       - filters
 
@@ -1874,18 +1912,18 @@ async def filters_test_post(request):
             type: object
             required:
               - group_id
-              - science_program_id
+              - filter_id
               - catalog
               - permissions
               - pipeline
             properties:
               group_id:
                 type: integer
-                description: "[fritz] user group id"
+                description: "[fritz] user group (science program) id"
                 minimum: 1
-              science_program_id:
+              filter_id:
                 type: integer
-                description: "[fritz] science program id for this user group id"
+                description: "[fritz] science program filter id for this user group id"
                 minimum: 1
               catalog:
                 type: string
@@ -1894,20 +1932,20 @@ async def filters_test_post(request):
               permissions:
                 type: array
                 items:
-                  type: int
-                description: "permissions to access candidate.programid"
+                  type: integer
+                description: "permissions to access streams"
                 minItems: 1
               pipeline:
                 type: array
                 items:
                   type: object
-                description: "aggregation pipeline stages in MQL"
+                description: "user-defined aggregation pipeline stages in MQL"
                 minItems: 1
           examples:
             filter_1:
               value:
                 "group_id": 1
-                "science_program_id": 1
+                "filter_id": 1
                 "catalog": ZTF_alerts
                 "permissions": [1, 2]
                 "pipeline": [
@@ -1939,7 +1977,7 @@ async def filters_test_post(request):
             filter_2:
               value:
                 "group_id": 2
-                "science_program_id": 1
+                "filter_id": 1
                 "catalog": ZTF_alerts
                 "permissions": [1, 2]
                 "pipeline": [
@@ -2036,23 +2074,16 @@ async def filters_test_post(request):
             print(f'{datetime.datetime.utcnow()}: Cannot extract json() from request, trying post(): {str(_e)}')
             filter_spec = await request.post()
 
-        # print(list(filter_spec.keys()))
-
-        # filter_spec = {'group_id': group_id,
-        #                'science_program_id': science_program_id,
-        #                'catalog': 'ZTF_alerts',
-        #                'pipeline': [list of <json|dict>]}
-
         # checks:
         group_id = filter_spec.get('group_id', None)
-        science_program_id = filter_spec.get('science_program_id', None)
+        filter_id = filter_spec.get('filter_id', None)
         catalog = filter_spec.get('catalog', None)
         permissions = filter_spec.get('permissions', None)
         pipeline = filter_spec.get('pipeline', None)
         if group_id is None:
             return web.json_response({'status': 'error', 'message': 'group_id must be set'}, status=400)
-        if science_program_id is None:
-            return web.json_response({'status': 'error', 'message': 'science_program_id must be set'}, status=400)
+        if filter_id is None:
+            return web.json_response({'status': 'error', 'message': 'filter_id must be set'}, status=400)
         if catalog is None:
             return web.json_response({'status': 'error', 'message': 'catalog must be set'}, status=400)
         if permissions is None:
@@ -2060,9 +2091,8 @@ async def filters_test_post(request):
         if pipeline is None:
             return web.json_response({'status': 'error', 'message': 'pipeline must be set'}, status=400)
 
-        doc = deepcopy(filter_spec)
-        if not isinstance(doc['pipeline'], str):
-            doc['pipeline'] = dumps(doc['pipeline'])
+        if not isinstance(pipeline, str):
+            pipeline = dumps(pipeline)
 
         # try on most recently ingested alert
         n_docs = await request.app['mongo'][catalog].estimated_document_count()
@@ -2077,7 +2107,7 @@ async def filters_test_post(request):
             # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
             # including archival photometry and cross-matches:
             filter_pipeline_upstream = config['database']['filters'][catalog]
-            filter_template = filter_pipeline_upstream + loads(doc['pipeline'])
+            filter_template = filter_pipeline_upstream + loads(pipeline)
             # match candid
             filter_template[0]["$match"]["candid"] = alert['candid']
             # match permissions
@@ -2100,10 +2130,11 @@ async def filters_test_post(request):
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
-@routes.delete('/api/filters/{filter_id}')
+# @routes.delete('/api/filters/{filter_id}')
 @admin_required
 async def filters_delete(request):
     """
+    fixme: remove this, add .put to modify existing filters: activate/deactivate, change active_fid
     Delete user-defined filter by id
 
     :param request:
@@ -2204,7 +2235,7 @@ async def filters_delete(request):
 ''' lab apis '''
 
 
-@routes.get('/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}', allow_head=False)
+# @routes.get('/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}', allow_head=False)
 @auth_required
 async def ztf_alert_get_cutout(request):
     """
@@ -2348,7 +2379,7 @@ async def ztf_alert_get_cutout(request):
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
-@routes.get('/lab/zuds-alerts/{candid}/cutout/{cutout}/{file_format}', allow_head=False)
+# @routes.get('/lab/zuds-alerts/{candid}/cutout/{cutout}/{file_format}', allow_head=False)
 @auth_required
 async def zuds_alert_get_cutout(request):
     """
@@ -2534,42 +2565,45 @@ async def app_factory():
                   'JWT_EXP_DELTA_SECONDS': 30 * 86400 * 3}
 
     # OpenAPI docs:
-    s = SwaggerDocs(app,
-                    redoc_ui_settings=ReDocUiSettings(path="/docs/api/"),
-                    # swagger_ui_settings=SwaggerUiSettings(path="/docs/api/"),
-                    validate=config['misc']['openapi_validate'],
-                    title=config['server']['name'],
-                    version=config['server']['version'],
-                    description=config['server']['description'],
-                    components="components_api.yaml")
+    s = SwaggerDocs(
+        app,
+        redoc_ui_settings=ReDocUiSettings(path="/docs/api/"),
+        # swagger_ui_settings=SwaggerUiSettings(path="/docs/api/"),
+        validate=config['misc']['openapi_validate'],
+        title=config['server']['name'],
+        version=config['server']['version'],
+        description=config['server']['description'],
+        components="components_api.yaml"
+    )
 
     # route table from decorators:
     # app.add_routes(routes)
-    s.add_routes(routes)
+    # s.add_routes(routes)
 
     # add routes manually
-    # s.add_routes([web.get('/', root, name='root', allow_head=False),
-    #               # auth:
-    #               web.post('/api/auth', auth_post, name='auth'),
-    #               # users:
-    #               web.post('/api/users', users_post),
-    #               web.delete('/api/users/{username}', users_delete),
-    #               web.put('/api/users/{username}', users_put),
-    #               # queries:
-    #               web.post('/api/queries', queries_post),
-    #               web.get('/api/queries/{task_id}', queries_get, allow_head=False),
-    #               web.delete('/api/queries/{task_id}', queries_delete),
-    #               # filters:
-    #               web.get('/api/filters/{filter_id}', filters_get, allow_head=False),
-    #               web.post('/api/filters', filters_post),
-    #               web.delete('/api/filters/{filter_id}', filters_delete),
-    #               web.post('/api/filters/test', filters_test_post),
-    #               # lab:
-    #               web.get('/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}',
-    #                       ztf_alert_get_cutout, allow_head=False),
-    #               web.get('/lab/zuds-alerts/{candid}/cutout/{cutout}/{file_format}',
-    #                       zuds_alert_get_cutout, allow_head=False),
-    #               ])
+    s.add_routes(
+        [
+            web.get('/', root, name='root', allow_head=False),
+            # auth:
+            web.post('/api/auth', auth_post, name='auth'),
+            # users:
+            web.post('/api/users', users_post),
+            web.delete('/api/users/{username}', users_delete),
+            web.put('/api/users/{username}', users_put),
+            # queries:
+            web.post('/api/queries', queries_post),
+            web.get('/api/queries/{task_id}', queries_get, allow_head=False),
+            web.delete('/api/queries/{task_id}', queries_delete),
+            # # filters:
+            # web.get('/api/filters/{filter_id}', filters_get, allow_head=False),
+            web.post('/api/filters', filters_post),
+            # web.delete('/api/filters/{filter_id}', filters_delete),
+            web.post('/api/filters/test', filters_test_post),
+            # lab:
+            web.get('/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}', ztf_alert_get_cutout, allow_head=False),
+            web.get('/lab/zuds-alerts/{candid}/cutout/{cutout}/{file_format}', zuds_alert_get_cutout, allow_head=False),
+        ]
+    )
 
     return app
 

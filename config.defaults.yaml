@@ -115,7 +115,7 @@ kowalski:
     filters:
       ZTF_alerts:
         # fixme: default upstream aggregation pipeline stages for filtering ZTF alerts:
-        - {"$match": {"candid": null}, "candidate.programid": {"$in": [1, 2, 3]}}
+        - {"$match": {"candid": null, "candidate.programid": {"$in": null}}}
         - {"$project": {"cutoutScience": 0, "cutoutTemplate": 0, "cutoutDifference": 0}}
         - {"$lookup": {"from": "ZTF_alerts_aux", "localField": "objectId", "foreignField": "_id", "as": "aux"}}
         - {"$project": {
@@ -130,7 +130,7 @@ kowalski:
               "as": "item",
               "cond": {
                 "$and": [
-                  {"$in": ["$$item.programid", [1, 2, 3]]},
+                  {"$in": ["$$item.programid", null]},
                   {"$lt": [{"$subtract": ["$candidate.jd", "$$item.jd"]}, 100]}
                 ]
               }

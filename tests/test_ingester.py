@@ -15,11 +15,64 @@ from utils import load_config, time_stamp
 config = load_config(config_file='config.yaml')['kowalski']
 
 
+class Program(object):
+    def __init__(self):
+        self.access_token = config['skyportal']['token']
+        self.base_url = f"{config['skyportal']['protocol']}://" \
+                        f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+        self.headers = {'Authorization': f'Bearer {self.access_token}'}
+        self.program_id = self.create()
+
+    def create(self, group_name="FRITZ_TEST_PROGRAM"):
+        resp = requests.get(
+            self.base_url + f"/api/groups",
+            headers=self.headers, timeout=3,
+        )
+
+        assert resp.status_code == requests.codes.ok
+        result = resp.json()
+        # print(result)
+        assert result['status'] == 'success'
+        assert 'data' in result
+        assert 'user_groups' in result['data']
+
+        user_groups = {g['name']: g['id'] for g in result['data']['user_groups']}
+
+        if group_name in user_groups.keys():
+            return user_groups[group_name]
+        else:
+            resp = requests.post(
+                self.base_url + f"/api/groups",
+                json={"name": group_name},
+                headers=self.headers, timeout=3,
+            )
+            result = resp.json()
+            # print(result)
+            assert result['status'] == 'success'
+            assert 'data' in result
+            assert 'id' in result['data']
+
+            return result['data']['id']
+
+    def remove(self):
+        if self.program_id is not None:
+            resp = requests.delete(
+                self.base_url + f"/api/groups/{self.program_id}",
+                headers=self.headers,
+                timeout=3,
+            )
+            assert resp.status_code == requests.codes.ok
+            result = resp.json()
+            assert result['status'] == 'success'
+
+            self.program_id = None
+
+
 class Filter(object):
     def __init__(self):
         self.access_token = self.get_api_token()
         self.headers = {'Authorization': f'Bearer {self.access_token}'}
-        self.filter_id = self.save()
+        self.filter_id = self.create()
 
     @staticmethod
     def get_api_token():
@@ -35,12 +88,12 @@ class Filter(object):
 
         return token
 
-    def save(self, collection: str = 'ZTF_alerts', user_filter=None):
+    def create(self, collection: str = 'ZTF_alerts', user_filter=None):
 
         if user_filter is None:
             user_filter = {
                 "group_id": 0,
-                "science_program_id": 0,
+                "filter_id": 0,
                 "catalog": collection,
                 "permissions": [1, 2],
                 "pipeline": [
@@ -115,17 +168,20 @@ def delivery_report(err, msg):
 class TestIngester(object):
     """
         End-to-end ingester test:
+            - Create test program in Fritz
             - Spin up ZooKeeper
             - Spin up Kafka server
-            - create topic
-            - publish test alerts to topic
-            - create test filter
-            - spin up ingester
-            - digest and ingest alert stream, post to Fritz
-            - delete test filter
+            - Create topic
+            - Publish test alerts to topic
+            - Create test filter
+            - Spin up ingester
+            - Digest and ingest alert stream, post to Fritz
+            - Delete test filter
     """
 
     def test_ingester(self):
+
+
 
         path_kafka = pathlib.Path(config['path']['kafka'])
 
