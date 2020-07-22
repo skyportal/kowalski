@@ -1483,33 +1483,32 @@ async def queries_delete(request):
 ''' filters apis '''
 
 
-# @routes.get('/api/filters/{filter_id}', allow_head=False)
+# @routes.get('/api/filters/{group_id}', allow_head=False)
 @admin_required
-async def filters_get(request):
+async def filters_get_group_id(request):
     """
-    Retrieve user-defined filter by id
+    Retrieve all user-defined filters of group group_id
 
     :param request:
     :return:
 
     ---
-    summary: Retrieve user-defined filter by id
+    summary: Retrieve all user-defined filters of group group_id
     tags:
       - filters
 
     parameters:
       - in: path
-        name: filter_id
-        description: "unique filter _id"
+        name: group_id
+        description: "group_id"
         required: true
         schema:
-          type: string
-          minLength: 6
-          maxLength: 6
+          type: integer
+          minimum: 1
 
     responses:
       '200':
-        description: retrived filter data
+        description: retrieved filter data
         content:
           application/json:
             schema:
@@ -1528,16 +1527,131 @@ async def filters_get(request):
                   type: object
             example:
               "status": "success"
-              "message": "retrieved filter_id c3ig1t"
-              "data": {
-                "_id": "c3ig1t",
+              "message": "retrieved filters of group_id 1"
+              "data": [{
                 "group_id": 1,
-                "science_program_id": 1,
+                "filter_id": 1,
                 "catalog": "ZTF_alerts",
-                "pipeline": "<serialized extended json string>",
-                "created": {
-                    "$date": 1584403506877
-                }
+                "permissions": [1, 2],
+                "fv": [
+                  "fid": "nnsun9",
+                  "pipeline": "<serialized extended json string>",
+                  "created": {
+                      "$date": 1584403506877
+                  }
+                ]
+              }]
+
+      '400':
+        description: retrieval failed or internal/unknown cause of failure
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [error]
+                message:
+                  type: string
+            example:
+              status: error
+              message: "failure: <error message>"
+    """
+    try:
+        # get query params
+        group_id = request.match_info['group_id']
+
+        cursor = request.app['mongo'][config['database']['collections']['filters']].find(
+            {'group_id': int(group_id)},
+            {'_id': 0}
+        )
+        user_filters = await cursor.to_list(length=None)
+
+        if len(user_filters) == 0:
+            return web.json_response(
+                {'status': 'error', 'message': f'filters for group_id={group_id} not found'},
+                status=400
+            )
+
+        return web.json_response({'status': 'success',
+                                  'message': f'retrieved filters of group_id {group_id}',
+                                  'data': user_filters}, status=200, dumps=dumps)
+
+    except Exception as _e:
+        print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
+        _err = traceback.format_exc()
+        print(_err)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
+
+
+# @routes.get('/api/filters/{group_id}/{filter_id}', allow_head=False)
+@admin_required
+async def filters_get_group_id_filter_id(request):
+    """
+    Retrieve user-defined filter filter_id of group group_id
+
+    :param request:
+    :return:
+
+    ---
+    summary: Retrieve user-defined filter filter_id of group group_id
+    tags:
+      - filters
+
+    parameters:
+      - in: path
+        name: group_id
+        description: "group_id"
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - in: path
+        name: filter_id
+        description: "filter_id"
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+
+    responses:
+      '200':
+        description: retrieved filter data
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+                - data
+              properties:
+                status:
+                  type: string
+                  enum: [success]
+                message:
+                  type: string
+                data:
+                  type: object
+            example:
+              "status": "success"
+              "message": "retrieved filter_id 1 of group_id 1"
+              "data": {
+                "group_id": 1,
+                "filter_id": 1,
+                "catalog": "ZTF_alerts",
+                "permissions": [1, 2],
+                "fv": [
+                  "fid": "nnsun9",
+                  "pipeline": "<serialized extended json string>",
+                  "created": {
+                      "$date": 1584403506877
+                  }
+                ]
               }
 
       '400':
@@ -1561,14 +1675,23 @@ async def filters_get(request):
     """
     try:
         # get query params
+        group_id = request.match_info['group_id']
         filter_id = request.match_info['filter_id']
 
         user_filter = await request.app['mongo'][config['database']['collections']['filters']].find_one(
-            {'_id': filter_id}
+            {'group_id': int(group_id), 'filter_id': int(filter_id)}
         )
 
+        if user_filter is None:
+            return web.json_response(
+                {'status': 'error', 'message': f'filter for group_id={group_id}, filter_id={filter_id} not found'},
+                status=400
+            )
+
+        user_filter.pop("_id", None)
+
         return web.json_response({'status': 'success',
-                                  'message': f'retrieved filter_id {filter_id}',
+                                  'message': f'retrieved filter_id {filter_id} of group_id {group_id}',
                                   'data': user_filter}, status=200, dumps=dumps)
 
     except Exception as _e:
@@ -1576,26 +1699,6 @@ async def filters_get(request):
         _err = traceback.format_exc()
         print(_err)
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
-
-
-# @routes.get('/api/filters')
-@admin_required
-async def filters_query(request):
-    """
-    todo: get filters (filter id's?) for group_id[/science_program_id]:
-          /api/filters?group_id=1&science_program_id=1&all=false&only_ids=true
-          all ever saved
-          ? or use the standard POST to /api/queries endpoint ? gotta think a bit...
-
-    :param request:
-    :return:
-
-    {"data": [{"group_id": 1, "science_programs": [{"science_program_id": 1, "filters": ["filter_id": "abc123"]}]}]}
-
-    ?
-
-    """
-    pass
 
 
 # @routes.post('/api/filters')
@@ -1796,6 +1899,9 @@ async def filters_post(request):
             return web.json_response({'status': 'error', 'message': 'permissions must be set'}, status=400)
         if pipeline is None:
             return web.json_response({'status': 'error', 'message': 'pipeline must be set'}, status=400)
+
+        group_id = int(group_id)
+        filter_id = int(filter_id)
 
         # check if a filter for these (group_id, filter_id) already exists:
         doc_saved = await request.app['mongo'].filters.find_one(
@@ -2091,6 +2197,9 @@ async def filters_test_post(request):
         if pipeline is None:
             return web.json_response({'status': 'error', 'message': 'pipeline must be set'}, status=400)
 
+        group_id = int(group_id)
+        filter_id = int(filter_id)
+
         if not isinstance(pipeline, str):
             pipeline = dumps(pipeline)
 
@@ -2279,6 +2388,9 @@ async def filters_put(request):
                 {'status': 'error', 'message': 'one of (active, active_fid) must be set'},
                 status=400
             )
+
+        group_id = int(group_id)
+        filter_id = int(filter_id)
 
         # check if a filter for these (group_id, filter_id) exists:
         doc_saved = await request.app['mongo'].filters.find_one(
@@ -2469,6 +2581,9 @@ async def filters_delete(request):
             return web.json_response({'status': 'error', 'message': 'group_id must be set'}, status=400)
         if filter_id is None:
             return web.json_response({'status': 'error', 'message': 'filter_id must be set'}, status=400)
+
+        group_id = int(group_id)
+        filter_id = int(filter_id)
 
         r = await request.app['mongo'].filters.delete_one(
             {
@@ -2858,7 +2973,8 @@ async def app_factory():
             web.get('/api/queries/{task_id}', queries_get, allow_head=False),
             web.delete('/api/queries/{task_id}', queries_delete),
             # # filters:
-            # web.get('/api/filters/{filter_id}', filters_get, allow_head=False),
+            web.get('/api/filters/{group_id}', filters_get_group_id, allow_head=False),
+            web.get('/api/filters/{group_id}/{filter_id}', filters_get_group_id_filter_id, allow_head=False),
             web.post('/api/filters', filters_post),
             web.put('/api/filters', filters_put),
             web.delete('/api/filters', filters_delete),
