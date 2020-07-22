@@ -2130,30 +2130,73 @@ async def filters_test_post(request):
         return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=400)
 
 
-# @routes.delete('/api/filters/{filter_id}')
 @admin_required
-async def filters_delete(request):
+async def filters_put(request):
     """
-    fixme: remove this, add .put to modify existing filters: activate/deactivate, change active_fid
-    Delete user-defined filter by id
+    Update user-defined filter
 
     :param request:
     :return:
 
     ---
-    summary: Delete user-defined filter by id
+    summary: "Modify existing filters: activate/deactivate, set active_fid"
     tags:
       - filters
 
-    parameters:
-      - in: path
-        name: filter_id
-        description: "unique filter _id"
-        required: true
-        schema:
-          type: string
-          minLength: 6
-          maxLength: 6
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - type: object
+                required:
+                  - group_id
+                  - filter_id
+                  - active
+                properties:
+                  group_id:
+                    type: integer
+                    description: "[fritz] user group (science program) id"
+                    minimum: 1
+                  filter_id:
+                    type: integer
+                    description: "[fritz] science program filter id for this user group id"
+                    minimum: 1
+                  active:
+                    type: boolean
+                    description: "activate or deactivate filter"
+              - type: object
+                required:
+                  - group_id
+                  - filter_id
+                  - active_fid
+                properties:
+                  group_id:
+                    type: integer
+                    description: "[fritz] user group (science program) id"
+                    minimum: 1
+                  filter_id:
+                    type: integer
+                    description: "[fritz] science program filter id for this user group id"
+                    minimum: 1
+                  active_fid:
+                    description: "set fid as active version"
+                    type: string
+                    minLength: 6
+                    maxLength: 6
+
+          examples:
+            filter_1:
+              value:
+                "group_id": 1
+                "filter_id": 1
+                "active": false
+            filter_2:
+              value:
+                "group_id": 2
+                "filter_id": 5
+                "active_fid": "r7qiti"
 
     responses:
       '200':
@@ -2173,7 +2216,7 @@ async def filters_delete(request):
                   type: string
             example:
               status: success
-              message: "removed filter: c3ig1t"
+              message: "removed filter for group_id=1, filter_id=1"
 
       '400':
         description: filter not found or removal failed
@@ -2194,7 +2237,7 @@ async def filters_delete(request):
               filter not found:
                 value:
                   status: error
-                  message: filter c3ig1t not found
+                  message: filter for group_id=1, filter_id=1 not found
 
       '500':
         description: internal/unknown cause of failure
@@ -2216,14 +2259,234 @@ async def filters_delete(request):
               message: "failure: <error message>"
     """
     try:
-        filter_id = request.match_info['filter_id']
+        try:
+            filter_spec = await request.json()
+        except Exception as _e:
+            print(f'{datetime.datetime.utcnow()}: Cannot extract json() from request, trying post(): {str(_e)}')
+            filter_spec = await request.post()
 
-        r = await request.app['mongo'].filters.delete_one({'_id': filter_id})
+        # checks:
+        group_id = filter_spec.get('group_id', None)
+        filter_id = filter_spec.get('filter_id', None)
+        active = filter_spec.get('active', None)
+        active_fid = filter_spec.get('active_fid', None)
+        if group_id is None:
+            return web.json_response({'status': 'error', 'message': 'group_id must be set'}, status=400)
+        if filter_id is None:
+            return web.json_response({'status': 'error', 'message': 'filter_id must be set'}, status=400)
+        if (active, active_fid).count(None) != 1:
+            return web.json_response(
+                {'status': 'error', 'message': 'one of (active, active_fid) must be set'},
+                status=400
+            )
+
+        # check if a filter for these (group_id, filter_id) exists:
+        doc_saved = await request.app['mongo'].filters.find_one(
+            {
+                'group_id': group_id,
+                'filter_id': filter_id
+            }
+        )
+
+        if doc_saved is None:
+            return web.json_response(
+                {'status': 'error', 'message': f'filter for group_id={group_id}, filter_id={filter_id} not found'},
+                status=400
+            )
+
+        if active is not None:
+            r = await request.app['mongo'].filters.update_one(
+                {'_id': doc_saved['_id']},
+                {
+                    "$set": {
+                        "active": active
+                    }
+                }
+            )
+
+            if r.modified_count == 0:
+                return web.json_response({'status': 'error', 'message': f'failed to update filter'}, status=400)
+
+            return web.json_response(
+                {
+                    'status': 'success',
+                    'message': f'updated filter for group_id={group_id}, filter_id={filter_id}',
+                    'data': {'active': active}
+                },
+                status=200
+            )
+
+        if active_fid is not None:
+            # check that fid exists:
+            fids = {ff['fid'] for ff in doc_saved['fv']}
+
+            if active_fid not in fids:
+                return web.json_response({'status': 'error', 'message': f'fid {active_fid} not found'}, status=400)
+
+            r = await request.app['mongo'].filters.update_one(
+                {'_id': doc_saved['_id']},
+                {
+                    "$set": {
+                        "active_fid": active_fid
+                    }
+                }
+            )
+
+            if r.modified_count == 0:
+                # note: this would fire up if, e.g. trying to change from True to True
+                return web.json_response({'status': 'error', 'message': f'failed to update filter'}, status=400)
+
+            return web.json_response(
+                {
+                    'status': 'success',
+                    'message': f'updated filter for group_id={group_id}, filter_id={filter_id}',
+                    'data': {'active_fid': active_fid}
+                },
+                status=200
+            )
+
+    except Exception as _e:
+        print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
+        _err = traceback.format_exc()
+        print(_err)
+        return web.json_response({'status': 'error', 'message': f'failure: {_err}'}, status=500)
+
+
+# @routes.delete('/api/filters')
+@admin_required
+async def filters_delete(request):
+    """
+    Delete user-defined filter for (group_id, filter_id) altogether
+
+    :param request:
+    :return:
+
+    ---
+    summary: Delete user-defined filter by (group_id, filter_id)
+    tags:
+      - filters
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - group_id
+              - filter_id
+            properties:
+              group_id:
+                type: integer
+                description: "[fritz] user group (science program) id"
+                minimum: 1
+              filter_id:
+                type: integer
+                description: "[fritz] science program filter id for this user group id"
+                minimum: 1
+
+          examples:
+            filter_1:
+              value:
+                "group_id": 1
+                "filter_id": 1
+            filter_2:
+              value:
+                "group_id": 2
+                "filter_id": 5
+
+    responses:
+      '200':
+        description: filter removed
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [success]
+                message:
+                  type: string
+            example:
+              status: success
+              message: "removed filter for group_id=1, filter_id=1"
+
+      '400':
+        description: filter not found or removal failed
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [error]
+                message:
+                  type: string
+            examples:
+              filter not found:
+                value:
+                  status: error
+                  message: filter for group_id=1, filter_id=1 not found
+
+      '500':
+        description: internal/unknown cause of failure
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - message
+              properties:
+                status:
+                  type: string
+                  enum: [error]
+                message:
+                  type: string
+            example:
+              status: error
+              message: "failure: <error message>"
+    """
+    try:
+        try:
+            filter_spec = await request.json()
+        except Exception as _e:
+            print(f'{datetime.datetime.utcnow()}: Cannot extract json() from request, trying post(): {str(_e)}')
+            filter_spec = await request.post()
+
+        # checks:
+        group_id = filter_spec.get('group_id', None)
+        filter_id = filter_spec.get('filter_id', None)
+        if group_id is None:
+            return web.json_response({'status': 'error', 'message': 'group_id must be set'}, status=400)
+        if filter_id is None:
+            return web.json_response({'status': 'error', 'message': 'filter_id must be set'}, status=400)
+
+        r = await request.app['mongo'].filters.delete_one(
+            {
+                'group_id': group_id,
+                'filter_id': filter_id
+            }
+        )
 
         if r.deleted_count != 0:
-            return web.json_response({'status': 'success', 'message': f'removed filter: {filter_id}'}, status=200)
+            return web.json_response(
+                {'status': 'success', 'message': f'removed filter for group_id={group_id}, filter_id={filter_id}'},
+                status=200
+            )
         else:
-            return web.json_response({'status': 'error', 'message': f'filter {filter_id} not found'}, status=400)
+            return web.json_response(
+                {'status': 'error', 'message': f'filter for group_id={group_id}, filter_id={filter_id} not found'},
+                status=400
+            )
 
     except Exception as _e:
         print(f'{datetime.datetime.utcnow()} Got error: {str(_e)}')
@@ -2597,7 +2860,8 @@ async def app_factory():
             # # filters:
             # web.get('/api/filters/{filter_id}', filters_get, allow_head=False),
             web.post('/api/filters', filters_post),
-            # web.delete('/api/filters/{filter_id}', filters_delete),
+            web.put('/api/filters', filters_put),
+            web.delete('/api/filters', filters_delete),
             web.post('/api/filters/test', filters_test_post),
             # lab:
             web.get('/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}', ztf_alert_get_cutout, allow_head=False),
