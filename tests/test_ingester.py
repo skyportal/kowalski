@@ -5,7 +5,6 @@ import pathlib
 import requests
 import subprocess
 import time
-from tqdm import tqdm
 
 from alert_watcher_ztf import ingester
 from utils import load_config, time_stamp
@@ -15,11 +14,137 @@ from utils import load_config, time_stamp
 config = load_config(config_file='config.yaml')['kowalski']
 
 
+class Program(object):
+    def __init__(self, group_name="FRITZ_TEST_PROGRAM"):
+        self.access_token = config['skyportal']['token']
+        self.base_url = f"{config['skyportal']['protocol']}://" \
+                        f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+        self.headers = {'Authorization': f'token {self.access_token}'}
+
+        self.group_name = group_name
+        self.group_id, self.filter_id = self.create()
+
+    def get_groups(self):
+        resp = requests.get(
+            self.base_url + f"/api/groups",
+            headers=self.headers, timeout=3,
+        )
+
+        assert resp.status_code == requests.codes.ok
+        result = resp.json()
+        # print(result)
+        assert result['status'] == 'success'
+        assert 'data' in result
+        assert 'user_groups' in result['data']
+
+        user_groups = {g['name']: g['id'] for g in result['data']['user_groups']}
+
+        return user_groups
+
+    def get_group_filters(self, group_id: int):
+        resp = requests.get(
+            self.base_url + f"/api/filters",
+            headers=self.headers, timeout=3,
+        )
+
+        assert resp.status_code == requests.codes.ok
+        result = resp.json()
+        # print(result)
+        assert result['status'] == 'success'
+        assert 'data' in result
+
+        group_filter_ids = [fi['id'] for fi in result['data'] if fi['group_id'] == group_id]
+
+        return group_filter_ids
+
+    def create(self):
+        user_groups = self.get_groups()
+
+        if self.group_name in user_groups.keys():
+            # already exists? grab its id then:
+            group_id = user_groups[self.group_name]
+        else:
+            # else, create a new group
+            resp = requests.post(
+                self.base_url + f"/api/groups",
+                json={"name": self.group_name, "group_admins": ["testadmin@cesium-ml.org"]},
+                headers=self.headers, timeout=3,
+            )
+            result = resp.json()
+            # print(result)
+            assert result['status'] == 'success'
+            assert 'data' in result
+            assert 'id' in result['data']
+
+            group_id = result['data']['id']
+
+        # grab filter_ids defined for this group:
+        group_filter_ids = self.get_group_filters(group_id=group_id)
+
+        if len(group_filter_ids) == 0:
+            # none created so far? make one:
+            resp = requests.post(
+                self.base_url + f"/api/filters",
+                json={"query_string": "", "group_id": group_id},
+                headers=self.headers, timeout=3,
+            )
+            result = resp.json()
+            # print(result)
+            assert result['status'] == 'success'
+            assert 'data' in result
+            assert 'id' in result['data']
+
+            filter_id = result['data']['id']
+        else:
+            # else just grab the first one
+            filter_id = group_filter_ids[0]
+
+        return group_id, filter_id
+
+    def remove(self):
+        user_groups = self.get_groups()
+
+        group_filter_ids = self.get_group_filters(group_id=self.group_id)
+        for filter_id in group_filter_ids:
+            resp = requests.delete(
+                self.base_url + f"/api/filters/{filter_id}",
+                headers=self.headers,
+                timeout=3,
+            )
+            assert resp.status_code == requests.codes.ok
+            result = resp.json()
+            assert result['status'] == 'success'
+
+        if self.group_name in user_groups.keys():
+
+            resp = requests.delete(
+                self.base_url + f"/api/groups/{user_groups[self.group_name]}",
+                headers=self.headers,
+                timeout=3,
+            )
+            assert resp.status_code == requests.codes.ok
+            result = resp.json()
+            assert result['status'] == 'success'
+
+        self.group_id, self.filter_id = None, None
+
+
 class Filter(object):
-    def __init__(self):
+    def __init__(
+        self,
+        collection: str = 'ZTF_alerts',
+        group_id=None,
+        filter_id=None
+    ):
+        assert group_id is not None
+        assert filter_id is not None
+
         self.access_token = self.get_api_token()
         self.headers = {'Authorization': f'Bearer {self.access_token}'}
-        self.filter_id = self.save()
+        self.collection = collection
+        self.group_id = int(group_id)
+        self.filter_id = int(filter_id)
+        self.fid = self.create()
 
     @staticmethod
     def get_api_token():
@@ -35,40 +160,40 @@ class Filter(object):
 
         return token
 
-    def save(self, collection: str = 'ZTF_alerts', user_filter=None):
+    def create(self):
 
-        if user_filter is None:
-            user_filter = {
-                "group_id": 0,
-                "science_program_id": 0,
-                "catalog": collection,
-                "pipeline": [
-                    {
-                        "$match": {
-                            "candidate.drb": {
-                                "$gt": 0.9
-                            },
-                            "cross_matches.CLU_20190625.0": {
-                                "$exists": False
-                            }
-                        }
-                    },
-                    {
-                        "$addFields": {
-                            "annotations.author": "dd",
-                            "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
-                        }
-                    },
-                    {
-                        "$project": {
-                            "_id": 0,
-                            "candid": 1,
-                            "objectId": 1,
-                            "annotations": 1
+        user_filter = {
+            "group_id": self.group_id,
+            "filter_id": self.filter_id,
+            "catalog": self.collection,
+            "permissions": [1, 2],
+            "pipeline": [
+                {
+                    "$match": {
+                        "candidate.drb": {
+                            "$gt": 0.9
+                        },
+                        "cross_matches.CLU_20190625.0": {
+                            "$exists": False
                         }
                     }
-                ]
-            }
+                },
+                {
+                    "$addFields": {
+                        "annotations.author": "dd",
+                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                    }
+                },
+                {
+                    "$project": {
+                        "_id": 0,
+                        "candid": 1,
+                        "objectId": 1,
+                        "annotations": 1
+                    }
+                }
+            ]
+        }
 
         # save:
         resp = requests.post(
@@ -82,24 +207,24 @@ class Filter(object):
         # print(result)
         assert result['status'] == 'success'
         assert 'data' in result
-        assert '_id' in result['data']
-        filter_id = result['data']['_id']
+        assert 'fid' in result['data']
+        fid = result['data']['fid']
 
-        return filter_id
+        return fid
 
     def remove(self):
-        if self.filter_id is not None:
-            resp = requests.delete(
-                f"http://kowalski_api_1:{config['server']['port']}/api/filters/{self.filter_id}",
-                headers=self.headers,
-                timeout=5,
-            )
-            assert resp.status_code == requests.codes.ok
-            result = resp.json()
-            assert result['status'] == 'success'
-            assert result['message'] == f'removed filter: {self.filter_id}'
+        resp = requests.delete(
+            f"http://kowalski_api_1:{config['server']['port']}/api/filters",
+            json={"group_id": self.group_id, "filter_id": self.filter_id},
+            headers=self.headers,
+            timeout=5,
+        )
+        assert resp.status_code == requests.codes.ok
+        result = resp.json()
+        assert result['status'] == 'success'
+        assert result['message'] == f'removed filter for group_id={self.group_id}, filter_id={self.filter_id}'
 
-            self.filter_id = None
+        self.fid = None
 
 
 def delivery_report(err, msg):
@@ -114,25 +239,31 @@ def delivery_report(err, msg):
 class TestIngester(object):
     """
         End-to-end ingester test:
+            - Create test program in Fritz
             - Spin up ZooKeeper
             - Spin up Kafka server
-            - create topic
-            - publish test alerts to topic
-            - create test filter
-            - spin up ingester
-            - digest and ingest alert stream, post to Fritz
-            - delete test filter
+            - Create topic
+            - Publish test alerts to topic
+            - Create test filter
+            - Spin up ingester
+            - Digest and ingest alert stream, post to Fritz
+            - Delete test filter
     """
 
     def test_ingester(self):
 
+        print(f'{time_stamp()}: Setting up paths')
         path_kafka = pathlib.Path(config['path']['kafka'])
 
         path_logs = pathlib.Path(config['path']['logs'])
         if not path_logs.exists():
             path_logs.mkdir(parents=True, exist_ok=True)
 
+        print(f'{time_stamp()}: Setting up test program in Fritz')
+        program = Program(group_name="FRITZ_TEST_PROGRAM")
+
         # clean up old Kafka logs
+        print(f'{time_stamp()}: Cleaning up Kafka logs')
         subprocess.run([
             'rm',
             '-rf',
@@ -218,6 +349,7 @@ class TestIngester(object):
             ids = [pathlib.Path(a['id']).parent for a in aa if 'avro' in a['id']]
         except Exception as e:
             print(f'{time_stamp()}: Grabbing alerts from gs://ztf-fritz/sample-public-alerts failed, but it is ok')
+            print(f'{time_stamp()}: {e}')
             ids = []
         subprocess.run([
             "gsutil", "-m", "cp", "-n",
@@ -243,7 +375,11 @@ class TestIngester(object):
         producer.flush()
 
         print(f'{time_stamp()}: Creating a test filter')
-        test_filter = Filter()
+        test_filter = Filter(
+            collection='ZTF_alerts',
+            group_id=program.group_id,
+            filter_id=program.filter_id
+        )
 
         print(f'{time_stamp()}: Starting up Ingester')
 
