@@ -384,7 +384,7 @@ class TestIngester(object):
         print(f'{time_stamp()}: Starting up Ingester')
 
         # digest and ingest
-        ingester(obs_date=date, save_packets=False, test=True)
+        ingester(obs_date=date, test=True)
         print(f'{time_stamp()}: Digested and ingested: all done!')
 
         # shut down Kafka server and ZooKeeper
