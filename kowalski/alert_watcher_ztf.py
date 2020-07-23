@@ -1022,7 +1022,7 @@ def ingester(obs_date=None, test=False):
                     path_tess = config['path']['tess']
                     topics_on_watch[t] = multiprocessing.Process(
                         target=listener,
-                        args=(t, bootstrap_servers, offset_reset, group, path_alerts, path_tess, test)
+                        args=(t, bootstrap_servers, offset_reset, group, test)
                     )
                     topics_on_watch[t].daemon = True
                     topics_on_watch[t].start()
