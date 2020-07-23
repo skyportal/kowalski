@@ -2,7 +2,7 @@ import argparse
 from ast import literal_eval
 from astropy.io import fits
 import base64
-from bson.json_util import dumps, loads
+from bson.json_util import loads
 import confluent_kafka
 from copy import deepcopy
 import datetime
@@ -16,6 +16,7 @@ import numpy as np
 import os
 import pandas as pd
 import pymongo
+from pymongo.errors import BulkWriteError
 import requests
 # from requests.adapters import HTTPAdapter, DEFAULT_POOLBLOCK, DEFAULT_POOLSIZE, DEFAULT_RETRIES
 import subprocess
@@ -35,7 +36,7 @@ config = load_config(config_file='config.yaml')['kowalski']
 ''' Utilities for manipulating Avro data and schemas. '''
 
 
-def readSchemaData(bytes_io):
+def read_schema_data(bytes_io):
     """Read data that already has an Avro schema.
 
     Parameters
@@ -139,12 +140,9 @@ def make_thumbnail(a, ttype, ztftype):
     img = np.nan_to_num(img)
 
     if ztftype != 'Difference':
-        # img += np.min(img)
         img[img <= 0] = np.median(img)
-        # plt.imshow(img, cmap='gray', norm=LogNorm(), origin='lower')
         plt.imshow(img, cmap=plt.cm.bone, norm=LogNorm(), origin='lower')
     else:
-        # plt.imshow(img, cmap='gray', origin='lower')
         plt.imshow(img, cmap=plt.cm.bone, origin='lower')
     plt.savefig(buff, dpi=42)
 
@@ -257,8 +255,10 @@ def alert_filter__xmatch(database, alert) -> dict:
             object_position_query = dict()
             object_position_query['coordinates.radec_geojson'] = {
                 '$geoWithin': {'$centerSphere': [[ra_geojson, dec_geojson], cone_search_radius]}}
-            s = database[catalog].find({**object_position_query, **catalog_filter},
-                                 {**catalog_projection})
+            s = database[catalog].find(
+                {**object_position_query, **catalog_filter},
+                {**catalog_projection}
+            )
             xmatches[catalog] = list(s)
 
     except Exception as e:
@@ -353,8 +353,9 @@ def alert_filter__xmatch_clu(database, alert, size_margin=3, clu_version='CLU_20
     return xmatches
 
 
-def alert_filter__user_defined(database, filter_templates, alert,
-                               catalog: str = 'ZTF_alerts', max_time_ms: int = 500) -> list:
+def alert_filter__user_defined(
+    database, filter_templates, alert, catalog: str = 'ZTF_alerts', max_time_ms: int = 500
+) -> list:
     """
         Evaluate user defined filters
     :param database:
@@ -400,7 +401,7 @@ def alert_filter__user_defined(database, filter_templates, alert,
 
 class AlertConsumer(object):
     """
-        Creates an alert stream Kafka consumer for a given topic.
+    Creates an alert stream Kafka consumer for a given topic.
 
     Parameters
     ----------
@@ -450,18 +451,19 @@ class AlertConsumer(object):
         self.config = config
 
         # session to talk to SkyPortal
-        self.session = requests.Session()
-        self.session_headers = {'Authorization': f"token {config['skyportal']['token']}"}
-        # non-default settings:
-        # pc = pool_connections if pool_connections is not None else DEFAULT_POOLSIZE
-        # pm = pool_maxsize if pool_maxsize is not None else DEFAULT_POOLSIZE
-        # mr = max_retries if max_retries is not None else DEFAULT_RETRIES
-        # pb = pool_block if pool_block is not None else DEFAULT_POOLBLOCK
-        #
-        # self.session.mount('https://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
-        #                                            max_retries=mr, pool_block=pb))
-        # self.session.mount('http://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
-        #                                           max_retries=mr, pool_block=pb))
+        if config['misc']['post_to_skyportal']:
+            self.session = requests.Session()
+            self.session_headers = {'Authorization': f"token {config['skyportal']['token']}"}
+            # non-default settings:
+            # pc = pool_connections if pool_connections is not None else DEFAULT_POOLSIZE
+            # pm = pool_maxsize if pool_maxsize is not None else DEFAULT_POOLSIZE
+            # mr = max_retries if max_retries is not None else DEFAULT_RETRIES
+            # pb = pool_block if pool_block is not None else DEFAULT_POOLBLOCK
+            #
+            # self.session.mount('https://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
+            #                                            max_retries=mr, pool_block=pb))
+            # self.session.mount('http://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
+            #                                           max_retries=mr, pool_block=pb))
 
         # MongoDB collections to store the alerts:
         self.collection_alerts = self.config['database']['collections']['alerts_ztf']
@@ -471,7 +473,6 @@ class AlertConsumer(object):
 
         # create indexes
         for index_name, index in self.config['database']['indexes'][self.collection_alerts].items():
-            # print(index_name, index)
             ind = [tuple(ii) for ii in index]
             self.db['db'][self.collection_alerts].create_index(keys=ind, name=index_name, background=True)
 
@@ -559,8 +560,11 @@ class AlertConsumer(object):
 
         try:
             # there's only one instance of DB, it's too big to be replicated
-            _client = pymongo.MongoClient(host=self.config['database']['host'],
-                                          port=self.config['database']['port'], connect=False)
+            _client = pymongo.MongoClient(
+                host=self.config['database']['host'],
+                port=self.config['database']['port'],
+                connect=False
+            )
             # grab main database:
             _db = _client[self.config['database']['db']]
         except Exception as _e:
@@ -581,8 +585,11 @@ class AlertConsumer(object):
         :param _db_entry:
         :return:
         """
-        assert _collection is not None, 'Must specify collection'
-        assert _db_entry is not None, 'Must specify document'
+        if _collection is None:
+            raise ValueError('Must specify collection')
+        if _db_entry is None:
+            raise ValueError('Must specify document to insert')
+
         try:
             self.db['db'][_collection].insert_one(_db_entry)
         except Exception as _e:
@@ -598,33 +605,18 @@ class AlertConsumer(object):
         :param _db_entries:
         :return:
         """
-        assert _collection is not None, 'Must specify collection'
-        assert _db_entries is not None, 'Must specify documents'
+        if _collection is None:
+            raise ValueError('Must specify collection')
+        if _db_entries is None:
+            raise ValueError('Must specify documents to insert')
+
         try:
             # ordered=False ensures that every insert operation will be attempted
             # so that if, e.g., a document already exists, it will be simply skipped
             self.db['db'][_collection].insert_many(_db_entries, ordered=False)
-        except pymongo.errors.BulkWriteError as bwe:
+        except BulkWriteError as bwe:
             print(time_stamp(), bwe.details)
         except Exception as _e:
-            traceback.print_exc()
-            print(_e)
-
-    def replace_db_entry(self, _collection=None, _filter=None, _db_entry=None):
-        """
-            Insert a document _doc to collection _collection in DB.
-            It is monitored for timeout in case DB connection hangs for some reason
-        :param _collection:
-        :param _filter:
-        :param _db_entry:
-        :return:
-        """
-        assert _collection is not None, 'Must specify collection'
-        assert _db_entry is not None, 'Must specify document'
-        try:
-            self.db['db'][_collection].replace_one(_filter, _db_entry, upsert=True)
-        except Exception as _e:
-            print(time_stamp(), 'Error replacing {:s} in {:s}'.format(str(_db_entry['_id']), _collection))
             traceback.print_exc()
             print(_e)
 
@@ -638,13 +630,10 @@ class AlertConsumer(object):
         # placeholders for classifications
         doc['classifications'] = dict()
 
-        '''Coordinates:'''
-
         # GeoJSON for 2D indexing
         doc['coordinates'] = {}
         _ra = doc['candidate']['ra']
         _dec = doc['candidate']['dec']
-        _radec = [_ra, _dec]
         # string format: H:M:S, D:M:S
         _radec_str = [deg2hms(_ra), deg2dms(_dec)]
         doc['coordinates']['radec_str'] = _radec_str
@@ -665,13 +654,10 @@ class AlertConsumer(object):
 
         return doc, prv_candidates
 
-    def poll(self, path_alerts=None, path_tess=None, datestr=None, save_packets=False, verbose=2):
+    def poll(self, verbose=2):
         """
-            Polls Kafka broker to consume topic.
-        :param path_alerts:
-        :param path_tess:
-        :param datestr:
-        :param save_packets:
+        Polls Kafka broker to consume topic.
+
         :param verbose: 1 - main, 2 - debug
         :return:
         """
@@ -688,7 +674,7 @@ class AlertConsumer(object):
         elif msg is not None:
             try:
                 # decode avro packet
-                msg_decoded = self.decodeMessage(msg)
+                msg_decoded = self.decode_message(msg)
                 for record in msg_decoded:
 
                     candid = record['candid']
@@ -698,20 +684,7 @@ class AlertConsumer(object):
 
                     # check that candid not in collection_alerts
                     if self.db['db'][self.collection_alerts].count_documents({'candid': candid}, limit=1) == 0:
-                        # candid not in db, ingest
-
-                        if save_packets:
-                            # save avro packet to disk
-                            path_alert_dir = os.path.join(path_alerts, datestr)
-                            # mkdir if does not exist
-                            if not os.path.exists(path_alert_dir):
-                                os.makedirs(path_alert_dir)
-                            path_avro = os.path.join(path_alert_dir, f'{candid}.avro')
-                            print(f'{time_stamp()}: saving {candid} to disk')
-                            with open(path_avro, 'wb') as f:
-                                f.write(msg.value())
-
-                        # ingest decoded avro packet into db
+                        # candid not in db, ingest decoded avro packet into db
                         # todo: ?? restructure alerts even further?
                         #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
                         #       group by objectId similar to prv_candidates?? maybe this is too much
@@ -742,7 +715,6 @@ class AlertConsumer(object):
 
                         # cross-match with external catalogs if objectId not in collection_alerts_aux:
                         if self.db['db'][self.collection_alerts_aux].count_documents({'_id': objectId}, limit=1) == 0:
-                            # tic = time.time()
                             tic = time.time()
                             xmatches = alert_filter__xmatch(self.db['db'], alert)
                             toc = time.time()
@@ -754,9 +726,6 @@ class AlertConsumer(object):
                             toc = time.time()
                             if verbose > 1:
                                 print(f'{time_stamp()}: clu xmatch took {toc - tic} s')
-                            # alert['cross_matches'] = xmatches
-                            # toc = time.time()
-                            # print(f'xmatch for {alert["candid"]} took {toc-tic:.2f} s')
 
                             alert_aux = {'_id': objectId,
                                          'cross_matches': xmatches,
@@ -778,37 +747,6 @@ class AlertConsumer(object):
                             toc = time.time()
                             if verbose > 1:
                                 print(f'{time_stamp()}: aux updating took {toc - tic} s')
-
-                        # dump packet as json to disk if in a public TESS sector
-                        if 'TESS' in alert['candidate']['programpi']:
-                            # put prv_candidates back
-                            alert['prv_candidates'] = prv_candidates
-
-                            # get cross-matches
-                            # xmatches = self.db['db'][self.collection_alerts_aux].find_one({'_id': objectId})
-                            xmatches = self.db['db'][self.collection_alerts_aux].find({'_id': objectId},
-                                                                                      {'cross_matches': 1},
-                                                                                      limit=1)
-                            xmatches = list(xmatches)[0]
-                            # fixme: pop CLU:
-                            xmatches.pop('CLU_20190625', None)
-
-                            alert['cross_matches'] = xmatches['cross_matches']
-
-                            if save_packets:
-                                path_tess_dir = os.path.join(path_tess, datestr)
-                                # mkdir if does not exist
-                                if not os.path.exists(path_tess_dir):
-                                    os.makedirs(path_tess_dir)
-
-                                print(f'{time_stamp()}: saving {alert["candid"]} to disk')
-                                try:
-                                    with open(os.path.join(path_tess_dir, f"{alert['candid']}.json"), 'w') as f:
-                                        f.write(dumps(alert))
-                                except Exception as e:
-                                    print(f'{time_stamp()}: {str(e)}')
-                                    _err = traceback.format_exc()
-                                    print(f'{time_stamp()}: {str(_err)}')
 
                         # execute user-defined alert filters
                         tic = time.time()
@@ -837,7 +775,6 @@ class AlertConsumer(object):
                             else:
                                 saved_candidate_meta = dict()
                                 print(f"{time_stamp()}: Candidate {alert['candid']} does not exist in SkyPortal")
-                                # print(resp.json())
 
                             for passed_filter in passed_filters:
                                 # post metadata
@@ -856,7 +793,8 @@ class AlertConsumer(object):
                                     "filter_ids": [passed_filter.get("filter_id")],
                                     "passing_alert_id": alert['candid'],
                                 }
-                                print(alert_thin)
+                                if verbose > 1:
+                                    print(f'{time_stamp()}: {alert_thin}')
 
                                 if not candidate_exists:
                                     tic = time.time()
@@ -952,7 +890,8 @@ class AlertConsumer(object):
             except Exception as e:
                 print(f"{time_stamp()}: {str(e)}")
 
-    def decodeMessage(self, msg):
+    @staticmethod
+    def decode_message(msg):
         """Decode Avro message according to a schema.
 
         Parameters
@@ -967,39 +906,30 @@ class AlertConsumer(object):
         """
         # print(msg.topic(), msg.offset(), msg.error(), msg.key(), msg.value())
         message = msg.value()
-        # print(message)
+        decoded_msg = message
+
         try:
             bytes_io = io.BytesIO(message)
-            decoded_msg = readSchemaData(bytes_io)
-            # print(decoded_msg)
-            # decoded_msg = readAvroData(bytes_io, self.alert_schema)
-            # print(decoded_msg)
+            decoded_msg = read_schema_data(bytes_io)
         except AssertionError:
-            # FIXME this exception is raised but not sure if it matters yet
-            bytes_io = io.BytesIO(message)
             decoded_msg = None
         except IndexError:
             literal_msg = literal_eval(str(message, encoding='utf-8'))  # works to give bytes
             bytes_io = io.BytesIO(literal_msg)  # works to give <class '_io.BytesIO'>
-            decoded_msg = readSchemaData(bytes_io)  # yields reader
+            decoded_msg = read_schema_data(bytes_io)  # yields reader
         except Exception:
             decoded_msg = message
         finally:
             return decoded_msg
 
 
-def listener(topic, bootstrap_servers='', offset_reset='earliest',
-             group=None, path_alerts=None, path_tess=None, save_packets=False,
-             test=False):
+def listener(topic, bootstrap_servers='', offset_reset='earliest', group=None, test=False):
     """
         Listen to a topic
     :param topic:
     :param bootstrap_servers:
     :param offset_reset:
     :param group:
-    :param path_alerts:
-    :param path_tess:
-    :param save_packets:
     :param test: when testing, terminate once reached end of partition
     :return:
     """
@@ -1015,21 +945,17 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest',
     # make it unique:
     conf['group.id'] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
 
-    # date string:
-    datestr = topic.split('_')[1]
-
     # Start alert stream consumer
     stream_reader = AlertConsumer(topic, **conf)
 
     while True:
         try:
             # poll!
-            stream_reader.poll(path_alerts=path_alerts, path_tess=path_tess,
-                               datestr=datestr, save_packets=save_packets)
+            stream_reader.poll()
 
         except EopError as e:
             # Write when reaching end of partition
-            print(f'{time_stamp()}: e.message')
+            print(f'{time_stamp()}: {e.message}')
             if test:
                 # when testing, terminate once reached end of partition:
                 sys.exit()
@@ -1047,13 +973,12 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest',
             sys.exit()
 
 
-def ingester(obs_date=None, save_packets=False, test=False):
+def ingester(obs_date=None, test=False):
     """
         Watchdog for topic listeners
 
-    :param obs_date:
-    :param save_packets:
-    :param test:
+    :param obs_date: observing date: YYYYMMDD
+    :param test: test mode
     :return:
     """
 
@@ -1078,7 +1003,7 @@ def ingester(obs_date=None, save_packets=False, test=False):
                 datestr = datetime.datetime.utcnow().strftime('%Y%m%d')
             else:
                 datestr = obs_date
-            # as of 20180403 naming convention is ztf_%Y%m%d_programidN
+            # as of 20180403, the naming convention is ztf_%Y%m%d_programidN
             # exclude ZUDS, ingest separately
             topics_tonight = [t for t in topics if (datestr in t) and ('programid' in t) and ('zuds' not in t)]
             print(f'{time_stamp()}: Topics: {topics_tonight}')
@@ -1095,18 +1020,16 @@ def ingester(obs_date=None, save_packets=False, test=False):
 
                     path_alerts = config['path']['alerts']
                     path_tess = config['path']['tess']
-                    topics_on_watch[t] = multiprocessing.Process(target=listener,
-                                                                 args=(t, bootstrap_servers,
-                                                                       offset_reset, group,
-                                                                       path_alerts, path_tess,
-                                                                       save_packets, test))
+                    topics_on_watch[t] = multiprocessing.Process(
+                        target=listener,
+                        args=(t, bootstrap_servers, offset_reset, group, path_alerts, path_tess, test)
+                    )
                     topics_on_watch[t].daemon = True
                     topics_on_watch[t].start()
 
                 else:
                     print(f'{time_stamp()}: performing thread health check for {t}')
                     try:
-                        # if not topics_on_watch[t].isAlive():
                         if not topics_on_watch[t].is_alive():
                             print(f'{time_stamp()}: {t} died, removing')
                             # topics_on_watch[t].terminate()
@@ -1118,8 +1041,7 @@ def ingester(obs_date=None, save_packets=False, test=False):
                         pass
 
             if test:
-                # fixme: (eventually this should be too much)
-                time.sleep(220)
+                time.sleep(240)
                 # when testing, wait for topic listeners to pull all the data, then break
                 for t in topics_on_watch:
                     topics_on_watch[t].kill()
@@ -1136,12 +1058,9 @@ def ingester(obs_date=None, save_packets=False, test=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Fetch AVRO packets from Kafka streams and ingest them into DB')
-    parser.add_argument('--obsdate', help='observing date')
-    parser.add_argument('--noio', help='reduce i/o - do not save packets', action='store_true')
+    parser.add_argument('--obsdate', help='observing date YYYYMMDD')
     parser.add_argument('--test', help='listen to the test stream', action='store_true')
 
     args = parser.parse_args()
 
-    ingester(obs_date=args.obsdate,
-             save_packets=not args.noio,
-             test=args.test)
+    ingester(obs_date=args.obsdate, test=args.test)
