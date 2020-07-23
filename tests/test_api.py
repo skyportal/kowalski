@@ -1,5 +1,3 @@
-# import sys
-# sys.path.append('../kowalski')
 from api import app_factory
 import pytest
 from utils import load_config, uid
@@ -38,9 +36,11 @@ class TestAPIs(object):
         """
         client = await aiohttp_client(await app_factory())
 
-        _auth = await client.post(f'/api/auth',
-                                  json={"username": config['server']['admin_username'],
-                                        "password": config['server']['admin_password']})
+        _auth = await client.post(
+            f'/api/auth',
+            json={"username": config['server']['admin_username'],
+                  "password": config['server']['admin_password']}
+        )
         assert _auth.status == 200
 
         credentials = await _auth.json()
@@ -148,17 +148,21 @@ class TestAPIs(object):
 
         headers = {'Authorization': f'Bearer {access_token}'}
 
+        group_id = 10000
+        filter_id = 10000
         collection = 'ZTF_alerts'
+        permissions = [1, 2]
 
         user_filter = {
-            "group_id": 0,
-            "science_program_id": 0,
+            "group_id": group_id,
+            "filter_id": filter_id,
             "catalog": collection,
+            "permissions": permissions,
             "pipeline": [
                 {
                     "$match": {
                         "candidate.drb": {
-                            "$gt": 0.9999
+                            "$gt": 0.9
                         },
                         "cross_matches.CLU_20190625.0": {
                             "$exists": False
@@ -189,35 +193,121 @@ class TestAPIs(object):
         # print(result)
         assert result['status'] == 'success'
 
-        # save:
+        # post:
         resp = await client.post('/api/filters', json=user_filter, headers=headers, timeout=5)
         assert resp.status == 200
         result = await resp.json()
         # print(result)
         assert result['status'] == 'success'
         assert 'data' in result
-        assert '_id' in result['data']
-        filter_id = result['data']['_id']
+        assert 'fid' in result['data']
+        fid1 = result['data']['fid']
 
         # retrieve
-        resp = await client.get(f'/api/filters/{filter_id}', headers=headers, timeout=5)
+        resp = await client.get(f'/api/filters/{group_id}', headers=headers, timeout=5)
         assert resp.status == 200
         result = await resp.json()
         assert result['status'] == 'success'
-        assert result['message'] == f'retrieved filter_id {filter_id}'
+        assert result['message'] == f'retrieved filters of group_id {group_id}'
+
+        resp = await client.get(f'/api/filters/{group_id}/{filter_id}', headers=headers, timeout=5)
+        assert resp.status == 200
+        result = await resp.json()
+        assert result['status'] == 'success'
+        assert result['message'] == f'retrieved filter_id {filter_id} of group_id {group_id}'
+        assert 'data' in result
+        assert 'active_fid' in result['data']
+        assert result['data']['active_fid'] == fid1
+
+        # post new version:
+        resp = await client.post('/api/filters', json=user_filter, headers=headers, timeout=5)
+        assert resp.status == 200
+        result = await resp.json()
+        # print(result)
+        assert result['status'] == 'success'
+        assert 'data' in result
+        assert 'fid' in result['data']
+        fid2 = result['data']['fid']
+
+        # retrieve again
+        resp = await client.get(f'/api/filters/{group_id}/{filter_id}', headers=headers, timeout=5)
+        assert resp.status == 200
+        result = await resp.json()
+        assert result['status'] == 'success'
+        assert result['message'] == f'retrieved filter_id {filter_id} of group_id {group_id}'
+        assert 'data' in result
+        assert 'active_fid' in result['data']
+        assert result['data']['active_fid'] == fid2
+
+        # make first version active
+        resp = await client.put(
+            '/api/filters',
+            json={
+                "group_id": group_id,
+                "filter_id": filter_id,
+                "active_fid": fid1
+            },
+            headers=headers,
+            timeout=5
+        )
+        assert resp.status == 200
+        result = await resp.json()
+        # print(result)
+        assert result['status'] == 'success'
+        assert 'data' in result
+        assert 'active_fid' in result['data']
+        assert result['data']['active_fid'] == fid1
+
+        # deactivate
+        resp = await client.put(
+            '/api/filters',
+            json={
+                "group_id": group_id,
+                "filter_id": filter_id,
+                "active": False
+            },
+            headers=headers,
+            timeout=5
+        )
+        assert resp.status == 200
+        result = await resp.json()
+        # print(result)
+        assert result['status'] == 'success'
+        assert 'data' in result
+        assert 'active' in result['data']
+        assert result['data']['active'] == False
+
+        # retrieve again
+        resp = await client.get(f'/api/filters/{group_id}/{filter_id}', headers=headers, timeout=5)
+        assert resp.status == 200
+        result = await resp.json()
+        assert result['status'] == 'success'
+        assert result['message'] == f'retrieved filter_id {filter_id} of group_id {group_id}'
+        assert 'data' in result
+        assert 'active' in result['data']
+        assert result['data']['active'] == False
 
         # remove filter
-        resp = await client.delete(f'/api/filters/{filter_id}', headers=headers, timeout=5)
+        resp = await client.delete(
+            '/api/filters',
+            json={
+                "group_id": group_id,
+                "filter_id": filter_id
+            },
+            headers=headers,
+            timeout=5
+        )
         assert resp.status == 200
         result = await resp.json()
         assert result['status'] == 'success'
-        assert result['message'] == f'removed filter: {filter_id}'
+        assert result['message'] == f'removed filter for group_id={group_id}, filter_id={filter_id}'
 
     # test raising errors
 
     async def test_bad_filter(self, aiohttp_client):
         """
-            Test trying to save a bad filter: /api/filters/test
+        Test trying to save a bad filter: /api/filters/test
+
         :param aiohttp_client:
         :return:
         """

@@ -5,7 +5,6 @@ import pathlib
 import requests
 import subprocess
 import time
-from tqdm import tqdm
 
 from alert_watcher_ztf import ingester
 from utils import load_config, time_stamp
@@ -162,7 +161,6 @@ class Filter(object):
         return token
 
     def create(self):
-
 
         user_filter = {
             "group_id": self.group_id,

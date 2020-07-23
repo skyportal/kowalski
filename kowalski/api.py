@@ -1534,6 +1534,8 @@ async def filters_get_group_id(request):
                 "filter_id": 1,
                 "catalog": "ZTF_alerts",
                 "permissions": [1, 2],
+                "active": true,
+                "active_fid": "nnsun9",
                 "fv": [
                   "fid": "nnsun9",
                   "pipeline": "<serialized extended json string>",
@@ -1646,6 +1648,8 @@ async def filters_get_group_id_filter_id(request):
                 "filter_id": 1,
                 "catalog": "ZTF_alerts",
                 "permissions": [1, 2],
+                "active": true,
+                "active_fid": "nnsun9",
                 "fv": [
                   "fid": "nnsun9",
                   "pipeline": "<serialized extended json string>",
@@ -2326,7 +2330,9 @@ async def filters_put(request):
                   type: string
             example:
               status: success
-              message: "removed filter for group_id=1, filter_id=1"
+              message: "updated filter for group_id=1, filter_id=1"
+              data:
+                active: false
 
       '400':
         description: filter not found or removal failed
