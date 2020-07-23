@@ -371,12 +371,7 @@ def alert_filter__user_defined(database, filter_templates, alert,
             _filter = deepcopy(filter_template)
             # match candid
             _filter['pipeline'][0]["$match"]["candid"] = alert['candid']
-            # match permissions
-            _filter["pipeline"][0]["$match"]["candidate.programid"]["$in"] = filter_template["permissions"]
-            _filter["pipeline"][3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][1] =\
-                filter_template["permissions"]
-            # todo: evaluate magic variables (such as "<jd>" or "<jd_date>") here with DFS for each pipeline stage
-            #       or serialize, replace, and de-serialize?
+
             filtered_data = list(
                 database[catalog].aggregate(
                     _filter['pipeline'],
@@ -386,19 +381,18 @@ def alert_filter__user_defined(database, filter_templates, alert,
             )
             # passed filter? then len(passed_filter) must be = 1
             if len(filtered_data) == 1:
-                print(f'{time_stamp()}: {alert["candid"]} passed filter {_filter["_id"]}')
-                # passed_filters[_filter['_id']] = passed_filter[0]
+                print(f'{time_stamp()}: {alert["candid"]} passed filter {_filter["fid"]}')
                 passed_filters.append(
                     {
-                        'group_id': 1,
-                        '_id': 1,
-                        'fid': _filter['_id'],
+                        'group_id': _filter["group_id"],
+                        'filter_id': _filter["filter_id"],
+                        'fid': _filter['fid'],
                         'data': filtered_data[0]
                     }
                 )
 
         except Exception as e:
-            print(f'{time_stamp()}: filter {filter_template["_id"]} execution failed on alert {alert["candid"]}: {e}')
+            print(f'{time_stamp()}: filter {filter_template["fid"]} execution failed on alert {alert["candid"]}: {e}')
             continue
 
     return passed_filters
@@ -473,8 +467,7 @@ class AlertConsumer(object):
         self.collection_alerts = self.config['database']['collections']['alerts_ztf']
         self.collection_alerts_aux = self.config['database']['collections']['alerts_ztf_aux']
 
-        self.db = None
-        self.connect_to_db()
+        self.db = self.connect_to_db()
 
         # create indexes
         for index_name, index in self.config['database']['indexes'][self.collection_alerts].items():
@@ -502,28 +495,61 @@ class AlertConsumer(object):
         print('Upstream filtering pipeline:')
         print(self.filter_pipeline_upstream)
 
-        # load user-defined alert filter templates
-        # todo: implement magic variables such as <jd>, <jd_date>
-        # load only the latest filter for each group_id. the assumption is that there is only one filter per group_id
-        # as far as the end user is concerned
-        # self.filter_templates = \
-        #     list(self.db['db'][config['database']['collections']['filters']].find(
-        #         {'catalog': self.collection_alerts}
-        #     ))
-        self.filter_templates = list(self.db['db'][config['database']['collections']['filters']].\
-            aggregate([{'$match': {'catalog': self.collection_alerts}},
-                       {'$group': {'_id': 'science_program_id',
-                                   'created': {'$max': '$created'}, 'tmp': {'$last': '$$ROOT'}}},
-                       {'$group': {'_id': None, "filters": {"$push": "$tmp"}}}]))
-        if len(self.filter_templates) > 0:
-            self.filter_templates = self.filter_templates[0]['filters']
+        # load *active* user-defined alert filter templates
+        active_filters = list(
+            self.db['db'][config['database']['collections']['filters']].aggregate(
+                [
+                    {
+                        '$match': {
+                            'catalog': 'ZTF_alerts',
+                            'active': True
+                        }
+                    },
+                    {
+                        '$project': {
+                            'group_id': 1,
+                            'filter_id': 1,
+                            'permissions': 1,
+                            'fv': {
+                                '$arrayElemAt': [
+                                    {
+                                        '$filter': {
+                                            'input': '$fv',
+                                            'as': 'fvv',
+                                            'cond': {
+                                                '$eq': [
+                                                    '$$fvv.fid', '$active_fid'
+                                                ]
+                                            }
+                                        }
+                                    }, 0
+                                ]
+                            }
+                        }
+                    }
+                ]
+            )
+        )
+
+        self.filter_templates = []
+        for ft in active_filters:
+            # prepend upstream aggregation stages:
+            pipeline = self.filter_pipeline_upstream + loads(ft['fv']['pipeline'])
+            # match permissions
+            pipeline[0]["$match"]["candidate.programid"]["$in"] = ft['permissions']
+            pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][1] = ft['permissions']
+
+            filter_template = {
+                'group_id': ft['group_id'],
+                'filter_id': ft['filter_id'],
+                'fid': ft['fv']['fid'],
+                'pipeline': pipeline
+            }
+
+            self.filter_templates.append(filter_template)
 
         print('Science filters:')
         print(self.filter_templates)
-
-        # prepend default upstream filter:
-        for filter_template in self.filter_templates:
-            filter_template['pipeline'] = self.filter_pipeline_upstream + loads(filter_template['pipeline'])
 
     def connect_to_db(self):
         """
@@ -545,9 +571,7 @@ class AlertConsumer(object):
         except Exception as _e:
             raise ConnectionRefusedError
 
-        self.db = dict()
-        self.db['client'] = _client
-        self.db['db'] = _db
+        return {'client': _client, 'db': _db}
 
     def insert_db_entry(self, _collection=None, _db_entry=None):
         """
@@ -823,66 +847,76 @@ class AlertConsumer(object):
                                     "dec": alert['candidate'].get('dec'),
                                     "score": alert['candidate'].get('drb', alert['candidate']['rb']),
 
-                                    "altdata": passed_filter.get('data', dict()).get('annotations', dict()),
+                                    "altdata": {
+                                        'group_id': passed_filter.get("group_id"),
+                                        'filter_id': passed_filter.get("filter_id"),
+                                        'fid': passed_filter.get("fid"),
+                                    },
 
-                                    "filter_ids": [passed_filter.get("_id")],
+                                    "filter_ids": [passed_filter.get("filter_id")],
                                     "passing_alert_id": alert['candid'],
                                 }
+                                print(alert_thin)
 
-                                # if not candidate_exists:
-                                tic = time.time()
-                                resp = self.session.post(
-                                    f"{config['skyportal']['protocol']}://"
-                                    f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                    "/api/candidates",
-                                    json=alert_thin, headers=self.session_headers, timeout=2,
-                                )
-                                toc = time.time()
-                                if verbose > 1:
-                                    print(f'{time_stamp()}: posting metadata to skyportal took {toc - tic} s')
-                                if resp.json()['status'] == 'success':
-                                    print(f"{time_stamp()}: Posted {alert['candid']} metadata to SkyPortal")
-                                else:
-                                    print(f"{time_stamp()}: Failed to post {alert['candid']} metadata to SkyPortal")
-                                    print(resp.json())
-
-                                # post photometry
-                                tic = time.time()
-                                alert['prv_candidates'] = prv_candidates
-                                if candidate_exists:
-                                    last_detected = saved_candidate_meta.get("last_detected")
-                                    if last_detected:
-                                        last_detected = datetime.datetime.fromisoformat(
-                                            saved_candidate_meta.get("last_detected")
-                                        )
-                                        last_detected_jd = datetime_to_jd(last_detected)
-                                        photometry = make_photometry(deepcopy(alert), jd_start=last_detected_jd)
-                                    else:
-                                        photometry = make_photometry(deepcopy(alert))
-                                else:
-                                    photometry = make_photometry(deepcopy(alert))
-                                toc = time.time()
-                                if verbose > 1:
-                                    print(f'{time_stamp()}: making alert photometry took {toc - tic} s')
-
-                                if len(photometry.get('mag', ())) > 0:
+                                if not candidate_exists:
                                     tic = time.time()
                                     resp = self.session.post(
                                         f"{config['skyportal']['protocol']}://"
                                         f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                        "/api/photometry",
-                                        json=photometry, headers=self.session_headers, timeout=2,
+                                        "/api/candidates",
+                                        json=alert_thin, headers=self.session_headers, timeout=2,
                                     )
                                     toc = time.time()
                                     if verbose > 1:
-                                        print(f'{time_stamp()}: posting photometry to skyportal took {toc - tic} s')
+                                        print(f'{time_stamp()}: posting metadata to skyportal took {toc - tic} s')
                                     if resp.json()['status'] == 'success':
-                                        print(f"{time_stamp()}: Posted {alert['candid']} photometry to SkyPortal")
+                                        print(f"{time_stamp()}: Posted {alert['candid']} metadata to SkyPortal")
                                     else:
-                                        print(
-                                            f"{time_stamp()}: Failed to post {alert['candid']} photometry to SkyPortal"
+                                        print(f"{time_stamp()}: Failed to post {alert['candid']} metadata to SkyPortal")
+                                        print(resp.json())
+
+                                    # post photometry
+                                    tic = time.time()
+                                    alert['prv_candidates'] = prv_candidates
+                                    if candidate_exists:
+                                        last_detected = saved_candidate_meta.get("last_detected")
+                                        if last_detected:
+                                            last_detected = datetime.datetime.fromisoformat(
+                                                saved_candidate_meta.get("last_detected")
+                                            )
+                                            last_detected_jd = datetime_to_jd(last_detected)
+                                            photometry = make_photometry(deepcopy(alert), jd_start=last_detected_jd)
+                                        else:
+                                            photometry = make_photometry(deepcopy(alert))
+                                    else:
+                                        photometry = make_photometry(deepcopy(alert))
+                                    toc = time.time()
+                                    if verbose > 1:
+                                        print(f'{time_stamp()}: making alert photometry took {toc - tic} s')
+
+                                    if len(photometry.get('mag', ())) > 0:
+                                        photometry['group_ids'] = [passed_filter.get("group_id")]
+                                        tic = time.time()
+                                        resp = self.session.post(
+                                            f"{config['skyportal']['protocol']}://"
+                                            f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                                            "/api/photometry",
+                                            json=photometry, headers=self.session_headers, timeout=2,
                                         )
-                                    print(resp.json())
+                                        toc = time.time()
+                                        if verbose > 1:
+                                            print(f'{time_stamp()}: posting photometry to skyportal took {toc - tic} s')
+                                        if resp.json()['status'] == 'success':
+                                            print(f"{time_stamp()}: Posted {alert['candid']} photometry to SkyPortal")
+                                        else:
+                                            print(
+                                                f"{time_stamp()}: Failed to post {alert['candid']} "
+                                                "photometry to SkyPortal"
+                                            )
+                                        print(resp.json())
+
+                                    # todo: post comments:
+                                    passed_filter.get('data', dict()).get('annotations', dict())
 
                             # post thumbnails for new candidates only
                             if not candidate_exists:

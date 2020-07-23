@@ -1414,8 +1414,9 @@ async def queries_get(request):
     try:
         part = _data.get('part', 'result')
 
-        _query = await request.app['mongo'].queries.find_one({'user': user,
-                                                              'task_id': {'$eq': task_id}}, {'status': 1})
+        _query = await request.app['mongo'].queries.find_one(
+            {'user': user, 'task_id': {'$eq': task_id}},
+        )
 
         if part == 'task':
             task_file = os.path.join(config['path']['queries'], user, f'{task_id}.task.json')
