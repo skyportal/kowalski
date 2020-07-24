@@ -1018,8 +1018,6 @@ def ingester(obs_date=None, test=False):
                         bootstrap_servers = config['kafka']['bootstrap.test.servers']
                     group = '{:s}'.format(config['kafka']['group'])
 
-                    path_alerts = config['path']['alerts']
-                    path_tess = config['path']['tess']
                     topics_on_watch[t] = multiprocessing.Process(
                         target=listener,
                         args=(t, bootstrap_servers, offset_reset, group, test)

@@ -1919,6 +1919,18 @@ async def filters_post(request):
         if not isinstance(pipeline, str):
             pipeline = dumps(pipeline)
 
+        # check that only allowed stages are used in the pipeline
+        forbidden_stages = {"$lookup", "$unionWith", "$out", "$merge"}
+        stages = set([list(pp.keys())[0] for pp in pipeline])
+        if len(stages.intersection(forbidden_stages)):
+            return web.json_response(
+                {
+                    'status': 'error',
+                    'message': f'pipeline uses forbidden stages: {str(stages.intersection(forbidden_stages))}'
+                },
+                status=400
+            )
+
         # try on most recently ingested alert
         n_docs = await request.app['mongo'][catalog].estimated_document_count()
 
