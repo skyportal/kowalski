@@ -1921,7 +1921,7 @@ async def filters_post(request):
 
         # check that only allowed stages are used in the pipeline
         forbidden_stages = {"$lookup", "$unionWith", "$out", "$merge"}
-        stages = set([list(pp.keys())[0] for pp in pipeline])
+        stages = set([list(pp.keys())[0] for pp in loads(pipeline)])
         if len(stages.intersection(forbidden_stages)):
             return web.json_response(
                 {
@@ -2214,11 +2214,20 @@ async def filters_test_post(request):
         if pipeline is None:
             return web.json_response({'status': 'error', 'message': 'pipeline must be set'}, status=400)
 
-        group_id = int(group_id)
-        filter_id = int(filter_id)
-
         if not isinstance(pipeline, str):
             pipeline = dumps(pipeline)
+
+        # check that only allowed stages are used in the pipeline
+        forbidden_stages = {"$lookup", "$unionWith", "$out", "$merge"}
+        stages = set([list(pp.keys())[0] for pp in loads(pipeline)])
+        if len(stages.intersection(forbidden_stages)):
+            return web.json_response(
+                {
+                    'status': 'error',
+                    'message': f'pipeline uses forbidden stages: {str(stages.intersection(forbidden_stages))}'
+                },
+                status=400
+            )
 
         # try on most recently ingested alert
         n_docs = await request.app['mongo'][catalog].estimated_document_count()
