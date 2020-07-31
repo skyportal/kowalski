@@ -1919,6 +1919,12 @@ async def filters_post(request):
         if not isinstance(pipeline, str):
             pipeline = dumps(pipeline)
 
+        if len(pipeline) == 0:
+            return web.json_response(
+                {'status': 'error', 'message': 'pipeline must have at least one stage'},
+                status=400
+            )
+
         # check that only allowed stages are used in the pipeline
         forbidden_stages = {"$lookup", "$unionWith", "$out", "$merge"}
         stages = set([list(pp.keys())[0] for pp in loads(pipeline)])
@@ -2216,6 +2222,12 @@ async def filters_test_post(request):
 
         if not isinstance(pipeline, str):
             pipeline = dumps(pipeline)
+
+        if len(pipeline) == 0:
+            return web.json_response(
+                {'status': 'error', 'message': 'pipeline must have at least one stage'},
+                status=400
+            )
 
         # check that only allowed stages are used in the pipeline
         forbidden_stages = {"$lookup", "$unionWith", "$out", "$merge"}
