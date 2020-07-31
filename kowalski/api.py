@@ -1919,7 +1919,7 @@ async def filters_post(request):
         if not isinstance(pipeline, str):
             pipeline = dumps(pipeline)
 
-        if len(pipeline) == 0:
+        if len(loads(pipeline)) == 0:
             return web.json_response(
                 {'status': 'error', 'message': 'pipeline must have at least one stage'},
                 status=400
@@ -2223,7 +2223,7 @@ async def filters_test_post(request):
         if not isinstance(pipeline, str):
             pipeline = dumps(pipeline)
 
-        if len(pipeline) == 0:
+        if len(loads(pipeline)) == 0:
             return web.json_response(
                 {'status': 'error', 'message': 'pipeline must have at least one stage'},
                 status=400
