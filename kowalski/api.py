@@ -1,11 +1,10 @@
 import aiofiles
 from aiohttp import web
-from aiohttp_swagger3 import SwaggerDocs, ReDocUiSettings, SwaggerUiSettings
+from aiohttp_swagger3 import SwaggerDocs, ReDocUiSettings
 from astropy.io import fits
 import asyncio
 from ast import literal_eval
 from bson.json_util import dumps, loads
-from copy import deepcopy
 import datetime
 import gzip
 import io
@@ -18,17 +17,18 @@ from multidict import MultiDict
 import numpy as np
 import os
 import pathlib
-from pymongo.errors import DuplicateKeyError
 import shutil
 import traceback
-from utils import add_admin, check_password_hash, compute_hash, generate_password_hash, \
+from utils import (
+    add_admin, check_password_hash, compute_hash, generate_password_hash,
     init_db, load_config, radec_str2geojson, uid
+)
 import uvloop
 
 
 config = load_config(config_file='config.yaml')['kowalski']
 
-routes = web.RouteTableDef()
+# routes = web.RouteTableDef()
 
 
 ''' authentication and authorization '''

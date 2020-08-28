@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def check_configs(
-        cfgs=('config.defaults.yaml', 'docker-compose.defaults.yaml', 'docker-compose.traefik.defaults.yaml'),
+        cfgs=('config.defaults.yaml', 'docker-compose.defaults.yaml'),
         yes=False,
 ):
     # use config defaults if configs do not exist
@@ -33,17 +33,10 @@ def up(_args):
 
     cfgs = [
         'config.defaults.yaml',
+        'docker-compose.defaults.yaml'
     ]
 
-    if args.traefik:
-        cfgs.append('docker-compose.traefik.defaults.yaml')
-        command = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "up", "-d"]
-    elif args.fritz:
-        cfgs.append('docker-compose.fritz.defaults.yaml')
-        command = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "up", "-d"]
-    else:
-        cfgs.append('docker-compose.defaults.yaml')
-        command = ["docker-compose", "-f", 'docker-compose.yaml', "up", "-d"]
+    command = ["docker-compose", "-f", 'docker-compose.yaml', "up", "-d"]
 
     if args.build:
         command += ["--build"]
@@ -64,12 +57,7 @@ def down(_args):
     :return:
     """
     print('Shutting down Kowalski')
-    if args.traefik:
-        command = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "down"]
-    elif args.fritz:
-        command = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "down"]
-    else:
-        command = ["docker-compose", "-f", 'docker-compose.yaml', "down"]
+    command = ["docker-compose", "-f", 'docker-compose.yaml', "down"]
 
     subprocess.run(command)
 
@@ -84,18 +72,11 @@ def build(_args):
 
     cfgs = [
         'config.defaults.yaml',
+        'docker-compose.defaults.yaml'
     ]
 
-    # fixme: always use docker-compose.yaml
-    if args.traefik:
-        cfgs.append('docker-compose.traefik.defaults.yaml')
-        command = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "build"]
-    elif args.fritz:
-        cfgs.append('docker-compose.fritz.defaults.yaml')
-        command = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "build"]
-    else:
-        cfgs.append('docker-compose.defaults.yaml')
-        command = ["docker-compose", "-f", 'docker-compose.yaml', "build"]
+    # always use docker-compose.yaml
+    command = ["docker-compose", "-f", 'docker-compose.yaml', "build"]
 
     # check configuration
     print('Checking configuration')
@@ -139,24 +120,6 @@ if __name__ == "__main__":
 
     parsers["up"].add_argument(
         "--build", action="store_true", help="Force (re)building Kowalski's containers"
-    )
-    parsers["up"].add_argument(
-        "--traefik", action="store_true", help="Deploy Kowalski behind traefik"
-    )
-    parsers["up"].add_argument(
-        "--fritz", action="store_true", help="Deploy Kowalski alongside locally-running SkyPortal"
-    )
-    parsers["down"].add_argument(
-        "--traefik", action="store_true", help="Shut down Kowalski running behind traefik"
-    )
-    parsers["down"].add_argument(
-        "--fritz", action="store_true", help="Shut down Kowalski running alongside locally-running SkyPortal"
-    )
-    parsers["build"].add_argument(
-        "--traefik", action="store_true", help="Build Kowalski to run behind traefik"
-    )
-    parsers["build"].add_argument(
-        "--fritz", action="store_true", help="Build Kowalski to run alongside locally-running SkyPortal"
     )
 
     args = parser.parse_args()
