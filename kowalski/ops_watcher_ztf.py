@@ -1,0 +1,135 @@
+import sys
+import pymongo
+import traceback
+import datetime
+import os
+import time
+import pandas as pd
+import requests
+from utils import load_config, radec_str2geojson, datetime_to_jd
+
+
+''' load config and secrets '''
+config = load_config(config_file='config.yaml')['kowalski']
+
+
+def mongify(doc):
+
+    if doc['ra'] == -99. and doc['dec'] == -99.0:
+        return doc
+
+    # GeoJSON for 2D indexing
+    doc['coordinates'] = {}
+    # doc['coordinates']['epoch'] = 2000.0
+    _ra_str = doc['ra']
+    _dec_str = doc['dec']
+
+    _radec_str = [_ra_str, _dec_str]
+    _ra_geojson, _dec_geojson = radec_str2geojson(_ra_str, _dec_str)
+
+    doc['coordinates']['radec_str'] = _radec_str
+
+    doc['coordinates']['radec_geojson'] = {'type': 'Point',
+                                           'coordinates': [_ra_geojson, _dec_geojson]}
+
+    return doc
+
+
+def get_ops():
+    """
+        Fetch and ingest ZTF ops data
+    """
+
+    # connect to MongoDB:
+    print('Connecting to DB')
+    client, db = connect_to_db(config)
+    print('Successfully connected')
+
+    collection = 'ZTF_ops'
+
+    db[collection].create_index([('coordinates.radec_geojson', '2dsphere')], background=True)
+    db[collection].create_index([('utc_start', pymongo.ASCENDING),
+                                 ('utc_end', pymongo.ASCENDING),
+                                 ('fileroot', pymongo.ASCENDING)], background=True)
+    db[collection].create_index([('jd_start', pymongo.ASCENDING),
+                                 ('jd_end', pymongo.ASCENDING),
+                                 ('fileroot', pymongo.ASCENDING)], background=True)
+
+    # fetch full table
+    url = secrets['ztf_ops']['url']
+    r = requests.get(url, auth=(secrets['ztf_ops']['username'], secrets['ztf_ops']['password']))
+    if r.status_code == requests.codes.ok:
+        with open(os.path.join(config['path']['path_tmp'], 'allexp.tbl'), 'wb') as f:
+            f.write(r.content)
+    else:
+        print(datetime.datetime.utcnow())
+        raise Exception('Failed to fetch allexp.tbl')
+
+    latest = list(db[collection].find({}, sort=[["$natural", -1]], limit=1))
+    # print(latest)
+
+    df = pd.read_fwf(os.path.join(config['path']['path_tmp'], 'allexp.tbl'), comment='|', header=None,
+                     names=['utc_start', 'sun_elevation',
+                            'exp', 'filter', 'type', 'field', 'pid',
+                            'ra', 'dec', 'slew', 'wait', 'fileroot', 'programpi', 'qcomment'])
+
+    # drop comments:
+    comments = df['utc_start'] == 'UT_START'
+    df = df.loc[~comments]
+
+    for col in ['sun_elevation', 'exp', 'filter', 'field', 'pid']:
+        df[col] = df[col].apply(lambda x: int(x))
+    for col in ['ra', 'dec', 'slew', 'wait']:
+        df[col] = df[col].apply(lambda x: float(x))
+
+    df['utc_start'] = df['utc_start'].apply(lambda x: datetime.datetime.strptime(x, '%Y-%m-%dT%H:%M:%S.%f'))
+    df['utc_end'] = df['utc_start'].add(df['exp'].apply(lambda x: datetime.timedelta(seconds=x)))
+
+    df['jd_start'] = df['utc_start'].apply(lambda x: jd(x))
+    df['jd_end'] = df['utc_end'].apply(lambda x: jd(x))
+
+    # drop rows with utc_start <= c['utc_start]
+    if len(latest) > 0:
+        new = df['jd_start'] > latest[0].get('jd_start', 0)
+
+        if sum(new):
+            df = df.loc[new]
+        else:
+            # no new data? take a nap...
+            # close connection to db
+            client.close()
+            print('Disconnected from db')
+            return
+
+    documents = df.to_dict('records')
+
+    documents = [mongify(doc) for doc in documents]
+
+    insert_multiple_db_entries(db, _collection=collection, _db_entries=documents, _verbose=False)
+
+    # close connection to db
+    client.close()
+    print('Disconnected from db')
+
+
+def main():
+
+    while True:
+        try:
+            get_ops()
+
+        except KeyboardInterrupt:
+            sys.stderr.write('Aborted by user\n')
+            sys.exit()
+
+        except Exception as e:
+            print(str(e))
+            traceback.print_exc()
+
+        #
+        time.sleep(600)
+
+
+if __name__ == '__main__':
+
+    main()

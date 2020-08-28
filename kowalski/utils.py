@@ -7,6 +7,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from numba import jit
 import numpy as np
 import os
+import pymongo
+from pymongo.errors import BulkWriteError
 import secrets
 import string
 import traceback
@@ -101,6 +103,83 @@ async def add_admin(_mongo, config):
             print(f'Got error: {str(e)}')
             _err = traceback.format_exc()
             print(_err)
+
+
+class Mongo(object):
+    def __init__(
+            self,
+            host: str = '127.0.0.1', port: str = '27017',
+            username: str = None, password: str = None,
+            db: str = None,
+            verbose=0,
+            **kwargs
+    ):
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+
+        self.client = pymongo.MongoClient(host=self.host, port=self.port)
+        self.db = self.client[db]
+        # authenticate
+        self.db.authenticate(self.username, self.password)
+
+        self.verbose = verbose
+
+    def insert_one(self, collection: str, document: dict, transaction: bool = True, **kwargs):
+        try:
+            if transaction:
+                with self.client.start_session() as session:
+                    with session.start_transaction():
+                        self.db[collection].insert_one(document, session=session)
+            else:
+                self.db[collection].insert_one(document)
+        except Exception as e:
+            if self.verbose:
+                print(time_stamp(), f"Error inserting document into collection {collection}: {str(e)}")
+                traceback.print_exc()
+
+    def insert_many(self, collection: str, documents: list, transaction: bool = True, **kwargs):
+        ordered = kwargs.get("ordered", False)
+        try:
+            if transaction:
+                with self.client.start_session() as session:
+                    with session.start_transaction():
+                        self.db[collection].insert_many(documents, ordered=ordered, session=session)
+            else:
+                self.db[collection].insert_many(documents, ordered=ordered)
+        except BulkWriteError as bwe:
+            if self.verbose:
+                print(time_stamp(), f"Error inserting documents into collection {collection}: {str(bwe.details)}")
+                traceback.print_exc()
+        except Exception as e:
+            if self.verbose:
+                print(time_stamp(), f"Error inserting documents into collection {collection}: {str(e)}")
+                traceback.print_exc()
+
+    def update_one(self, collection: str, filt: dict, update: dict, transaction: bool = True, **kwargs):
+        upsert = kwargs.get("upsert", True)
+
+        try:
+            if transaction:
+                with self.client.start_session() as session:
+                    with session.start_transaction():
+                        self.db[collection].update_one(
+                            filter=filt,
+                            update=update,
+                            upsert=upsert,
+                            session=session,
+                        )
+            else:
+                self.db[collection].update_one(
+                    filter=filt,
+                    update=update,
+                    upsert=upsert
+                )
+        except Exception as e:
+            if self.verbose:
+                print(time_stamp(), f"Error inserting document into collection {collection}: {str(e)}")
+                traceback.print_exc()
 
 
 def radec_str2rad(_ra_str, _dec_str):
