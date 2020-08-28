@@ -6,7 +6,13 @@ import os
 import time
 import pandas as pd
 import requests
-from utils import load_config, radec_str2geojson, datetime_to_jd
+from utils import (
+    datetime_to_jd,
+    load_config,
+    Mongo,
+    radec_str2geojson,
+    time_stamp
+)
 
 
 ''' load config and secrets '''
@@ -19,7 +25,7 @@ def mongify(doc):
         return doc
 
     # GeoJSON for 2D indexing
-    doc['coordinates'] = {}
+    doc['coordinates'] = dict()
     # doc['coordinates']['epoch'] = 2000.0
     _ra_str = doc['ra']
     _dec_str = doc['dec']
@@ -41,37 +47,67 @@ def get_ops():
     """
 
     # connect to MongoDB:
-    print('Connecting to DB')
-    client, db = connect_to_db(config)
-    print('Successfully connected')
+    print(f'{time_stamp()}: Connecting to DB.')
+    mongo = Mongo(
+        host=config['database']['host'],
+        port=config['database']['port'],
+        username=config['database']['username'],
+        password=config['database']['password'],
+        db=config['database']['db']
+    )
+    print(f'{time_stamp()}: Successfully connected')
 
     collection = 'ZTF_ops'
 
-    db[collection].create_index([('coordinates.radec_geojson', '2dsphere')], background=True)
-    db[collection].create_index([('utc_start', pymongo.ASCENDING),
-                                 ('utc_end', pymongo.ASCENDING),
-                                 ('fileroot', pymongo.ASCENDING)], background=True)
-    db[collection].create_index([('jd_start', pymongo.ASCENDING),
-                                 ('jd_end', pymongo.ASCENDING),
-                                 ('fileroot', pymongo.ASCENDING)], background=True)
+    mongo.db[collection].create_index(
+        [('coordinates.radec_geojson', '2dsphere')],
+        background=True
+    )
+    mongo.db[collection].create_index(
+        [
+            ('utc_start', pymongo.ASCENDING),
+            ('utc_end', pymongo.ASCENDING),
+            ('fileroot', pymongo.ASCENDING)
+        ],
+        background=True
+    )
+    mongo.db[collection].create_index(
+        [
+            ('jd_start', pymongo.ASCENDING),
+            ('jd_end', pymongo.ASCENDING),
+            ('fileroot', pymongo.ASCENDING)
+        ],
+        background=True
+    )
+    mongo.db[collection].create_index(
+        [
+            ('jd_start', pymongo.DESCENDING),
+            ('pid', pymongo.ASCENDING),
+            ('field', pymongo.ASCENDING)
+        ],
+        background=True
+    )
 
     # fetch full table
-    url = secrets['ztf_ops']['url']
-    r = requests.get(url, auth=(secrets['ztf_ops']['username'], secrets['ztf_ops']['password']))
+    url = config['ztf_ops']['url']
+    r = requests.get(url, auth=(config['ztf_ops']['username'], config['ztf_ops']['password']))
     if r.status_code == requests.codes.ok:
         with open(os.path.join(config['path']['path_tmp'], 'allexp.tbl'), 'wb') as f:
             f.write(r.content)
     else:
-        print(datetime.datetime.utcnow())
-        raise Exception('Failed to fetch allexp.tbl')
+        raise Exception(f'{time_stamp()}: Failed to fetch allexp.tbl')
 
-    latest = list(db[collection].find({}, sort=[["$natural", -1]], limit=1))
-    # print(latest)
+    latest = list(mongo.db[collection].find({}, sort=[["$natural", -1]], limit=1))
 
-    df = pd.read_fwf(os.path.join(config['path']['path_tmp'], 'allexp.tbl'), comment='|', header=None,
-                     names=['utc_start', 'sun_elevation',
-                            'exp', 'filter', 'type', 'field', 'pid',
-                            'ra', 'dec', 'slew', 'wait', 'fileroot', 'programpi', 'qcomment'])
+    df = pd.read_fwf(
+        os.path.join(config['path']['tmp'], 'allexp.tbl'),
+        comment='|',
+        header=None,
+        names=[
+            'utc_start', 'sun_elevation', 'exp', 'filter', 'type', 'field', 'pid',
+            'ra', 'dec', 'slew', 'wait', 'fileroot', 'programpi', 'qcomment'
+        ]
+    )
 
     # drop comments:
     comments = df['utc_start'] == 'UT_START'
@@ -85,8 +121,8 @@ def get_ops():
     df['utc_start'] = df['utc_start'].apply(lambda x: datetime.datetime.strptime(x, '%Y-%m-%dT%H:%M:%S.%f'))
     df['utc_end'] = df['utc_start'].add(df['exp'].apply(lambda x: datetime.timedelta(seconds=x)))
 
-    df['jd_start'] = df['utc_start'].apply(lambda x: jd(x))
-    df['jd_end'] = df['utc_end'].apply(lambda x: jd(x))
+    df['jd_start'] = df['utc_start'].apply(lambda x: datetime_to_jd(x))
+    df['jd_end'] = df['utc_end'].apply(lambda x: datetime_to_jd(x))
 
     # drop rows with utc_start <= c['utc_start]
     if len(latest) > 0:
@@ -96,20 +132,20 @@ def get_ops():
             df = df.loc[new]
         else:
             # no new data? take a nap...
+            print(f'{time_stamp()}: Non new data found.')
             # close connection to db
-            client.close()
-            print('Disconnected from db')
+            mongo.client.close()
+            print(f'{time_stamp()}: Disconnected from db.')
             return
 
     documents = df.to_dict('records')
-
     documents = [mongify(doc) for doc in documents]
 
-    insert_multiple_db_entries(db, _collection=collection, _db_entries=documents, _verbose=False)
+    mongo.insert_many(collection=collection, documents=documents, transaction=True)
 
     # close connection to db
-    client.close()
-    print('Disconnected from db')
+    mongo.client.close()
+    print(f'{time_stamp()}: Disconnected from db.')
 
 
 def main():
@@ -119,7 +155,7 @@ def main():
             get_ops()
 
         except KeyboardInterrupt:
-            sys.stderr.write('Aborted by user\n')
+            sys.stderr.write(f'{time_stamp()}: Aborted by user\n')
             sys.exit()
 
         except Exception as e:
@@ -127,7 +163,7 @@ def main():
             traceback.print_exc()
 
         #
-        time.sleep(600)
+        time.sleep(300)
 
 
 if __name__ == '__main__':
