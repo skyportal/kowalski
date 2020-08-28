@@ -72,6 +72,12 @@ In `docker-compose.yaml`:
 ./kowalski.py test
 ```
 
-## API docs
+## Shut down `kowalski`
+
+```bash
+./kowalski.py down
+```
+
+## Docs
 
 OpenAPI specs are to be found under `/docs/api` once `kowalski` is up and running.
