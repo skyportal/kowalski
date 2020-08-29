@@ -112,20 +112,25 @@ def seed(arguments):
             choices=dumps
         ).ask()
 
+        command = [
+            "docker",
+            "exec",
+            "-i",
+            "kowalski_mongo_1",
+            "mongorestore",
+            f"-u={config['database']['admin_username']}",
+            f"-p={config['database']['admin_password']}",
+            "--authenticationDatabase=admin",
+            "--archive"
+        ]
+
+        if arguments.drop:
+            command.append("--drop")
+
         for dump in answer:
             with open(f"{path / dump}") as f:
                 subprocess.call(
-                    [
-                        "docker",
-                        "exec",
-                        "-i",
-                        "kowalski_mongo_1",
-                        "mongorestore",
-                        f"-u={config['database']['admin_username']}",
-                        f"-p={config['database']['admin_password']}",
-                        "--authenticationDatabase=admin",
-                        f"--archive"
-                    ],
+                    command,
                     stdin=f
                 )
 
@@ -177,6 +182,9 @@ if __name__ == "__main__":
     )
     parsers["seed"].add_argument(
         "--gcs", type=str, help="Google Cloud Storage bucket name to look for collection dumps"
+    )
+    parsers["seed"].add_argument(
+        "--drop", action="store_true", help="Drop collections before ingestion"
     )
 
     args = parser.parse_args()
