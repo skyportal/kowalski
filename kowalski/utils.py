@@ -126,7 +126,9 @@ class Mongo(object):
 
         self.verbose = verbose
 
-    def insert_one(self, collection: str, document: dict, transaction: bool = True, **kwargs):
+    def insert_one(self, collection: str, document: dict, transaction: bool = False, **kwargs):
+        # note to future me: single-document operations in MongoDB are atomic
+        # turn on transactions only if running a replica set
         try:
             if transaction:
                 with self.client.start_session() as session:
@@ -139,7 +141,7 @@ class Mongo(object):
                 print(time_stamp(), f"Error inserting document into collection {collection}: {str(e)}")
                 traceback.print_exc()
 
-    def insert_many(self, collection: str, documents: list, transaction: bool = True, **kwargs):
+    def insert_many(self, collection: str, documents: list, transaction: bool = False, **kwargs):
         ordered = kwargs.get("ordered", False)
         try:
             if transaction:
@@ -157,7 +159,7 @@ class Mongo(object):
                 print(time_stamp(), f"Error inserting documents into collection {collection}: {str(e)}")
                 traceback.print_exc()
 
-    def update_one(self, collection: str, filt: dict, update: dict, transaction: bool = True, **kwargs):
+    def update_one(self, collection: str, filt: dict, update: dict, transaction: bool = False, **kwargs):
         upsert = kwargs.get("upsert", True)
 
         try:

@@ -53,12 +53,14 @@ def get_ops():
         port=config['database']['port'],
         username=config['database']['username'],
         password=config['database']['password'],
-        db=config['database']['db']
+        db=config['database']['db'],
+        verbose=0
     )
-    print(f'{time_stamp()}: Successfully connected')
+    print(f'{time_stamp()}: Successfully connected.')
 
     collection = 'ZTF_ops'
 
+    print(f'{time_stamp()}: Checking indexes.')
     mongo.db[collection].create_index(
         [('coordinates.radec_geojson', '2dsphere')],
         background=True
@@ -89,16 +91,18 @@ def get_ops():
     )
 
     # fetch full table
+    print(f'{time_stamp()}: Fetching data.')
     url = config['ztf_ops']['url']
     r = requests.get(url, auth=(config['ztf_ops']['username'], config['ztf_ops']['password']))
     if r.status_code == requests.codes.ok:
-        with open(os.path.join(config['path']['path_tmp'], 'allexp.tbl'), 'wb') as f:
+        with open(os.path.join(config['path']['tmp'], 'allexp.tbl'), 'wb') as f:
             f.write(r.content)
     else:
         raise Exception(f'{time_stamp()}: Failed to fetch allexp.tbl')
 
     latest = list(mongo.db[collection].find({}, sort=[["$natural", -1]], limit=1))
 
+    print(f'{time_stamp()}: Loading data.')
     df = pd.read_fwf(
         os.path.join(config['path']['tmp'], 'allexp.tbl'),
         comment='|',
@@ -129,6 +133,7 @@ def get_ops():
         new = df['jd_start'] > latest[0].get('jd_start', 0)
 
         if sum(new):
+            print(f'{time_stamp()}: Found {sum(new)} new records.')
             df = df.loc[new]
         else:
             # no new data? take a nap...
@@ -140,6 +145,8 @@ def get_ops():
 
     documents = df.to_dict('records')
     documents = [mongify(doc) for doc in documents]
+
+    print(f'{time_stamp()}: Inserting {len(documents)} documents.')
 
     mongo.insert_many(collection=collection, documents=documents, transaction=True)
 
