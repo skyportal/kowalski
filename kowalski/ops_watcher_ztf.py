@@ -148,7 +148,7 @@ def get_ops():
 
     print(f'{time_stamp()}: Inserting {len(documents)} documents.')
 
-    mongo.insert_many(collection=collection, documents=documents, transaction=True)
+    mongo.insert_many(collection=collection, documents=documents)
 
     # close connection to db
     mongo.client.close()
