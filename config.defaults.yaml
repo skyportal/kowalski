@@ -197,6 +197,15 @@ kowalski:
             Teff: 1
             eTeff: 1
 
+        galaxy_redshifts_20200522:
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            z: 1
+            l: 1
+            b: 1
+
         GALEX:
           filter: {}
           projection:
@@ -251,15 +260,6 @@ kowalski:
             zMeanPSFMagErr: 1
             yMeanPSFMag: 1
             yMeanPSFMagErr: 1
-
-        galaxy_redshifts_20200522:
-          filter: {}
-          projection:
-            _id: 1
-            coordinates.radec_str: 1
-            z: 1
-            l: 1
-            b: 1
 
   ml_models:
     braai:

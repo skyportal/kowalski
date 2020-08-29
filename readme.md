@@ -12,6 +12,12 @@ cd kowalski
 
 Use the `kowalski.py` utility to manage `kowalski`.
 
+Make sure the requirements to run the `kowalski.py` utility are met, e.g.:
+
+```bash
+pip install -r requirements.txt
+```
+
 Start up `kowalski` using the default configs and secrets (copying them over):
 
 ```bash

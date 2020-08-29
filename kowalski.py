@@ -1,39 +1,39 @@
 #!/usr/bin/env python
 import argparse
+import pathlib
+import questionary
 import sys
 import subprocess
-from pathlib import Path
+import yaml
 
 
-def check_configs(
-        cfgs=('config.defaults.yaml', 'docker-compose.defaults.yaml'),
-        yes=False,
-):
-    # use config defaults if configs do not exist
+def check_configs(cfgs=('config.*yaml', 'docker-compose.*yaml')):
+    path = pathlib.Path(__file__).parent.absolute()
+
+    # use config defaults if configs do not exist?
     for cfg in cfgs:
-        c = cfg.replace('.defaults', '')
-        if not Path(c).exists():
-            cd = input(
-                f'{c} does not exist, do you want to use {cfg} (not recommended)? [y/N] '
-            ) if not yes else 'y'
-            if cd.lower() == 'y':
-                subprocess.run(["cp", f"{cfg}", f"{c}"])
-            else:
-                raise IOError(f'{c} does not exist, aborting')
+        c = cfg.replace('*', '')
+        if not (path / c).exists():
+            answer = questionary.select(
+                f"{c} does not exist, do you want to use one of the following"
+                " (not recommended without inspection)?",
+                choices=[p.name for p in path.glob(cfg)]
+            ).ask()
+            subprocess.run(["cp", f"{path / answer}", f"{path / c}"])
 
 
-def up(_args):
+def up(arguments):
     """
     Launch Kowalski
 
-    :param _args:
+    :param arguments:
     :return:
     """
     print('Spinning up Kowalski 🚀')
 
     cfgs = [
-        'config.defaults.yaml',
-        'docker-compose.defaults.yaml'
+        'config.*yaml',
+        'docker-compose.*yaml'
     ]
 
     command = ["docker-compose", "-f", 'docker-compose.yaml', "up", "-d"]
@@ -43,17 +43,17 @@ def up(_args):
 
     # check configuration
     print('Checking configuration')
-    check_configs(cfgs=cfgs, yes=_args.yes)
+    check_configs(cfgs=cfgs)
 
     # start up Kowalski
     print('Starting up')
     subprocess.run(command)
 
 
-def down(_args):
+def down(arguments):
     """
         Shut Kowalski down
-    :param _args:
+    :param arguments:
     :return:
     """
     print('Shutting down Kowalski')
@@ -62,17 +62,17 @@ def down(_args):
     subprocess.run(command)
 
 
-def build(_args):
+def build(arguments):
     """
         Build Kowalski's containers
-    :param _args:
+    :param arguments:
     :return:
     """
     print('Building Kowalski')
 
     cfgs = [
-        'config.defaults.yaml',
-        'docker-compose.defaults.yaml'
+        'config.*yaml',
+        'docker-compose.*yaml'
     ]
 
     # always use docker-compose.yaml
@@ -80,12 +80,64 @@ def build(_args):
 
     # check configuration
     print('Checking configuration')
-    check_configs(cfgs=cfgs, yes=_args.yes)
+    check_configs(cfgs=cfgs)
 
     subprocess.run(command)
+    
+    
+def seed(arguments):
+    print("Ingesting catalog data into a running Kowalski instance")
+
+    if (not arguments.local) and (not arguments.gcs):
+        raise ValueError("Source not set, aborting")
+
+    # check configuration
+    print('Checking configuration')
+    check_configs(cfgs=["config.*yaml"])
+
+    with open(pathlib.Path(__file__).parent.absolute() / "config.yaml") as cyaml:
+        config = yaml.load(cyaml, Loader=yaml.FullLoader)["kowalski"]
+
+    if arguments.local:
+        path = pathlib.Path(arguments.local).absolute()
+
+        dumps = [p.name for p in path.glob("*.dump")]
+
+        if len(dumps) == 0:
+            print(f"No dumps found under {path}")
+            return False
+
+        answer = questionary.checkbox(
+            f"Found the following collection dumps. Which ones would you like to ingest?",
+            choices=dumps
+        ).ask()
+
+        for dump in answer:
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "-it",
+                    "kowalski_mongo_1",
+                    "sh",
+                    "-c",
+                    "'mongorestore "
+                    f"-u={config['database']['admin_username']} "
+                    f"-p={config['database']['admin_password']} "
+                    "--authenticationDatabase=admin "
+                    f"--archive'"
+                    "<",
+                    f"{path / dump}"
+                ],
+                capture_output=False
+            )
+
+    if arguments.gcs:
+        # print("Make sure gsutil is properly configured")
+        raise NotImplementedError()
 
 
-def test(_args):
+def test(arguments):
     print('Running the test suite')
 
     print('Testing ZTF alert ingestion')
@@ -110,6 +162,7 @@ if __name__ == "__main__":
         ("up", "🐧🚀 Launch Kowalski"),
         ("down", "✋ Shut Kowalski down"),
         ("build", "Build Kowalski's containers"),
+        ("seed", "Ingest catalog data into Kowalski"),
         ("test", "Run the test suite"),
         ("help", "Print this message"),
     ]
@@ -120,6 +173,13 @@ if __name__ == "__main__":
 
     parsers["up"].add_argument(
         "--build", action="store_true", help="Force (re)building Kowalski's containers"
+    )
+
+    parsers["seed"].add_argument(
+        "--local", type=str, help="Local path to look for stored collection dumps"
+    )
+    parsers["seed"].add_argument(
+        "--gcs", type=str, help="Google Cloud Storage bucket name to look for collection dumps"
     )
 
     args = parser.parse_args()
