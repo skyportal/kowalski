@@ -113,24 +113,21 @@ def seed(arguments):
         ).ask()
 
         for dump in answer:
-            subprocess.run(
-                [
-                    "docker",
-                    "exec",
-                    "-it",
-                    "kowalski_mongo_1",
-                    "sh",
-                    "-c",
-                    "'mongorestore "
-                    f"-u={config['database']['admin_username']} "
-                    f"-p={config['database']['admin_password']} "
-                    "--authenticationDatabase=admin "
-                    f"--archive'"
-                    "<",
-                    f"{path / dump}"
-                ],
-                capture_output=False
-            )
+            with open(f"{path / dump}") as f:
+                subprocess.call(
+                    [
+                        "docker",
+                        "exec",
+                        "-i",
+                        "kowalski_mongo_1",
+                        "mongorestore",
+                        f"-u={config['database']['admin_username']}",
+                        f"-p={config['database']['admin_password']}",
+                        "--authenticationDatabase=admin",
+                        f"--archive"
+                    ],
+                    stdin=f
+                )
 
     if arguments.gcs:
         # print("Make sure gsutil is properly configured")
