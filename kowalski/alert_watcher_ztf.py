@@ -101,8 +101,8 @@ def make_photometry(a: dict, jd_start: float = None):
         dflc = dflc.loc[w]
 
     # replace NaN's with None's:
-    for col in ('magpsf', 'sigmapsf', 'diffmaglim'):
-        dflc[col] = dflc[col].replace({col: {np.nan: None}})
+    # for col in ('magpsf', 'sigmapsf', 'diffmaglim'):
+    #     dflc[col] = dflc[col].replace({col: {np.nan: None}})
 
     photometry = {
         "obj_id": a['objectId'],
