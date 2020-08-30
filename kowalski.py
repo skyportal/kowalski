@@ -1,110 +1,145 @@
 #!/usr/bin/env python
 import argparse
+import pathlib
+import questionary
 import sys
 import subprocess
-from pathlib import Path
+import yaml
 
 
-def check_configs(
-        cfgs=('config.defaults.yaml', 'docker-compose.defaults.yaml', 'docker-compose.traefik.defaults.yaml'),
-        yes=False,
-):
-    # use config defaults if configs do not exist
+def check_configs(cfgs=('config.*yaml', 'docker-compose.*yaml')):
+    path = pathlib.Path(__file__).parent.absolute()
+
+    # use config defaults if configs do not exist?
     for cfg in cfgs:
-        c = cfg.replace('.defaults', '')
-        if not Path(c).exists():
-            cd = input(
-                f'{c} does not exist, do you want to use {cfg} (not recommended)? [y/N] '
-            ) if not yes else 'y'
-            if cd.lower() == 'y':
-                subprocess.run(["cp", f"{cfg}", f"{c}"])
-            else:
-                raise IOError(f'{c} does not exist, aborting')
+        c = cfg.replace('*', '')
+        if not (path / c).exists():
+            answer = questionary.select(
+                f"{c} does not exist, do you want to use one of the following"
+                " (not recommended without inspection)?",
+                choices=[p.name for p in path.glob(cfg)]
+            ).ask()
+            subprocess.run(["cp", f"{path / answer}", f"{path / c}"])
 
 
-def up(_args):
+def up(arguments):
     """
     Launch Kowalski
 
-    :param _args:
+    :param arguments:
     :return:
     """
     print('Spinning up Kowalski 🚀')
 
     cfgs = [
-        'config.defaults.yaml',
+        'config.*yaml',
+        'docker-compose.*yaml'
     ]
 
-    if args.traefik:
-        cfgs.append('docker-compose.traefik.defaults.yaml')
-        command = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "up", "-d"]
-    elif args.fritz:
-        cfgs.append('docker-compose.fritz.defaults.yaml')
-        command = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "up", "-d"]
-    else:
-        cfgs.append('docker-compose.defaults.yaml')
-        command = ["docker-compose", "-f", 'docker-compose.yaml', "up", "-d"]
+    command = ["docker-compose", "-f", 'docker-compose.yaml', "up", "-d"]
 
     if args.build:
         command += ["--build"]
 
     # check configuration
     print('Checking configuration')
-    check_configs(cfgs=cfgs, yes=_args.yes)
+    check_configs(cfgs=cfgs)
 
     # start up Kowalski
     print('Starting up')
     subprocess.run(command)
 
 
-def down(_args):
+def down(arguments):
     """
         Shut Kowalski down
-    :param _args:
+    :param arguments:
     :return:
     """
     print('Shutting down Kowalski')
-    if args.traefik:
-        command = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "down"]
-    elif args.fritz:
-        command = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "down"]
-    else:
-        command = ["docker-compose", "-f", 'docker-compose.yaml', "down"]
+    command = ["docker-compose", "-f", 'docker-compose.yaml', "down"]
 
     subprocess.run(command)
 
 
-def build(_args):
+def build(arguments):
     """
         Build Kowalski's containers
-    :param _args:
+    :param arguments:
     :return:
     """
     print('Building Kowalski')
 
     cfgs = [
-        'config.defaults.yaml',
+        'config.*yaml',
+        'docker-compose.*yaml'
     ]
 
-    # fixme: always use docker-compose.yaml
-    if args.traefik:
-        cfgs.append('docker-compose.traefik.defaults.yaml')
-        command = ["docker-compose", "-f", 'docker-compose.traefik.yaml', "build"]
-    elif args.fritz:
-        cfgs.append('docker-compose.fritz.defaults.yaml')
-        command = ["docker-compose", "-f", 'docker-compose.fritz.yaml', "build"]
-    else:
-        cfgs.append('docker-compose.defaults.yaml')
-        command = ["docker-compose", "-f", 'docker-compose.yaml', "build"]
+    # always use docker-compose.yaml
+    command = ["docker-compose", "-f", 'docker-compose.yaml', "build"]
 
     # check configuration
     print('Checking configuration')
-    check_configs(cfgs=cfgs, yes=_args.yes)
+    check_configs(cfgs=cfgs)
 
     subprocess.run(command)
+    
+    
+def seed(arguments):
+    print("Ingesting catalog dumps into a running Kowalski instance")
+
+    if (not arguments.local) and (not arguments.gcs):
+        raise ValueError("Source not set, aborting")
+
+    # check configuration
+    print('Checking configuration')
+    check_configs(cfgs=["config.*yaml"])
+
+    with open(pathlib.Path(__file__).parent.absolute() / "config.yaml") as cyaml:
+        config = yaml.load(cyaml, Loader=yaml.FullLoader)["kowalski"]
+
+    if arguments.local:
+        path = pathlib.Path(arguments.local).absolute()
+
+        dumps = [p.name for p in path.glob("*.dump")]
+
+        if len(dumps) == 0:
+            print(f"No dumps found under {path}")
+            return False
+
+        answer = questionary.checkbox(
+            f"Found the following collection dumps. Which ones would you like to ingest?",
+            choices=dumps
+        ).ask()
+
+        command = [
+            "docker",
+            "exec",
+            "-i",
+            "kowalski_mongo_1",
+            "mongorestore",
+            f"-u={config['database']['admin_username']}",
+            f"-p={config['database']['admin_password']}",
+            "--authenticationDatabase=admin",
+            "--archive"
+        ]
+
+        if arguments.drop:
+            command.append("--drop")
+
+        for dump in answer:
+            with open(f"{path / dump}") as f:
+                subprocess.call(
+                    command,
+                    stdin=f
+                )
+
+    if arguments.gcs:
+        # print("Make sure gsutil is properly configured")
+        raise NotImplementedError()
 
 
-def test(_args):
+def test(arguments):
     print('Running the test suite')
 
     print('Testing ZTF alert ingestion')
@@ -127,8 +162,9 @@ if __name__ == "__main__":
 
     commands = [
         ("up", "🐧🚀 Launch Kowalski"),
-        ("down", "✋ Shut Kowalski down"),
+        ("down", "✋ Shut down Kowalski"),
         ("build", "Build Kowalski's containers"),
+        ("seed", "Ingest catalog dumps into Kowalski"),
         ("test", "Run the test suite"),
         ("help", "Print this message"),
     ]
@@ -140,23 +176,15 @@ if __name__ == "__main__":
     parsers["up"].add_argument(
         "--build", action="store_true", help="Force (re)building Kowalski's containers"
     )
-    parsers["up"].add_argument(
-        "--traefik", action="store_true", help="Deploy Kowalski behind traefik"
+
+    parsers["seed"].add_argument(
+        "--local", type=str, help="Local path to look for stored collection dumps"
     )
-    parsers["up"].add_argument(
-        "--fritz", action="store_true", help="Deploy Kowalski alongside locally-running SkyPortal"
+    parsers["seed"].add_argument(
+        "--gcs", type=str, help="Google Cloud Storage bucket name to look for collection dumps"
     )
-    parsers["down"].add_argument(
-        "--traefik", action="store_true", help="Shut down Kowalski running behind traefik"
-    )
-    parsers["down"].add_argument(
-        "--fritz", action="store_true", help="Shut down Kowalski running alongside locally-running SkyPortal"
-    )
-    parsers["build"].add_argument(
-        "--traefik", action="store_true", help="Build Kowalski to run behind traefik"
-    )
-    parsers["build"].add_argument(
-        "--fritz", action="store_true", help="Build Kowalski to run alongside locally-running SkyPortal"
+    parsers["seed"].add_argument(
+        "--drop", action="store_true", help="Drop collections before ingestion"
     )
 
     args = parser.parse_args()

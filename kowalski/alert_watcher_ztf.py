@@ -114,6 +114,8 @@ def make_photometry(a: dict, jd_start: float = None):
         "limiting_mag": dflc.diffmaglim.tolist(),
         "magsys": dflc.magsys.tolist(),
         "filter": dflc.ztf_filter.tolist(),
+        "ra": dflc.ra.tolist(),
+        "dec": dflc.dec.tolist(),
     }
 
     return photometry
