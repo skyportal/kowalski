@@ -86,7 +86,7 @@ def build(arguments):
     
     
 def seed(arguments):
-    print("Ingesting catalog data into a running Kowalski instance")
+    print("Ingesting catalog dumps into a running Kowalski instance")
 
     if (not arguments.local) and (not arguments.gcs):
         raise ValueError("Source not set, aborting")
@@ -162,9 +162,9 @@ if __name__ == "__main__":
 
     commands = [
         ("up", "🐧🚀 Launch Kowalski"),
-        ("down", "✋ Shut Kowalski down"),
+        ("down", "✋ Shut down Kowalski"),
         ("build", "Build Kowalski's containers"),
-        ("seed", "Ingest catalog data into Kowalski"),
+        ("seed", "Ingest catalog dumps into Kowalski"),
         ("test", "Run the test suite"),
         ("help", "Print this message"),
     ]
