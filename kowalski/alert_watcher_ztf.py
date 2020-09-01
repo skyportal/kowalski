@@ -787,13 +787,13 @@ class AlertConsumer(object):
                                     "score": alert['candidate'].get('drb', alert['candidate']['rb']),
 
                                     "altdata": {
-                                        'group_id': passed_filter.get("group_id"),
-                                        'filter_id': passed_filter.get("filter_id"),
-                                        'fid': passed_filter.get("fid"),
+                                        "group_id": passed_filter.get("group_id"),
+                                        "filter_id": passed_filter.get("filter_id"),
+                                        "fid": passed_filter.get("fid"),
                                     },
 
                                     "filter_ids": [passed_filter.get("filter_id")],
-                                    "passing_alert_id": alert['candid'],
+                                    "passing_alert_id": alert["candid"],
                                 }
                                 if verbose > 1:
                                     print(f'{time_stamp()}: {alert_thin}')
@@ -855,8 +855,33 @@ class AlertConsumer(object):
                                             )
                                         print(resp.json())
 
-                                    # todo: post comments:
-                                    passed_filter.get('data', dict()).get('annotations', dict())
+                                    # post comments:
+                                    annotations = passed_filter.get('data', dict()).get('annotations', dict())
+                                    for annotation in annotations:
+                                        tic = time.time()
+                                        resp = self.session.post(
+                                            f"{config['skyportal']['protocol']}://"
+                                            f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                                            "/api/comment",
+                                            json={
+                                                "obj_id": alert['objectId'],
+                                                "text": annotation,
+                                                "group_ids": [passed_filter.get("group_id")]
+                                            },
+                                            headers=self.session_headers,
+                                            timeout=2,
+                                        )
+                                        toc = time.time()
+                                        if verbose > 1:
+                                            print(f'{time_stamp()}: posting annotation to skyportal took {toc - tic} s')
+                                        if resp.json()['status'] == 'success':
+                                            print(f"{time_stamp()}: Posted {alert['candid']} annotation to SkyPortal")
+                                        else:
+                                            print(
+                                                f"{time_stamp()}: Failed to post {alert['candid']}"
+                                                " annotation to SkyPortal"
+                                            )
+                                            print(resp.json())
 
                             # post thumbnails for new candidates only
                             if not candidate_exists:
