@@ -147,7 +147,7 @@ kowalski:
         }
 
     xmatch:
-      cone_search_radius: 5
+      cone_search_radius: 2
       cone_search_unit: "arcsec"
       catalogs:
         2MASS_PSC:

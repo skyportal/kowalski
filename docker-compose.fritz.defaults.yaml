@@ -5,10 +5,9 @@ volumes:
   data:
 
 networks:
-  kowalski:
-  skyportal:
+  default:
     external:
-      name: skyportal_default
+      name: fritz_net
 
 services:
 
@@ -30,8 +29,6 @@ services:
     restart: always
     depends_on:
       - mongo
-    networks:
-      - kowalski
 
   ingester:
     build:
@@ -47,9 +44,6 @@ services:
     restart: always
     depends_on:
       - mongo
-    networks:
-      - kowalski
-      - skyportal
 
   mongo:
     image: mongo:latest
@@ -64,5 +58,3 @@ services:
     volumes:
       - mongodb:/data/db
     restart: always
-    networks:
-      - kowalski
