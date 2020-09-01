@@ -857,7 +857,7 @@ class AlertConsumer(object):
 
                                     # post comments:
                                     annotations = passed_filter.get('data', dict()).get('annotations', dict())
-                                    for annotation in annotations:
+                                    for k, v in annotations.items():
                                         tic = time.time()
                                         resp = self.session.post(
                                             f"{config['skyportal']['protocol']}://"
@@ -865,7 +865,7 @@ class AlertConsumer(object):
                                             "/api/comment",
                                             json={
                                                 "obj_id": alert['objectId'],
-                                                "text": annotation,
+                                                "text": f"{k}: {v}",
                                                 "group_ids": [passed_filter.get("group_id")]
                                             },
                                             headers=self.session_headers,
