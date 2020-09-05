@@ -15,7 +15,6 @@ services:
     build:
       context: .
       dockerfile: api.Dockerfile
-#    entrypoint: python -m pytest -s test_api.py
     image: dmitryduev/kowalski_api:latest
     volumes:
       - data:/data
@@ -34,8 +33,6 @@ services:
     build:
       context: .
       dockerfile: ingester.Dockerfile
-#    entrypoint: supervisord -n -c supervisord_ingester.conf
-#    entrypoint: python -m pytest -s test_ingester.py
     image: dmitryduev/kowalski_ingester:latest
     volumes:
       - data:/data

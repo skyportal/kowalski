@@ -765,7 +765,7 @@ class AlertConsumer(object):
                                 f"{config['skyportal']['protocol']}://"
                                 f"{config['skyportal']['host']}:{config['skyportal']['port']}"
                                 f"/api/candidates/{alert['objectId']}",
-                                headers=self.session_headers, timeout=2,
+                                headers=self.session_headers, timeout=5,
                             )
                             toc = time.time()
                             candidate_exists = resp.json()['status'] == 'success'
@@ -804,7 +804,7 @@ class AlertConsumer(object):
                                         f"{config['skyportal']['protocol']}://"
                                         f"{config['skyportal']['host']}:{config['skyportal']['port']}"
                                         "/api/candidates",
-                                        json=alert_thin, headers=self.session_headers, timeout=2,
+                                        json=alert_thin, headers=self.session_headers, timeout=5,
                                     )
                                     toc = time.time()
                                     if verbose > 1:
@@ -841,7 +841,7 @@ class AlertConsumer(object):
                                             f"{config['skyportal']['protocol']}://"
                                             f"{config['skyportal']['host']}:{config['skyportal']['port']}"
                                             "/api/photometry",
-                                            json=photometry, headers=self.session_headers, timeout=2,
+                                            json=photometry, headers=self.session_headers, timeout=5,
                                         )
                                         toc = time.time()
                                         if verbose > 1:
@@ -869,7 +869,7 @@ class AlertConsumer(object):
                                                 "group_ids": [passed_filter.get("group_id")]
                                             },
                                             headers=self.session_headers,
-                                            timeout=2,
+                                            timeout=5,
                                         )
                                         toc = time.time()
                                         if verbose > 1:
@@ -898,7 +898,7 @@ class AlertConsumer(object):
                                         f"{config['skyportal']['protocol']}://"
                                         f"{config['skyportal']['host']}:{config['skyportal']['port']}"
                                         "/api/thumbnail",
-                                        json=thumb, headers=self.session_headers, timeout=2,
+                                        json=thumb, headers=self.session_headers, timeout=5,
                                     )
                                     toc = time.time()
                                     if verbose > 1:
