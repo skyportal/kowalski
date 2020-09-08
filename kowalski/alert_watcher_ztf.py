@@ -100,14 +100,10 @@ def make_photometry(a: dict, jd_start: float = None):
         w = dflc['jd'] > jd_start
         dflc = dflc.loc[w]
 
-    # replace NaN's with None's:
-    # for col in ('magpsf', 'sigmapsf', 'diffmaglim'):
-    #     dflc[col] = dflc[col].replace({col: {np.nan: None}})
-
     photometry = {
         "obj_id": a['objectId'],
-        "group_ids": [1, ],
-        "instrument_id": 1,
+        "group_ids": [1, ],  # placeholder
+        "instrument_id": 1,  # placeholder
         "mjd": dflc.mjd.tolist(),
         "mag": dflc.magpsf.tolist(),
         "magerr": dflc.sigmapsf.tolist(),
@@ -417,6 +413,8 @@ class AlertConsumer(object):
 
     def __init__(self, topic, **kwargs):
 
+        self.verbose = kwargs.get("verbose", 0)
+
         # keep track of disconnected partitions
         self.num_disconnected_partitions = 0
         self.topic = topic
@@ -452,8 +450,9 @@ class AlertConsumer(object):
 
         self.config = config
 
-        # session to talk to SkyPortal
+        # posting candidates to SP?
         if config['misc']['post_to_skyportal']:
+            # session to talk to SkyPortal
             self.session = requests.Session()
             self.session_headers = {'Authorization': f"token {config['skyportal']['token']}"}
             # non-default settings:
@@ -466,6 +465,27 @@ class AlertConsumer(object):
             #                                            max_retries=mr, pool_block=pb))
             # self.session.mount('http://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
             #                                           max_retries=mr, pool_block=pb))
+
+            # ZTF instrument id
+            tic = time.time()
+            resp = self.session.get(
+                f"{config['skyportal']['protocol']}://"
+                f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                "/api/instrument?name=ZTF",
+                headers=self.session_headers, timeout=5,
+            )
+            toc = time.time()
+            if self.verbose > 1:
+                print(f'{time_stamp()}: Getting ZTF instrument_id from SkyPortal took {toc - tic} s')
+            if resp.json()['status'] == 'success' and len(resp.json()["data"]) == 1:
+                self.instrument_id = resp.json()["data"][0]["id"]
+                print(f"{time_stamp()}: Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
+            else:
+                print(
+                    f"{time_stamp()}: Failed to get ZTF instrument_id from SkyPortal"
+                )
+                raise ValueError("Failed to get ZTF instrument_id from SkyPortal")
+            print(resp.json())
 
         # MongoDB collections to store the alerts:
         self.collection_alerts = self.config['database']['collections']['alerts_ztf']
@@ -835,7 +855,9 @@ class AlertConsumer(object):
                                         print(f'{time_stamp()}: making alert photometry took {toc - tic} s')
 
                                     if len(photometry.get('mag', ())) > 0:
-                                        photometry['group_ids'] = [passed_filter.get("group_id")]
+                                        photometry["group_ids"] = [passed_filter.get("group_id")]
+                                        photometry["instrument_id"] = self.instrument_id
+
                                         tic = time.time()
                                         resp = self.session.post(
                                             f"{config['skyportal']['protocol']}://"
