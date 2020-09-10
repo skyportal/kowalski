@@ -249,7 +249,6 @@ def uid(length: int = 6, prefix: str = ''):
     return prefix + ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
-@jit
 def deg2hms(x):
     """Transform degrees to *hours:minutes:seconds* strings.
 
@@ -265,19 +264,15 @@ def deg2hms(x):
         form, hours:minutes:seconds.
 
     """
-    assert 0.0 <= x < 360.0, 'Bad RA value in degrees'
-    # ac = Angle(x, unit='degree')
-    # hms = str(ac.to_string(unit='hour', sep=':', pad=True))
-    # print(str(hms))
+    if not 0.0 <= x < 360.0:
+        raise ValueError('Bad RA value in degrees')
     _h = np.floor(x * 12.0 / 180.)
     _m = np.floor((x * 12.0 / 180. - _h) * 60.0)
     _s = ((x * 12.0 / 180. - _h) * 60.0 - _m) * 60.0
-    hms = '{:02.0f}:{:02.0f}:{:07.4f}'.format(_h, _m, _s)
-    # print(hms)
+    hms = f"{_h:02.0f}:{_m:02.0f}:{_s:07.4f}"
     return hms
 
 
-@jit
 def deg2dms(x):
     """Transform degrees to *degrees:arcminutes:arcseconds* strings.
 
@@ -292,15 +287,12 @@ def deg2dms(x):
         The input angle as a string, written as degrees:minutes:seconds.
 
     """
-    assert -90.0 <= x <= 90.0, 'Bad Dec value in degrees'
-    # ac = Angle(x, unit='degree')
-    # dms = str(ac.to_string(unit='degree', sep=':', pad=True))
-    # print(dms)
+    if not -90.0 <= x <= 90.0:
+        raise ValueError('Bad Dec value in degrees')
     _d = np.floor(abs(x)) * np.sign(x)
     _m = np.floor(np.abs(x - _d) * 60.0)
     _s = np.abs(np.abs(x - _d) * 60.0 - _m) * 60.0
-    dms = '{:02.0f}:{:02.0f}:{:06.3f}'.format(_d, _m, _s)
-    # print(dms)
+    dms = f"{_d:02.0f}:{_m:02.0f}:{_s:06.3f}"
     return dms
 
 
