@@ -93,7 +93,7 @@ def get_ops():
     # fetch full table
     print(f'{time_stamp()}: Fetching data.')
     url = config['ztf_ops']['url']
-    r = requests.get(url, auth=(config['ztf_ops']['username'], config['ztf_ops']['password']))
+    r = requests.get(url, auth=(config['ztf_ops']['username'], config['ztf_ops']['password']), verify=False)
     if r.status_code == requests.codes.ok:
         with open(os.path.join(config['path']['tmp'], 'allexp.tbl'), 'wb') as f:
             f.write(r.content)
