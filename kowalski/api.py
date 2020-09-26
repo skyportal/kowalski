@@ -2872,6 +2872,20 @@ async def zuds_alert_get_cutout(request):
         schema:
           type: string
           enum: [fits, png]
+      - in: query
+        name: scaling
+        description: "Scaling to use when rendering png"
+        required: false
+        schema:
+          type: string
+          enum: [linear, log, arcsinh, zscale]
+      - in: query
+        name: cmap
+        description: "Color map to use when rendering png"
+        required: false
+        schema:
+          type: string
+          enum: [bone, gray, cividis, viridis, magma]
 
     responses:
       '200':
@@ -2909,6 +2923,8 @@ async def zuds_alert_get_cutout(request):
         candid = int(request.match_info['candid'])
         cutout = request.match_info['cutout'].capitalize()
         file_format = request.match_info['file_format']
+        scaling = request.query.get('scaling', None)
+        cmap = request.query.get('cmap', None)
 
         known_cutouts = ['Science', 'Template', 'Difference']
         if cutout not in known_cutouts:
@@ -2920,6 +2936,21 @@ async def zuds_alert_get_cutout(request):
             return web.json_response({'status': 'error',
                                       'message': f'file format {file_format} not in {str(known_file_formats)}'},
                                      status=400)
+
+        default_scaling = {
+            'Science': 'log',
+            'Template': 'log',
+            'Difference': 'linear'
+        }
+        if (scaling is None) or (scaling.lower() not in ('log', 'linear', 'zscale', 'arcsinh')):
+            scaling = default_scaling[cutout]
+        else:
+            scaling = scaling.lower()
+
+        if (cmap is None) or (cmap.lower() not in ['bone', 'gray', 'cividis', 'viridis', 'magma']):
+            cmap = 'bone'
+        else:
+            cmap = cmap.lower()
 
         alert = await request.app['mongo']['ZUDS_alerts'].find_one({'candid': candid},
                                                                    {f'cutout{cutout}': 1},
@@ -2962,10 +2993,22 @@ async def zuds_alert_get_cutout(request):
             img = np.array(data_flipped_y)
             img = np.nan_to_num(img)
 
-            img_corrected = np.arcsinh(img - np.median(img))
-            vmax = np.percentile(img_corrected, 98)
-            vmin = np.percentile(img_corrected, 2)
-            plt.imshow(img_corrected, cmap='bone', origin='lower', vmax=vmax, vmin=vmin)
+            if scaling == 'log':
+                img[img <= 0] = np.median(img)
+                ax.imshow(img, cmap=cmap, norm=LogNorm(), origin='lower')
+            elif scaling == 'linear':
+                ax.imshow(img, cmap=cmap, origin='lower')
+            elif scaling == 'zscale':
+                interval = ZScaleInterval(
+                    nsamples=img.shape[0] * img.shape[1],
+                    contrast=0.045,
+                    krej=2.5
+                )
+                limits = interval.get_limits(img)
+                ax.imshow(img, origin='lower', cmap=cmap, vmin=limits[0], vmax=limits[1])
+            elif scaling == 'arcsinh':
+                ax.imshow(np.arcsinh(img - np.median(img)), cmap=cmap, origin='lower')
+
             plt.savefig(buff, dpi=42)
 
             buff.seek(0)
