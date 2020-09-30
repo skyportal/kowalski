@@ -4,7 +4,7 @@ Enhancing time-domain astronomy with the [Zwicky Transient Facility](https://ztf
 
 ## Ineract with a `Kowalski` instance
 
-`Kowalski` is an API-first system. The full OpenAPI specs can be found [here](https://kowalski.caltech.edu/docs/api/).
+`Kowalski` is an API-first system. The full OpenAPI specs can be found [here](https://kowalski.caltech.edu/docs/api/). Most users will only need the [queries section](https://kowalski.caltech.edu/docs/api/#tag/queries) of the specs.
 
 The easiest way to interact with a `Kowalski` instance is by using a python client [`penquins`](https://github.com/dmitryduev/penquins).
 
