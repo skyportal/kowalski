@@ -579,3 +579,28 @@ def mjd_to_datetime(_mjd):
     _jd = _mjd + 2400000.5
 
     return jd_to_datetime(_jd)
+
+
+def sdss_url(ra: float, dec: float):
+    """
+    Construct URL for public Sloan Digital Sky Survey (SDSS) cutout.
+
+    from SkyPortal
+    """
+    return (
+        f"http://skyserver.sdss.org/dr12/SkyserverWS/ImgCutout/getjpeg"
+        f"?ra={ra}&dec={dec}&scale=0.3&width=200&height=200"
+        f"&opt=G&query=&Grid=on"
+    )
+
+
+def desi_dr8_url(ra, dec):
+    """
+    Construct URL for public DESI DR8 cutout.
+
+    from SkyPortal
+    """
+    return (
+        f"http://legacysurvey.org/viewer/jpeg-cutout?ra={ra}"
+        f"&dec={dec}&size=200&layer=dr8&pixscale=0.262&bands=grz"
+    )

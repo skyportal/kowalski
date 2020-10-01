@@ -26,7 +26,8 @@ import time
 import traceback
 
 from utils import deg2dms, deg2hms, great_circle_distance, \
-    in_ellipse, load_config, radec2lb, time_stamp, datetime_to_jd
+    in_ellipse, load_config, radec2lb, time_stamp, datetime_to_jd, \
+    sdss_url, desi_dr8_url
 
 
 ''' load config and secrets '''

@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y default-jdk && \
 COPY kowalski/server.properties /kafka_$kafka_version/config/
 
 # ML models:
-ADD https://github.com/dmitryduev/kowalski/raw/master/kowalski/models/braai_d6_m9.h5 /app/models/
+ADD https://github.com/dmitryduev/braai/raw/master/models/braai_d6_m9.h5 /app/models/
 
 # copy over the test alerts
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
