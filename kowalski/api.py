@@ -1093,7 +1093,7 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
 
 
 # @routes.post('/api/queries')
-@admin_required
+@auth_required
 async def queries_post(request: web.Request) -> web.Response:
     """
     Query Kowalski

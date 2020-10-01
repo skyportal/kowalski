@@ -137,7 +137,7 @@ def get_ops():
             df = df.loc[new]
         else:
             # no new data? take a nap...
-            print(f'{time_stamp()}: Non new data found.')
+            print(f'{time_stamp()}: No new data found.')
             # close connection to db
             mongo.client.close()
             print(f'{time_stamp()}: Disconnected from db.')
