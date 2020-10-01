@@ -1,12 +1,19 @@
-# kowalski
+# Kowalski
 
 Enhancing time-domain astronomy with the [Zwicky Transient Facility](https://ztf.caltech.edu).
 
-## Spin up `kowalski`
+## Ineract with a `Kowalski` instance
+
+`Kowalski` is an API-first system. The full OpenAPI specs can be found [here](https://kowalski.caltech.edu/docs/api/). Most users will only need the [queries section](https://kowalski.caltech.edu/docs/api/#tag/queries) of the specs.
+
+The easiest way to interact with a `Kowalski` instance is by using a python client [`penquins`](https://github.com/dmitryduev/penquins).
+
+
+## Spin up your own `kowalski`
 
 Clone the repo and cd to the cloned directory:
 ```bash
-git clone https://github.com/dmitryduev/kowalski-dev.git kowalski
+git clone https://github.com/dmitryduev/kowalski.git
 cd kowalski
 ```
 
