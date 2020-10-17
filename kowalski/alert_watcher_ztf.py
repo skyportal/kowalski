@@ -108,7 +108,7 @@ def make_photometry(alert: dict, jd_start: float = None):
         [df, df_prv],
         ignore_index=True,
         sort=False
-    ).drop_duplicates(subset=["jd", "mag", "magerr"]).reset_index(drop=True).sort_values(by=['jd'])
+    ).drop_duplicates(subset=["jd", "magpsf"]).reset_index(drop=True).sort_values(by=['jd'])
 
     ztf_filters = {1: 'ztfg', 2: 'ztfr', 3: 'ztfi'}
     dflc['ztf_filter'] = dflc['fid'].apply(lambda x: ztf_filters[x])
@@ -407,7 +407,7 @@ def alert_filter__user_defined(
             )
             # passed filter? then len(passed_filter) must be = 1
             if len(filtered_data) == 1:
-                print(f'{time_stamp()}: {alert["candid"]} passed filter {_filter["fid"]}')
+                log(f'{alert["objectId"]} {alert["candid"]} passed filter {_filter["fid"]}')
                 passed_filters.append(
                     {
                         'group_id': _filter["group_id"],
@@ -440,7 +440,7 @@ class AlertConsumer(object):
 
     def __init__(self, topic, **kwargs):
 
-        self.verbose = kwargs.get("verbose", 0)
+        self.verbose = kwargs.get("verbose", 2)
 
         # keep track of disconnected partitions
         self.num_disconnected_partitions = 0
@@ -647,9 +647,6 @@ class AlertConsumer(object):
                 headers=self.session_headers
             )
 
-        if resp.status_code != requests.codes.ok:
-            print(f'{time_stamp()}: SkyPortal api call error')
-
         return resp
 
     @staticmethod
@@ -755,12 +752,12 @@ class AlertConsumer(object):
                 for passed_filter in passed_filters:
                     annotations = {
                         "obj_id": alert["objectId"],
-                        "origin": f"{passed_filters.get('group_id')}_{passed_filter.get('filter_id')}",
+                        "origin": f"{passed_filter.get('group_id')}_{passed_filter.get('filter_id')}",
                         "data": passed_filter.get('data', dict()).get('annotations', dict()),
                         "group_ids": [passed_filter.get("group_id")]
                     }
                     tic = time.time()
-                    resp = self.api_skyportal("POST", f"/api/annotations", annotations)
+                    resp = self.api_skyportal("POST", f"/api/annotation", annotations)
                     toc = time.time()
                     if self.verbose > 1:
                         log(f"Posting annotation for {alert['objectId']} to skyportal took {toc - tic} s")

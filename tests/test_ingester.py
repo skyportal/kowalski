@@ -14,14 +14,15 @@ from utils import load_config, time_stamp
 config = load_config(config_file='config.yaml')['kowalski']
 
 
-class Program(object):
-    def __init__(self, group_name="FRITZ_TEST_PROGRAM"):
+class Program:
+    def __init__(self, group_name="FRITZ_TEST", group_nickname="Fritz"):
         self.access_token = config['skyportal']['token']
         self.base_url = f"{config['skyportal']['protocol']}://" \
                         f"{config['skyportal']['host']}:{config['skyportal']['port']}"
         self.headers = {'Authorization': f'token {self.access_token}'}
 
         self.group_name = group_name
+        self.group_nickname = group_nickname
         self.group_id, self.filter_id = self.create()
 
     def get_groups(self):
@@ -37,7 +38,7 @@ class Program(object):
         assert 'data' in result
         assert 'user_groups' in result['data']
 
-        user_groups = {g['name']: g['id'] for g in result['data']['user_groups']}
+        user_groups = {g['name']: g['id'] for g in result['data']['user_accessible_groups']}
 
         return user_groups
 
@@ -69,7 +70,7 @@ class Program(object):
             # else, create a new group and add stream access to it
             resp = requests.post(
                 self.base_url + f"/api/groups",
-                json={"name": self.group_name},
+                json={"name": self.group_name, "nickname": self.group_nickname},
                 headers=self.headers, timeout=3,
             )
             result = resp.json()
@@ -273,7 +274,7 @@ class TestIngester(object):
             path_logs.mkdir(parents=True, exist_ok=True)
 
         print(f'{time_stamp()}: Setting up test program in Fritz')
-        program = Program(group_name="FRITZ_TEST_PROGRAM")
+        program = Program(group_name="FRITZ_TEST", group_nickname="Fritz")
 
         # clean up old Kafka logs
         print(f'{time_stamp()}: Cleaning up Kafka logs')
