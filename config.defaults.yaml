@@ -54,6 +54,7 @@ kowalski:
       queries: "queries"
       alerts_ztf: "ZTF_alerts"
       alerts_ztf_aux: "ZTF_alerts_aux"
+      alerts_ztf_filter: "ZTF_alerts_filter"
       alerts_zuds: "ZUDS_alerts"
       alerts_zuds_aux: "ZUDS_alerts_aux"
 

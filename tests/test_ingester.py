@@ -69,7 +69,7 @@ class Program(object):
             # else, create a new group and add stream access to it
             resp = requests.post(
                 self.base_url + f"/api/groups",
-                json={"name": self.group_name, "group_admins": ["kowalski@caltech.edu"]},
+                json={"name": self.group_name},
                 headers=self.headers, timeout=3,
             )
             result = resp.json()
@@ -403,8 +403,8 @@ class TestIngester(object):
         # shut down Kafka server and ZooKeeper
         time.sleep(10)
 
-        print(f'{time_stamp()}: Removing the test filter')
-        test_filter.remove()
+        # print(f'{time_stamp()}: Removing the test filter')
+        # test_filter.remove()
 
         print(f'{time_stamp()}: Shutting down Kafka Server at localhost:9092')
         # start the Kafka server:
