@@ -706,6 +706,112 @@ class AlertConsumer(object):
 
         return doc, prv_candidates
 
+    def alert_post_candidate(self, alert, filter_ids):
+        # post metadata with all filter_ids in single call to /api/candidates
+        alert_thin = {
+            "id": alert['objectId'],
+            "ra": alert['candidate'].get('ra'),
+            "dec": alert['candidate'].get('dec'),
+            "score": alert['candidate'].get('drb', alert['candidate']['rb']),
+            "filter_ids": filter_ids,
+            "passing_alert_id": alert["candid"],
+        }
+        if self.verbose > 1:
+            log(alert_thin)
+
+        tic = time.time()
+        resp = self.api_skyportal("POST", f"/api/candidates", alert_thin)
+        toc = time.time()
+        if self.verbose > 1:
+            log(f"Posting metadata to SkyPortal took {toc - tic} s")
+        if resp.json()['status'] == 'success':
+            log(f"Posted {alert['objectId']} {alert['candid']} metadata to SkyPortal")
+        else:
+            log(f"Failed to post {alert['objectId']} {alert['candid']} metadata to SkyPortal")
+            log(resp.json())
+
+    def alert_post_annotations(self, alert, passed_filters):
+        for passed_filter in passed_filters:
+            annotations = {
+                "obj_id": alert["objectId"],
+                "origin": f"{passed_filter.get('group_name')}:{passed_filter.get('filter_name')}",
+                "data": passed_filter.get('data', dict()).get('annotations', dict()),
+                "group_ids": [passed_filter.get("group_id")]
+            }
+            tic = time.time()
+            resp = self.api_skyportal("POST", f"/api/annotation", annotations)
+            toc = time.time()
+            if self.verbose > 1:
+                log(f"Posting annotation for {alert['objectId']} to skyportal took {toc - tic} s")
+            if resp.json()['status'] == 'success':
+                log(f"Posted {alert['objectId']} annotation to SkyPortal")
+            else:
+                log(f"Failed to post {alert['objectId']} annotation to SkyPortal")
+                log(resp.json())
+
+    def alert_post_thumbnails(self, alert):
+        for ttype, ztftype in [('new', 'Science'), ('ref', 'Template'), ('sub', 'Difference')]:
+            tic = time.time()
+            thumb = make_thumbnail(alert, ttype, ztftype)
+            toc = time.time()
+            if self.verbose > 1:
+                log(f"Making {ztftype} thumbnail took {toc - tic} s")
+
+            tic = time.time()
+            resp = self.api_skyportal("POST", f"/api/thumbnail", thumb)
+            toc = time.time()
+            if self.verbose > 1:
+                log(f"Posting {ztftype} thumbnail to SkyPortal took {toc - tic} s")
+
+            if resp.json()['status'] == 'success':
+                log(f"Posted {alert['objectId']} {alert['candid']} {ztftype} cutout to SkyPortal")
+            else:
+                log(f"Failed to post {alert['objectId']} {alert['candid']} {ztftype} cutout to SkyPortal")
+                log(resp.json())
+
+    def alert_post_photometry(self, alert, groups):
+        tic = time.time()
+        df_photometry = make_photometry(alert)
+        toc = time.time()
+        if self.verbose > 1:
+            log(f"Making alert photometry took {toc - tic} s")
+
+        # post data from different program_id's
+        for pid in set(df_photometry.programid.unique()):
+            group_ids = [f.get("group_id") for f in groups if pid in f.get("permissions", [1])]
+
+            if len(group_ids) > 0:
+                w = df_photometry.programid == int(pid)
+
+                photometry = {
+                    "obj_id": alert['objectId'],
+                    "group_ids": group_ids,
+                    "instrument_id": self.instrument_id,
+                    "mjd": df_photometry.loc[w, "mjd"].tolist(),
+                    "mag": df_photometry.loc[w, "magpsf"].tolist(),
+                    "magerr": df_photometry.loc[w, "sigmapsf"].tolist(),
+                    "limiting_mag": df_photometry.loc[w, "diffmaglim"].tolist(),
+                    "magsys": df_photometry.loc[w, "magsys"].tolist(),
+                    "filter": df_photometry.loc[w, "ztf_filter"].tolist(),
+                    "ra": df_photometry.loc[w, "ra"].tolist(),
+                    "dec": df_photometry.loc[w, "dec"].tolist(),
+                }
+
+                if len(photometry.get('mag', ())) > 0:
+                    tic = time.time()
+                    resp = self.api_skyportal("PUT", f"/api/photometry", photometry)
+                    toc = time.time()
+                    if self.verbose > 1:
+                        log(
+                            f"Posting photometry of {alert['objectId']} {alert['candid']}, "
+                            f"program_id={pid} to SkyPortal took {toc - tic} s"
+                        )
+                    if resp.json()['status'] == 'success':
+                        log(f"Posted {alert['objectId']} program_id={pid} photometry to SkyPortal")
+                    else:
+                        log(f"Failed to post {alert['objectId']} program_id={pid} photometry to SkyPortal")
+                    log(resp.json())
+
     def alert_sentinel_skyportal(self, alert, prv_candidates, passed_filters):
         """
         Post alerts to SkyPortal, if need be.
@@ -748,47 +854,12 @@ class AlertConsumer(object):
         if (not is_candidate) and (not is_source):
             # passed any filters?
             if len(passed_filters) > 0:
-                # post metadata with all filter_ids in single call to /api/candidates
-                alert_thin = {
-                    "id": alert['objectId'],
-                    "ra": alert['candidate'].get('ra'),
-                    "dec": alert['candidate'].get('dec'),
-                    "score": alert['candidate'].get('drb', alert['candidate']['rb']),
-                    "filter_ids": [f.get("filter_id") for f in passed_filters],
-                    "passing_alert_id": alert["candid"],
-                }
-                if self.verbose > 1:
-                    log(alert_thin)
-
-                tic = time.time()
-                resp = self.api_skyportal("POST", f"/api/candidates", alert_thin)
-                toc = time.time()
-                if self.verbose > 1:
-                    log(f"Posting metadata to SkyPortal took {toc - tic} s")
-                if resp.json()['status'] == 'success':
-                    log(f"Posted {alert['objectId']} {alert['candid']} metadata to SkyPortal")
-                else:
-                    log(f"Failed to post {alert['objectId']} {alert['candid']} metadata to SkyPortal")
-                    log(resp.json())
+                # post candidate
+                filter_ids = [f.get("filter_id") for f in passed_filters]
+                self.alert_post_candidate(alert, filter_ids)
 
                 # post annotations
-                for passed_filter in passed_filters:
-                    annotations = {
-                        "obj_id": alert["objectId"],
-                        "origin": f"{passed_filter.get('group_name')}:{passed_filter.get('filter_name')}",
-                        "data": passed_filter.get('data', dict()).get('annotations', dict()),
-                        "group_ids": [passed_filter.get("group_id")]
-                    }
-                    tic = time.time()
-                    resp = self.api_skyportal("POST", f"/api/annotation", annotations)
-                    toc = time.time()
-                    if self.verbose > 1:
-                        log(f"Posting annotation for {alert['objectId']} to skyportal took {toc - tic} s")
-                    if resp.json()['status'] == 'success':
-                        log(f"Posted {alert['objectId']} annotation to SkyPortal")
-                    else:
-                        log(f"Failed to post {alert['objectId']} annotation to SkyPortal")
-                        log(resp.json())
+                self.alert_post_annotations(alert, passed_filters)
 
                 # post full light curve
                 try:
@@ -801,82 +872,82 @@ class AlertConsumer(object):
                     # this should never happen, but just in case
                     log(e)
                     alert['prv_candidates'] = prv_candidates
-                tic = time.time()
-                df_photometry = make_photometry(alert)
-                toc = time.time()
-                if self.verbose > 1:
-                    log(f"Making alert photometry took {toc - tic} s")
 
-                # post data from different program_id's
-                for pid in set(df_photometry.programid.unique()):
-                    group_ids = [f.get("group_id") for f in passed_filters if pid in f.get("permissions", [1])]
-
-                    if len(group_ids) > 0:
-                        w = df_photometry.programid == int(pid)
-
-                        photometry = {
-                            "obj_id": alert['objectId'],
-                            "group_ids": group_ids,
-                            "instrument_id": self.instrument_id,
-                            "mjd": df_photometry.loc[w, "mjd"].tolist(),
-                            "mag": df_photometry.loc[w, "magpsf"].tolist(),
-                            "magerr": df_photometry.loc[w, "sigmapsf"].tolist(),
-                            "limiting_mag": df_photometry.loc[w, "diffmaglim"].tolist(),
-                            "magsys": df_photometry.loc[w, "magsys"].tolist(),
-                            "filter": df_photometry.loc[w, "ztf_filter"].tolist(),
-                            "ra": df_photometry.loc[w, "ra"].tolist(),
-                            "dec": df_photometry.loc[w, "dec"].tolist(),
-                        }
-
-                        if len(photometry.get('mag', ())) > 0:
-                            tic = time.time()
-                            resp = self.api_skyportal("PUT", f"/api/photometry", photometry)
-                            toc = time.time()
-                            if self.verbose > 1:
-                                log(
-                                    f"Posting photometry of {alert['objectId']} {alert['candid']}, "
-                                    f"program_id={pid} to SkyPortal took {toc - tic} s"
-                                )
-                            if resp.json()['status'] == 'success':
-                                log(f"Posted {alert['objectId']} program_id={pid} photometry to SkyPortal")
-                            else:
-                                log(f"Failed to post {alert['objectId']} program_id={pid} photometry to SkyPortal")
-                            log(resp.json())
+                self.alert_post_photometry(alert, passed_filters)
 
                 # post thumbnails
-                for ttype, ztftype in [('new', 'Science'), ('ref', 'Template'), ('sub', 'Difference')]:
-                    tic = time.time()
-                    thumb = make_thumbnail(alert, ttype, ztftype)
-                    toc = time.time()
-                    if self.verbose > 1:
-                        log(f"Making {ztftype} thumbnail took {toc - tic} s")
-
-                    tic = time.time()
-                    resp = self.api_skyportal("POST", f"/api/thumbnail", thumb)
-                    toc = time.time()
-                    if self.verbose > 1:
-                        log(f"Posting {ztftype} thumbnail to SkyPortal took {toc - tic} s")
-
-                    if resp.json()['status'] == 'success':
-                        log(f"Posted {alert['objectId']} {alert['candid']} {ztftype} cutout to SkyPortal")
-                    else:
-                        log(f"Failed to post {alert['objectId']} {alert['candid']} {ztftype} cutout to SkyPortal")
-                        log(resp.json())
+                self.alert_post_thumbnails(alert)
 
         # obj exists in SP:
         else:
             if len(passed_filters) > 0:
+                filter_ids = [f.get("filter_id") for f in passed_filters]
                 # already posted as a candidate?
                 if is_candidate:
-                    pass
-                    # todo: get filter_ids of saved candidate from SP
-                # todo: post to /api/candidates with new_filter_ids
+                    # get filter_ids of saved candidate from SP
+                    tic = time.time()
+                    resp = self.api_skyportal("GET", f"/api/candidates/{alert['objectId']}")
+                    toc = time.time()
+                    if self.verbose > 1:
+                        log(f"Getting candidate info on {alert['objectId']} took {toc - tic} s")
+                    if resp.json()['status'] == 'success':
+                        existing_filter_ids = resp.json()['data']["filter_ids"]
+                        filter_ids = list(set(filter_ids) - set(existing_filter_ids))
+                    else:
+                        log(f"Failed to get candidate info on {alert['objectId']}")
+
+                if len(filter_ids) > 0:
+                    # post candidate with new filter ids
+                    self.alert_post_candidate(alert, filter_ids)
+
+                    # post annotations
+                    self.alert_post_annotations(
+                        alert,
+                        [pf for pf in passed_filters if pf.get("filter_id") in filter_ids]
+                    )
+
+            groups = passed_filters
+            group_ids = [f.get("group_id") for f in passed_filters]
             # already saved as a source?
             if is_source:
-                pass
-                # todo: get group_ids
+                # get info on the corresponding groups:
+                tic = time.time()
+                resp = self.api_skyportal("GET", f"/api/sources/{alert['objectId']}")
+                toc = time.time()
+                if self.verbose > 1:
+                    log(f"Getting source info on {alert['objectId']} took {toc - tic} s")
+                if resp.json()['status'] == 'success':
+                    existing_group_ids = [g["id"] for g in resp.json()['data']["groups"]]
+                    for group_id in set(existing_group_ids) - set(group_ids):
+                        tic = time.time()
+                        resp = self.api_skyportal("GET", f"/api/groups/{group_id}")
+                        toc = time.time()
+                        if self.verbose > 1:
+                            log(f"Getting info on group id={group_id} from SkyPortal took {toc - tic} s")
+                            log(resp.json())
+                        if resp.json()['status'] == 'success':
+                            selector = {1}
+                            for stream in resp.json()['data']["streams"]:
+                                if "ztf" in stream["name"].lower():
+                                    selector.update(set(stream["altdata"].get("selector", [])))
 
-            # todo: post alert photometry with all group_ids in single call to /api/photometry
+                            selector = list(selector)
+
+                            groups.append(
+                                {
+                                    "group_id": group_id,
+                                    "permissions": selector
+                                }
+                            )
+                        else:
+                            log(f"Failed to get info on group id={group_id} from SkyPortal")
+                else:
+                    log(f"Failed to get source info on {alert['objectId']}")
+
+            # post alert photometry with all group_ids in single call to /api/photometry
+            alert['prv_candidates'] = prv_candidates
+
+            self.alert_post_photometry(alert, groups)
 
     def poll(self, verbose=2):
         """
