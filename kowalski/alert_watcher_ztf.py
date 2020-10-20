@@ -101,10 +101,10 @@ def log(message):
 
 def make_photometry(alert: dict, jd_start: float = None):
     try:
-        a = deepcopy(alert)
-        df_candidate = pd.DataFrame(a['candidate'], index=[0])
+        alert = deepcopy(alert)
+        df_candidate = pd.DataFrame(alert['candidate'], index=[0])
 
-        df_prv_candidates = pd.DataFrame(a['prv_candidates'])
+        df_prv_candidates = pd.DataFrame(alert['prv_candidates'])
         df_light_curve = pd.concat(
             [df_candidate, df_prv_candidates],
             ignore_index=True,
@@ -142,9 +142,9 @@ def make_photometry(alert: dict, jd_start: float = None):
 
 
 def make_thumbnail(alert, ttype, ztftype):
-    a = deepcopy(alert)
+    alert = deepcopy(alert)
 
-    cutout_data = a[f'cutout{ztftype}']['stampData']
+    cutout_data = alert[f'cutout{ztftype}']['stampData']
     with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
         with fits.open(io.BytesIO(f.read())) as hdu:
             header = hdu[0].header
@@ -164,16 +164,16 @@ def make_thumbnail(alert, ttype, ztftype):
 
     if ztftype != 'Difference':
         img[img <= 0] = np.median(img)
-        plt.imshow(img, cmap=plt.cm.bone, norm=LogNorm(), origin='lower')
+        plt.imshow(img, cmap="bone", norm=LogNorm(), origin='lower')
     else:
-        plt.imshow(img, cmap=plt.cm.bone, origin='lower')
+        plt.imshow(img, cmap="bone", origin='lower')
     plt.savefig(buff, dpi=42)
 
     buff.seek(0)
     plt.close('all')
 
     thumb = {
-        "obj_id": a["objectId"],
+        "obj_id": alert["objectId"],
         "data": base64.b64encode(buff.read()).decode("utf-8"),
         "ttype": ttype,
     }
@@ -330,11 +330,12 @@ def alert_filter__xmatch_clu(database, alert, size_margin=3, clu_version='CLU_20
         object_position_query['coordinates.radec_geojson'] = {
             '$geoWithin': {'$centerSphere': [[ra_geojson, dec_geojson], cone_search_radius_clu]}
         }
-        s = database[clu_version].find(
-            {**object_position_query, **catalog_filter},
-            {**catalog_projection}
+        galaxies = list(
+            database[clu_version].find(
+                {**object_position_query, **catalog_filter},
+                {**catalog_projection}
+            )
         )
-        galaxies = list(s)
 
         # these guys are very big, so check them separately
         M31 = {
@@ -506,14 +507,14 @@ class AlertConsumer(object):
 
         # ML models:
         self.ml_models = dict()
-        for m in config['ml_models']:
+        for model in config['ml_models']:
             try:
-                m_v = config["ml_models"][m]["version"]
+                model_version = config["ml_models"][model]["version"]
                 # todo: allow other formats such as SavedModel
-                mf = os.path.join(config["path"]["ml_models"], f'{m}_{m_v}.h5')
-                self.ml_models[m] = {'model': load_model(mf), 'version': m_v}
+                model_filepath = os.path.join(config["path"]["ml_models"], f'{model}_{model_version}.h5')
+                self.ml_models[model] = {'model': load_model(model_filepath), 'version': model_version}
             except Exception as e:
-                log(f"Error loading ML model {m}: {str(e)}")
+                log(f"Error loading ML model {model}: {str(e)}")
                 _err = traceback.format_exc()
                 log(_err)
                 continue
@@ -538,12 +539,12 @@ class AlertConsumer(object):
             self.instrument_id = 1
             try:
                 tic = time.time()
-                resp = self.api_skyportal("GET", "/api/instrument", {"name": "ZTF"})
+                response = self.api_skyportal("GET", "/api/instrument", {"name": "ZTF"})
                 toc = time.time()
                 if self.verbose > 1:
                     log(f"Getting ZTF instrument_id from SkyPortal took {toc - tic} s")
-                if resp.json()['status'] == 'success' and len(resp.json()["data"]) > 0:
-                    self.instrument_id = resp.json()["data"][0]["id"]
+                if response.json()['status'] == 'success' and len(response.json()["data"]) > 0:
+                    self.instrument_id = response.json()["data"][0]["id"]
                     log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
                 else:
                     log("Failed to get ZTF instrument_id from SkyPortal")
@@ -598,42 +599,42 @@ class AlertConsumer(object):
             #       clean up if necessary
 
             self.filter_templates = []
-            for ft in active_filters:
+            for active_filter in active_filters:
                 # collect additional info from SkyPortal
                 tic = time.time()
-                resp = self.api_skyportal("GET", f"/api/groups/{ft['group_id']}")
+                response = self.api_skyportal("GET", f"/api/groups/{active_filter['group_id']}")
                 toc = time.time()
                 if self.verbose > 1:
-                    log(f"Getting info on group id={ft['group_id']} from SkyPortal took {toc - tic} s")
-                    log(resp.json())
-                if resp.json()['status'] == 'success':
+                    log(f"Getting info on group id={active_filter['group_id']} from SkyPortal took {toc - tic} s")
+                    log(response.json())
+                if response.json()['status'] == 'success':
                     group_name = (
-                        resp.json()["data"]["nickname"]
-                        if resp.json()["data"]["nickname"] is not None
-                        else resp.json()["data"]["name"]
+                        response.json()["data"]["nickname"]
+                        if response.json()["data"]["nickname"] is not None
+                        else response.json()["data"]["name"]
                     )
                     filter_name = [
-                        f["name"] for f in resp.json()["data"]["filters"] if f["id"] == ft['filter_id']
+                        f["name"] for f in response.json()["data"]["filters"] if f["id"] == active_filter['filter_id']
                     ][0]
                 else:
-                    log(f"Failed to get info on group id={ft['group_id']} from SkyPortal")
+                    log(f"Failed to get info on group id={active_filter['group_id']} from SkyPortal")
                     group_name, filter_name = None, None
-                    # raise ValueError(f"Failed to get info on group id={ft['group_id']} from SkyPortal")
+                    # raise ValueError(f"Failed to get info on group id={active_filter['group_id']} from SkyPortal")
                 log(f"Group name: {group_name}, filter name: {filter_name}")
 
                 # prepend upstream aggregation stages:
-                pipeline = self.filter_pipeline_upstream + loads(ft['fv']['pipeline'])
+                pipeline = self.filter_pipeline_upstream + loads(active_filter['fv']['pipeline'])
                 # match permissions
-                pipeline[0]["$match"]["candidate.programid"]["$in"] = ft['permissions']
-                pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][1] = ft['permissions']
+                pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter['permissions']
+                pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter['permissions']
 
                 filter_template = {
-                    'group_id': ft['group_id'],
-                    'filter_id': ft['filter_id'],
+                    'group_id': active_filter['group_id'],
+                    'filter_id': active_filter['filter_id'],
                     'group_name': group_name,
                     'filter_name': filter_name,
-                    'fid': ft['fv']['fid'],
-                    'permissions': ft['permissions'],
+                    'fid': active_filter['fv']['fid'],
+                    'permissions': active_filter['permissions'],
                     'pipeline': pipeline
                 }
 
@@ -659,7 +660,7 @@ class AlertConsumer(object):
             raise ValueError(f'Unsupported method: {method}')
 
         if method == 'get':
-            resp = methods[method](
+            response = methods[method](
                 f"{config['skyportal']['protocol']}://"
                 f"{config['skyportal']['host']}:{config['skyportal']['port']}"
                 f"{endpoint}",
@@ -667,7 +668,7 @@ class AlertConsumer(object):
                 headers=self.session_headers
             )
         else:
-            resp = methods[method.lower()](
+            response = methods[method.lower()](
                 f"{config['skyportal']['protocol']}://"
                 f"{config['skyportal']['host']}:{config['skyportal']['port']}"
                 f"{endpoint}",
@@ -675,7 +676,7 @@ class AlertConsumer(object):
                 headers=self.session_headers
             )
 
-        return resp
+        return response
 
     @staticmethod
     def alert_mongify(alert):
@@ -725,15 +726,15 @@ class AlertConsumer(object):
             log(alert_thin)
 
         tic = time.time()
-        resp = self.api_skyportal("POST", f"/api/candidates", alert_thin)
+        response = self.api_skyportal("POST", f"/api/candidates", alert_thin)
         toc = time.time()
         if self.verbose > 1:
             log(f"Posting metadata to SkyPortal took {toc - tic} s")
-        if resp.json()['status'] == 'success':
+        if response.json()['status'] == 'success':
             log(f"Posted {alert['objectId']} {alert['candid']} metadata to SkyPortal")
         else:
             log(f"Failed to post {alert['objectId']} {alert['candid']} metadata to SkyPortal")
-            log(resp.json())
+            log(response.json())
 
     def alert_post_annotations(self, alert, passed_filters):
         for passed_filter in passed_filters:
@@ -744,15 +745,15 @@ class AlertConsumer(object):
                 "group_ids": [passed_filter.get("group_id")]
             }
             tic = time.time()
-            resp = self.api_skyportal("POST", f"/api/annotation", annotations)
+            response = self.api_skyportal("POST", f"/api/annotation", annotations)
             toc = time.time()
             if self.verbose > 1:
                 log(f"Posting annotation for {alert['objectId']} to skyportal took {toc - tic} s")
-            if resp.json()['status'] == 'success':
+            if response.json()['status'] == 'success':
                 log(f"Posted {alert['objectId']} annotation to SkyPortal")
             else:
                 log(f"Failed to post {alert['objectId']} annotation to SkyPortal")
-                log(resp.json())
+                log(response.json())
 
     def alert_post_thumbnails(self, alert):
         for ttype, ztftype in [('new', 'Science'), ('ref', 'Template'), ('sub', 'Difference')]:
@@ -763,16 +764,16 @@ class AlertConsumer(object):
                 log(f"Making {ztftype} thumbnail took {toc - tic} s")
 
             tic = time.time()
-            resp = self.api_skyportal("POST", f"/api/thumbnail", thumb)
+            response = self.api_skyportal("POST", f"/api/thumbnail", thumb)
             toc = time.time()
             if self.verbose > 1:
                 log(f"Posting {ztftype} thumbnail to SkyPortal took {toc - tic} s")
 
-            if resp.json()['status'] == 'success':
+            if response.json()['status'] == 'success':
                 log(f"Posted {alert['objectId']} {alert['candid']} {ztftype} cutout to SkyPortal")
             else:
                 log(f"Failed to post {alert['objectId']} {alert['candid']} {ztftype} cutout to SkyPortal")
-                log(resp.json())
+                log(response.json())
 
     def alert_put_photometry(self, alert, groups):
         tic = time.time()
@@ -786,36 +787,36 @@ class AlertConsumer(object):
             group_ids = [f.get("group_id") for f in groups if pid in f.get("permissions", [1])]
 
             if len(group_ids) > 0:
-                w = df_photometry.programid == int(pid)
+                pid_mask = df_photometry.programid == int(pid)
 
                 photometry = {
                     "obj_id": alert['objectId'],
                     "group_ids": group_ids,
                     "instrument_id": self.instrument_id,
-                    "mjd": df_photometry.loc[w, "mjd"].tolist(),
-                    "mag": df_photometry.loc[w, "magpsf"].tolist(),
-                    "magerr": df_photometry.loc[w, "sigmapsf"].tolist(),
-                    "limiting_mag": df_photometry.loc[w, "diffmaglim"].tolist(),
-                    "magsys": df_photometry.loc[w, "magsys"].tolist(),
-                    "filter": df_photometry.loc[w, "ztf_filter"].tolist(),
-                    "ra": df_photometry.loc[w, "ra"].tolist(),
-                    "dec": df_photometry.loc[w, "dec"].tolist(),
+                    "mjd": df_photometry.loc[pid_mask, "mjd"].tolist(),
+                    "mag": df_photometry.loc[pid_mask, "magpsf"].tolist(),
+                    "magerr": df_photometry.loc[pid_mask, "sigmapsf"].tolist(),
+                    "limiting_mag": df_photometry.loc[pid_mask, "diffmaglim"].tolist(),
+                    "magsys": df_photometry.loc[pid_mask, "magsys"].tolist(),
+                    "filter": df_photometry.loc[pid_mask, "ztf_filter"].tolist(),
+                    "ra": df_photometry.loc[pid_mask, "ra"].tolist(),
+                    "dec": df_photometry.loc[pid_mask, "dec"].tolist(),
                 }
 
                 if len(photometry.get('mag', ())) > 0:
                     tic = time.time()
-                    resp = self.api_skyportal("PUT", f"/api/photometry", photometry)
+                    response = self.api_skyportal("PUT", f"/api/photometry", photometry)
                     toc = time.time()
                     if self.verbose > 1:
                         log(
                             f"Posting photometry of {alert['objectId']} {alert['candid']}, "
                             f"program_id={pid} to SkyPortal took {toc - tic} s"
                         )
-                    if resp.json()['status'] == 'success':
+                    if response.json()['status'] == 'success':
                         log(f"Posted {alert['objectId']} program_id={pid} photometry to SkyPortal")
                     else:
                         log(f"Failed to post {alert['objectId']} program_id={pid} photometry to SkyPortal")
-                    log(resp.json())
+                    log(response.json())
 
     def alert_sentinel_skyportal(self, alert, prv_candidates, passed_filters):
         """
@@ -841,16 +842,16 @@ class AlertConsumer(object):
         """
         # check if candidate/source exist in SP:
         tic = time.time()
-        resp = self.api_skyportal("HEAD", f"/api/candidates/{alert['objectId']}")
+        response = self.api_skyportal("HEAD", f"/api/candidates/{alert['objectId']}")
         toc = time.time()
-        is_candidate = resp.status_code == 200
+        is_candidate = response.status_code == 200
         if self.verbose > 1:
             log(f"Checking if object is Candidate took {toc - tic} s")
             log(f"{alert['objectId']} {'is' if is_candidate else 'is not'} Candidate in SkyPortal")
         tic = time.time()
-        resp = self.api_skyportal("HEAD", f"/api/sources/{alert['objectId']}")
+        response = self.api_skyportal("HEAD", f"/api/sources/{alert['objectId']}")
         toc = time.time()
-        is_source = resp.status_code == 200
+        is_source = response.status_code == 200
         if self.verbose > 1:
             log(f"Checking if object is Source took {toc - tic} s")
             log(f"{alert['objectId']} {'is' if is_source else 'is not'} Source in SkyPortal")
@@ -891,12 +892,12 @@ class AlertConsumer(object):
                 if is_candidate:
                     # get filter_ids of saved candidate from SP
                     tic = time.time()
-                    resp = self.api_skyportal("GET", f"/api/candidates/{alert['objectId']}")
+                    response = self.api_skyportal("GET", f"/api/candidates/{alert['objectId']}")
                     toc = time.time()
                     if self.verbose > 1:
                         log(f"Getting candidate info on {alert['objectId']} took {toc - tic} s")
-                    if resp.json()['status'] == 'success':
-                        existing_filter_ids = resp.json()['data']["filter_ids"]
+                    if response.json()['status'] == 'success':
+                        existing_filter_ids = response.json()['data']["filter_ids"]
                         filter_ids = list(set(filter_ids) - set(existing_filter_ids))
                     else:
                         log(f"Failed to get candidate info on {alert['objectId']}")
@@ -917,22 +918,22 @@ class AlertConsumer(object):
             if is_source:
                 # get info on the corresponding groups:
                 tic = time.time()
-                resp = self.api_skyportal("GET", f"/api/sources/{alert['objectId']}")
+                response = self.api_skyportal("GET", f"/api/sources/{alert['objectId']}")
                 toc = time.time()
                 if self.verbose > 1:
                     log(f"Getting source info on {alert['objectId']} took {toc - tic} s")
-                if resp.json()['status'] == 'success':
-                    existing_group_ids = [g["id"] for g in resp.json()['data']["groups"]]
+                if response.json()['status'] == 'success':
+                    existing_group_ids = [g["id"] for g in response.json()['data']["groups"]]
                     for group_id in set(existing_group_ids) - set(group_ids):
                         tic = time.time()
-                        resp = self.api_skyportal("GET", f"/api/groups/{group_id}")
+                        response = self.api_skyportal("GET", f"/api/groups/{group_id}")
                         toc = time.time()
                         if self.verbose > 1:
                             log(f"Getting info on group id={group_id} from SkyPortal took {toc - tic} s")
-                            log(resp.json())
-                        if resp.json()['status'] == 'success':
+                            log(response.json())
+                        if response.json()['status'] == 'success':
                             selector = {1}
-                            for stream in resp.json()['data']["streams"]:
+                            for stream in response.json()['data']["streams"]:
                                 if "ztf" in stream["name"].lower():
                                     selector.update(set(stream["altdata"].get("selector", [])))
 
