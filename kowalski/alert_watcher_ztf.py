@@ -100,48 +100,54 @@ def log(message):
 
 
 def make_photometry(alert: dict, jd_start: float = None):
-    try:
-        alert = deepcopy(alert)
-        df_candidate = pd.DataFrame(alert['candidate'], index=[0])
+    """Make a de-duplicated pandas.DataFrame with photometry of alert['objectId']
 
-        df_prv_candidates = pd.DataFrame(alert['prv_candidates'])
-        df_light_curve = pd.concat(
-            [df_candidate, df_prv_candidates],
-            ignore_index=True,
-            sort=False
-        )
+    :param alert: ZTF alert packet/dict
+    :param jd_start:
+    :return:
+    """
+    alert = deepcopy(alert)
+    df_candidate = pd.DataFrame(alert['candidate'], index=[0])
 
-        ztf_filters = {1: 'ztfg', 2: 'ztfr', 3: 'ztfi'}
-        df_light_curve['ztf_filter'] = df_light_curve['fid'].apply(lambda x: ztf_filters[x])
-        df_light_curve['magsys'] = "ab"
-        df_light_curve['zp'] = 25.0
-        df_light_curve['mjd'] = df_light_curve['jd'] - 2400000.5
+    df_prv_candidates = pd.DataFrame(alert['prv_candidates'])
+    df_light_curve = pd.concat(
+        [df_candidate, df_prv_candidates],
+        ignore_index=True,
+        sort=False
+    )
 
-        df_light_curve['mjd'] = df_light_curve['mjd'].apply(lambda x: np.float64(x))
-        df_light_curve['magpsf'] = df_light_curve['magpsf'].apply(lambda x: np.float32(x))
-        df_light_curve['sigmapsf'] = df_light_curve['sigmapsf'].apply(lambda x: np.float32(x))
+    ztf_filters = {1: 'ztfg', 2: 'ztfr', 3: 'ztfi'}
+    df_light_curve['ztf_filter'] = df_light_curve['fid'].apply(lambda x: ztf_filters[x])
+    df_light_curve['magsys'] = "ab"
+    df_light_curve['mjd'] = df_light_curve['jd'] - 2400000.5
 
-        df_light_curve = (
-            df_light_curve
-            .drop_duplicates(subset=["mjd", "magpsf"])
-            .reset_index(drop=True)
-            .sort_values(by=['mjd'])
-        )
+    df_light_curve['mjd'] = df_light_curve['mjd'].apply(lambda x: np.float64(x))
+    df_light_curve['magpsf'] = df_light_curve['magpsf'].apply(lambda x: np.float32(x))
+    df_light_curve['sigmapsf'] = df_light_curve['sigmapsf'].apply(lambda x: np.float32(x))
 
-        # only "new" photometry requested?
-        if jd_start is not None:
-            w_after_jd = df_light_curve['jd'] > jd_start
-            df_light_curve = df_light_curve.loc[w_after_jd]
+    df_light_curve = (
+        df_light_curve
+        .drop_duplicates(subset=["mjd", "magpsf"])
+        .reset_index(drop=True)
+        .sort_values(by=['mjd'])
+    )
 
-        return df_light_curve
+    # only "new" photometry requested?
+    if jd_start is not None:
+        w_after_jd = df_light_curve['jd'] > jd_start
+        df_light_curve = df_light_curve.loc[w_after_jd]
 
-    except Exception as e:
-        log(e)
-        _err = traceback.format_exc()
-        log(_err)
+    return df_light_curve
 
 
-def make_thumbnail(alert, ttype, ztftype):
+def make_thumbnail(alert, ttype: str, ztftype: str):
+    """Convert lossless FITS cutouts from ZTF alerts into PNGs
+
+    :param alert: ZTF alert packet/dict
+    :param ttype: <new|ref|sub>
+    :param ztftype: <Science|Template|Difference>
+    :return:
+    """
     alert = deepcopy(alert)
 
     cutout_data = alert[f'cutout{ztftype}']['stampData']
@@ -185,8 +191,11 @@ def make_thumbnail(alert, ttype, ztftype):
 
 
 def make_triplet(alert, to_tpu: bool = False):
-    """
-        Feed in alert packet
+    """Make an L2-normalized cutout triplet out of a ZTF alert
+
+    :param alert:
+    :param to_tpu:
+    :return:
     """
     cutout_dict = dict()
 
@@ -222,8 +231,11 @@ def make_triplet(alert, to_tpu: bool = False):
 
 
 def alert_filter__ml(alert, ml_models: dict = None) -> dict:
-    """
-        Execute ML models
+    """Execute ML models on ZTF alerts
+
+    :param alert:
+    :param ml_models:
+    :return:
     """
 
     scores = dict()
@@ -386,7 +398,7 @@ def alert_filter__user_defined(
     database, filter_templates, alert, catalog: str = 'ZTF_alerts', max_time_ms: int = 500
 ) -> list:
     """
-        Evaluate user defined filters
+        Evaluate user-defined filters
     :param database:
     :param filter_templates:
     :param alert:
@@ -644,6 +656,13 @@ class AlertConsumer(object):
             log(self.filter_templates)
 
     def api_skyportal(self, method: str, endpoint: str, data=None):
+        """Make an API call to a SkyPortal instance
+
+        :param method:
+        :param endpoint:
+        :param data:
+        :return:
+        """
         method = method.lower()
         methods = {
             'head': self.session.head,
@@ -776,6 +795,13 @@ class AlertConsumer(object):
                 log(response.json())
 
     def alert_put_photometry(self, alert, groups):
+        """PUT photometry to SkyPortal
+
+        :param alert:
+        :param groups: array of dicts containing at least
+                       [{"group_id": <group_id>, "permissions": <list of program ids the group has access to>}]
+        :return:
+        """
         tic = time.time()
         df_photometry = make_photometry(alert)
         toc = time.time()
@@ -838,6 +864,9 @@ class AlertConsumer(object):
           - decide which points to post to what groups based on permissions
           - post alert curve with all group_ids in single call to /api/photometry
 
+        :param alert: ZTF_alert with a stripped-off prv_candidates section
+        :param prv_candidates: could be plain prv_candidates section of an alert, or extended alert history
+        :param passed_filters: list of filters that alert passed, with their output
         :return:
         """
         # check if candidate/source exist in SP:
