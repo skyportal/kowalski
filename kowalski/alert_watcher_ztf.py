@@ -15,26 +15,48 @@ import multiprocessing
 import numpy as np
 import os
 import pandas as pd
-import pymongo
-from pymongo.errors import BulkWriteError
 import requests
-# from requests.adapters import HTTPAdapter, DEFAULT_POOLBLOCK, DEFAULT_POOLSIZE, DEFAULT_RETRIES
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 import subprocess
 import sys
 from tensorflow.keras.models import load_model
 import time
 import traceback
 
-from utils import deg2dms, deg2hms, great_circle_distance, \
-    in_ellipse, load_config, radec2lb, time_stamp, datetime_to_jd, \
-    sdss_url, desi_dr8_url
+from utils import (
+    datetime_to_jd,
+    deg2dms,
+    deg2hms,
+    great_circle_distance,
+    in_ellipse,
+    load_config,
+    Mongo,
+    radec2lb,
+    time_stamp,
+)
 
 
 ''' load config and secrets '''
 config = load_config(config_file='config.yaml')['kowalski']
 
 
-''' Utilities for manipulating Avro data and schemas. '''
+DEFAULT_TIMEOUT = 5  # seconds
+
+
+class TimeoutHTTPAdapter(HTTPAdapter):
+    def __init__(self, *args, **kwargs):
+        self.timeout = DEFAULT_TIMEOUT
+        if "timeout" in kwargs:
+            self.timeout = kwargs["timeout"]
+            del kwargs["timeout"]
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        timeout = kwargs.get("timeout")
+        if timeout is None:
+            kwargs["timeout"] = self.timeout
+        return super().send(request, **kwargs)
 
 
 def read_schema_data(bytes_io):
@@ -55,14 +77,7 @@ def read_schema_data(bytes_io):
     return message
 
 
-class AlertError(Exception):
-    """
-        Base class for exceptions in this module.
-    """
-    pass
-
-
-class EopError(AlertError):
+class EopError(Exception):
     """
         Exception raised when reaching end of partition.
 
@@ -80,47 +95,62 @@ class EopError(AlertError):
         return self.message
 
 
-def make_photometry(a: dict, jd_start: float = None):
-    df = pd.DataFrame(a['candidate'], index=[0])
+def log(message):
+    print(f"{time_stamp()}: {message}")
 
-    df_prv = pd.DataFrame(a['prv_candidates'])
-    dflc = pd.concat(
-        [df, df_prv],
+
+def make_photometry(alert: dict, jd_start: float = None):
+    """Make a de-duplicated pandas.DataFrame with photometry of alert['objectId']
+
+    :param alert: ZTF alert packet/dict
+    :param jd_start:
+    :return:
+    """
+    alert = deepcopy(alert)
+    df_candidate = pd.DataFrame(alert['candidate'], index=[0])
+
+    df_prv_candidates = pd.DataFrame(alert['prv_candidates'])
+    df_light_curve = pd.concat(
+        [df_candidate, df_prv_candidates],
         ignore_index=True,
         sort=False
-    ).drop_duplicates(subset='jd').reset_index(drop=True).sort_values(by=['jd'])
+    )
 
     ztf_filters = {1: 'ztfg', 2: 'ztfr', 3: 'ztfi'}
-    dflc['ztf_filter'] = dflc['fid'].apply(lambda x: ztf_filters[x])
-    dflc['magsys'] = "ab"
-    dflc['zp'] = 25.0
-    dflc['mjd'] = dflc['jd'] - 2400000.5
+    df_light_curve['ztf_filter'] = df_light_curve['fid'].apply(lambda x: ztf_filters[x])
+    df_light_curve['magsys'] = "ab"
+    df_light_curve['mjd'] = df_light_curve['jd'] - 2400000.5
+
+    df_light_curve['mjd'] = df_light_curve['mjd'].apply(lambda x: np.float64(x))
+    df_light_curve['magpsf'] = df_light_curve['magpsf'].apply(lambda x: np.float32(x))
+    df_light_curve['sigmapsf'] = df_light_curve['sigmapsf'].apply(lambda x: np.float32(x))
+
+    df_light_curve = (
+        df_light_curve
+        .drop_duplicates(subset=["mjd", "magpsf"])
+        .reset_index(drop=True)
+        .sort_values(by=['mjd'])
+    )
 
     # only "new" photometry requested?
     if jd_start is not None:
-        w = dflc['jd'] > jd_start
-        dflc = dflc.loc[w]
+        w_after_jd = df_light_curve['jd'] > jd_start
+        df_light_curve = df_light_curve.loc[w_after_jd]
 
-    photometry = {
-        "obj_id": a['objectId'],
-        "group_ids": [1, ],  # placeholder
-        "instrument_id": 1,  # placeholder
-        "mjd": dflc.mjd.tolist(),
-        "mag": dflc.magpsf.tolist(),
-        "magerr": dflc.sigmapsf.tolist(),
-        "limiting_mag": dflc.diffmaglim.tolist(),
-        "magsys": dflc.magsys.tolist(),
-        "filter": dflc.ztf_filter.tolist(),
-        "ra": dflc.ra.tolist(),
-        "dec": dflc.dec.tolist(),
-    }
-
-    return photometry
+    return df_light_curve
 
 
-def make_thumbnail(a, ttype, ztftype):
+def make_thumbnail(alert, ttype: str, ztftype: str):
+    """Convert lossless FITS cutouts from ZTF alerts into PNGs
 
-    cutout_data = a[f'cutout{ztftype}']['stampData']
+    :param alert: ZTF alert packet/dict
+    :param ttype: <new|ref|sub>
+    :param ztftype: <Science|Template|Difference>
+    :return:
+    """
+    alert = deepcopy(alert)
+
+    cutout_data = alert[f'cutout{ztftype}']['stampData']
     with gzip.open(io.BytesIO(cutout_data), 'rb') as f:
         with fits.open(io.BytesIO(f.read())) as hdu:
             header = hdu[0].header
@@ -140,16 +170,16 @@ def make_thumbnail(a, ttype, ztftype):
 
     if ztftype != 'Difference':
         img[img <= 0] = np.median(img)
-        plt.imshow(img, cmap=plt.cm.bone, norm=LogNorm(), origin='lower')
+        plt.imshow(img, cmap="bone", norm=LogNorm(), origin='lower')
     else:
-        plt.imshow(img, cmap=plt.cm.bone, origin='lower')
+        plt.imshow(img, cmap="bone", origin='lower')
     plt.savefig(buff, dpi=42)
 
     buff.seek(0)
     plt.close('all')
 
     thumb = {
-        "obj_id": a["objectId"],
+        "obj_id": alert["objectId"],
         "data": base64.b64encode(buff.read()).decode("utf-8"),
         "ttype": ttype,
     }
@@ -161,8 +191,11 @@ def make_thumbnail(a, ttype, ztftype):
 
 
 def make_triplet(alert, to_tpu: bool = False):
-    """
-        Feed in alert packet
+    """Make an L2-normalized cutout triplet out of a ZTF alert
+
+    :param alert:
+    :param to_tpu:
+    :return:
     """
     cutout_dict = dict()
 
@@ -198,8 +231,11 @@ def make_triplet(alert, to_tpu: bool = False):
 
 
 def alert_filter__ml(alert, ml_models: dict = None) -> dict:
-    """
-        Execute ML models
+    """Execute ML models on ZTF alerts
+
+    :param alert:
+    :param ml_models:
+    :return:
     """
 
     scores = dict()
@@ -294,18 +330,24 @@ def alert_filter__xmatch_clu(database, alert, size_margin=3, clu_version='CLU_20
         dec_geojson = dec
 
         catalog_filter = {}
-        catalog_projection = {"_id": 1, "name": 1, "ra": 1, "dec": 1,
-                              "a": 1, "b2a": 1, "pa": 1, "z": 1,
-                              "sfr_fuv": 1, "mstar": 1, "sfr_ha": 1,
-                              "coordinates.radec_str": 1}
+        catalog_projection = {
+            "_id": 1, "name": 1, "ra": 1, "dec": 1,
+            "a": 1, "b2a": 1, "pa": 1, "z": 1,
+            "sfr_fuv": 1, "mstar": 1, "sfr_ha": 1,
+            "coordinates.radec_str": 1
+        }
 
         # first do a coarse search of everything that is around
         object_position_query = dict()
         object_position_query['coordinates.radec_geojson'] = {
-            '$geoWithin': {'$centerSphere': [[ra_geojson, dec_geojson], cone_search_radius_clu]}}
-        s = database[clu_version].find({**object_position_query, **catalog_filter},
-                                       {**catalog_projection})
-        galaxies = list(s)
+            '$geoWithin': {'$centerSphere': [[ra_geojson, dec_geojson], cone_search_radius_clu]}
+        }
+        galaxies = list(
+            database[clu_version].find(
+                {**object_position_query, **catalog_filter},
+                {**catalog_projection}
+            )
+        )
 
         # these guys are very big, so check them separately
         M31 = {
@@ -356,7 +398,7 @@ def alert_filter__user_defined(
     database, filter_templates, alert, catalog: str = 'ZTF_alerts', max_time_ms: int = 500
 ) -> list:
     """
-        Evaluate user defined filters
+        Evaluate user-defined filters
     :param database:
     :param filter_templates:
     :param alert:
@@ -381,12 +423,15 @@ def alert_filter__user_defined(
             )
             # passed filter? then len(passed_filter) must be = 1
             if len(filtered_data) == 1:
-                print(f'{time_stamp()}: {alert["candid"]} passed filter {_filter["fid"]}')
+                log(f'{alert["objectId"]} {alert["candid"]} passed filter {_filter["fid"]}')
                 passed_filters.append(
                     {
                         'group_id': _filter["group_id"],
                         'filter_id': _filter["filter_id"],
+                        'group_name': _filter["group_name"],
+                        'filter_name': _filter["filter_name"],
                         'fid': _filter['fid'],
+                        'permissions': _filter['permissions'],
                         'data': filtered_data[0]
                     }
                 )
@@ -414,23 +459,22 @@ class AlertConsumer(object):
 
     def __init__(self, topic, **kwargs):
 
-        self.verbose = kwargs.get("verbose", 0)
+        self.verbose = kwargs.get("verbose", 2)
 
         # keep track of disconnected partitions
         self.num_disconnected_partitions = 0
         self.topic = topic
 
         def error_cb(err, _self=self):
-            print(f'{time_stamp()}: error_cb -------->', err)
+            log(f'error_cb --------> {err}')
             # print(err.code())
             if err.code() == -195:
                 _self.num_disconnected_partitions += 1
                 if _self.num_disconnected_partitions == _self.num_partitions:
-                    print(f'{time_stamp()}: all partitions got disconnected, killing thread')
+                    log(f'All partitions got disconnected, killing thread')
                     sys.exit()
                 else:
-                    print(f'{time_stamp()}: {_self.topic}: disconnected from partition.',
-                          'total:', _self.num_disconnected_partitions)
+                    log(f'{_self.topic}: disconnected from partition. total: {_self.num_disconnected_partitions}')
 
         # 'error_cb': error_cb
         kwargs['error_cb'] = error_cb
@@ -443,205 +487,215 @@ class AlertConsumer(object):
             for part in partitions:
                 # -2 stands for beginning and -1 for end
                 part.offset = -2
-                # keep number of partitions. when reaching end of last partition, kill thread and start from beginning
+                # keep number of partitions.
+                # when reaching end of last partition, kill thread and start from beginning
                 _self.num_partitions += 1
-                print(consumer.get_watermark_offsets(part))
+                log(consumer.get_watermark_offsets(part))
 
         self.consumer.subscribe([topic], on_assign=on_assign)
 
         self.config = config
 
-        # posting candidates to SP?
-        if config['misc']['post_to_skyportal']:
-            # session to talk to SkyPortal
-            self.session = requests.Session()
-            self.session_headers = {'Authorization': f"token {config['skyportal']['token']}"}
-            # non-default settings:
-            # pc = pool_connections if pool_connections is not None else DEFAULT_POOLSIZE
-            # pm = pool_maxsize if pool_maxsize is not None else DEFAULT_POOLSIZE
-            # mr = max_retries if max_retries is not None else DEFAULT_RETRIES
-            # pb = pool_block if pool_block is not None else DEFAULT_POOLBLOCK
-            #
-            # self.session.mount('https://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
-            #                                            max_retries=mr, pool_block=pb))
-            # self.session.mount('http://', HTTPAdapter(pool_connections=pc, pool_maxsize=pm,
-            #                                           max_retries=mr, pool_block=pb))
-
-            # ZTF instrument id
-            tic = time.time()
-            resp = self.session.get(
-                f"{config['skyportal']['protocol']}://"
-                f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                "/api/instrument?name=ZTF",
-                headers=self.session_headers, timeout=5,
-            )
-            toc = time.time()
-            if self.verbose > 1:
-                print(f'{time_stamp()}: Getting ZTF instrument_id from SkyPortal took {toc - tic} s')
-            if resp.json()['status'] == 'success' and len(resp.json()["data"]) == 1:
-                self.instrument_id = resp.json()["data"][0]["id"]
-                print(f"{time_stamp()}: Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
-            else:
-                print(
-                    f"{time_stamp()}: Failed to get ZTF instrument_id from SkyPortal"
-                )
-                raise ValueError("Failed to get ZTF instrument_id from SkyPortal")
-            print(resp.json())
-
         # MongoDB collections to store the alerts:
         self.collection_alerts = self.config['database']['collections']['alerts_ztf']
         self.collection_alerts_aux = self.config['database']['collections']['alerts_ztf_aux']
+        self.collection_alerts_filter = self.config['database']['collections']['alerts_ztf_filter']
 
-        self.db = self.connect_to_db()
+        self.mongo = Mongo(
+            host=config['database']['host'],
+            port=config['database']['port'],
+            username=config['database']['username'],
+            password=config['database']['password'],
+            db=config['database']['db'],
+            verbose=self.verbose
+        )
 
         # create indexes
         for index_name, index in self.config['database']['indexes'][self.collection_alerts].items():
             ind = [tuple(ii) for ii in index]
-            self.db['db'][self.collection_alerts].create_index(keys=ind, name=index_name, background=True)
+            self.mongo.db[self.collection_alerts].create_index(
+                keys=ind, name=index_name, background=True
+            )
 
         # ML models:
         self.ml_models = dict()
-        for m in config['ml_models']:
+        for model in config['ml_models']:
             try:
-                m_v = config["ml_models"][m]["version"]
-                # fixme: allow other formats such as SavedModel
-                mf = os.path.join(config["path"]["ml_models"], f'{m}_{m_v}.h5')
-                self.ml_models[m] = {'model': load_model(mf), 'version': m_v}
+                model_version = config["ml_models"][model]["version"]
+                # todo: allow other formats such as SavedModel
+                model_filepath = os.path.join(config["path"]["ml_models"], f'{model}_{model_version}.h5')
+                self.ml_models[model] = {'model': load_model(model_filepath), 'version': model_version}
             except Exception as e:
-                print(f'{time_stamp()}: Error loading ML model {m}: {str(e)}')
+                log(f"Error loading ML model {model}: {str(e)}")
                 _err = traceback.format_exc()
-                print(_err)
+                log(_err)
                 continue
 
-        # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
-        # including archival photometry and cross-matches:
-        self.filter_pipeline_upstream = config['database']['filters'][self.collection_alerts]
-        print('Upstream filtering pipeline:')
-        print(self.filter_pipeline_upstream)
+        # talking to SkyPortal?
+        if config['misc']['broker']:
+            # session to talk to SkyPortal
+            self.session = requests.Session()
+            self.session_headers = {'Authorization': f"token {config['skyportal']['token']}"}
 
-        # load *active* user-defined alert filter templates
-        active_filters = list(
-            self.db['db'][config['database']['collections']['filters']].aggregate(
-                [
-                    {
-                        '$match': {
-                            'catalog': 'ZTF_alerts',
-                            'active': True
-                        }
-                    },
-                    {
-                        '$project': {
-                            'group_id': 1,
-                            'filter_id': 1,
-                            'permissions': 1,
-                            'fv': {
-                                '$arrayElemAt': [
-                                    {
-                                        '$filter': {
-                                            'input': '$fv',
-                                            'as': 'fvv',
-                                            'cond': {
-                                                '$eq': [
-                                                    '$$fvv.fid', '$active_fid'
-                                                ]
+            retries = Retry(
+                total=3,
+                backoff_factor=1,
+                status_forcelist=[405, 429, 500, 502, 503, 504],
+                method_whitelist=["HEAD", "GET", "PUT", "POST", "PATCH"]
+            )
+            adapter = TimeoutHTTPAdapter(timeout=5, max_retries=retries)
+            self.session.mount("https://", adapter)
+            self.session.mount("http://", adapter)
+
+            # get ZTF instrument id
+            self.instrument_id = 1
+            try:
+                tic = time.time()
+                response = self.api_skyportal("GET", "/api/instrument", {"name": "ZTF"})
+                toc = time.time()
+                if self.verbose > 1:
+                    log(f"Getting ZTF instrument_id from SkyPortal took {toc - tic} s")
+                if response.json()['status'] == 'success' and len(response.json()["data"]) > 0:
+                    self.instrument_id = response.json()["data"][0]["id"]
+                    log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
+                else:
+                    log("Failed to get ZTF instrument_id from SkyPortal")
+                    raise ValueError("Failed to get ZTF instrument_id from SkyPortal")
+            except Exception as e:
+                log(e)
+                # config['misc']['broker'] = False
+
+            # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
+            # including archival photometry and cross-matches:
+            self.filter_pipeline_upstream = config['database']['filters'][self.collection_alerts]
+            log('Upstream filtering pipeline:')
+            log(self.filter_pipeline_upstream)
+
+            # load *active* user-defined alert filter templates
+            active_filters = list(
+                self.mongo.db[config['database']['collections']['filters']].aggregate(
+                    [
+                        {
+                            '$match': {
+                                'catalog': 'ZTF_alerts',
+                                'active': True
+                            }
+                        },
+                        {
+                            '$project': {
+                                'group_id': 1,
+                                'filter_id': 1,
+                                'permissions': 1,
+                                'fv': {
+                                    '$arrayElemAt': [
+                                        {
+                                            '$filter': {
+                                                'input': '$fv',
+                                                'as': 'fvv',
+                                                'cond': {
+                                                    '$eq': [
+                                                        '$$fvv.fid', '$active_fid'
+                                                    ]
+                                                }
                                             }
-                                        }
-                                    }, 0
-                                ]
+                                        }, 0
+                                    ]
+                                }
                             }
                         }
-                    }
-                ]
+                    ]
+                )
             )
-        )
 
-        self.filter_templates = []
-        for ft in active_filters:
-            # prepend upstream aggregation stages:
-            pipeline = self.filter_pipeline_upstream + loads(ft['fv']['pipeline'])
-            # match permissions
-            pipeline[0]["$match"]["candidate.programid"]["$in"] = ft['permissions']
-            pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][1] = ft['permissions']
+            # todo: query SP to make sure the filters still exist there and we're not out of sync;
+            #       clean up if necessary
 
-            filter_template = {
-                'group_id': ft['group_id'],
-                'filter_id': ft['filter_id'],
-                'fid': ft['fv']['fid'],
-                'pipeline': pipeline
-            }
+            self.filter_templates = []
+            for active_filter in active_filters:
+                # collect additional info from SkyPortal
+                tic = time.time()
+                response = self.api_skyportal("GET", f"/api/groups/{active_filter['group_id']}")
+                toc = time.time()
+                if self.verbose > 1:
+                    log(f"Getting info on group id={active_filter['group_id']} from SkyPortal took {toc - tic} s")
+                    log(response.json())
+                if response.json()['status'] == 'success':
+                    group_name = (
+                        response.json()["data"]["nickname"]
+                        if response.json()["data"]["nickname"] is not None
+                        else response.json()["data"]["name"]
+                    )
+                    filter_name = [
+                        f["name"] for f in response.json()["data"]["filters"] if f["id"] == active_filter['filter_id']
+                    ][0]
+                else:
+                    log(f"Failed to get info on group id={active_filter['group_id']} from SkyPortal")
+                    group_name, filter_name = None, None
+                    # raise ValueError(f"Failed to get info on group id={active_filter['group_id']} from SkyPortal")
+                log(f"Group name: {group_name}, filter name: {filter_name}")
 
-            self.filter_templates.append(filter_template)
+                # prepend upstream aggregation stages:
+                pipeline = self.filter_pipeline_upstream + loads(active_filter['fv']['pipeline'])
+                # match permissions
+                pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter['permissions']
+                pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter['permissions']
 
-        print('Science filters:')
-        print(self.filter_templates)
+                filter_template = {
+                    'group_id': active_filter['group_id'],
+                    'filter_id': active_filter['filter_id'],
+                    'group_name': group_name,
+                    'filter_name': filter_name,
+                    'fid': active_filter['fv']['fid'],
+                    'permissions': active_filter['permissions'],
+                    'pipeline': pipeline
+                }
 
-    def connect_to_db(self):
-        """
-            Connect to mongodb
+                self.filter_templates.append(filter_template)
+
+            log('Science filters:')
+            log(self.filter_templates)
+
+    def api_skyportal(self, method: str, endpoint: str, data=None):
+        """Make an API call to a SkyPortal instance
+
+        :param method:
+        :param endpoint:
+        :param data:
         :return:
         """
+        method = method.lower()
+        methods = {
+            'head': self.session.head,
+            'get': self.session.get,
+            'post': self.session.post,
+            'put': self.session.put,
+            'patch': self.session.patch,
+            'delete': self.session.delete
+        }
 
-        try:
-            # there's only one instance of DB, it's too big to be replicated
-            _client = pymongo.MongoClient(
-                host=self.config['database']['host'],
-                port=self.config['database']['port'],
-                connect=False
+        if endpoint is None:
+            raise ValueError('Endpoint not specified')
+        if method not in ['head', 'get', 'post', 'put', 'patch', 'delete']:
+            raise ValueError(f'Unsupported method: {method}')
+
+        if method == 'get':
+            response = methods[method](
+                f"{config['skyportal']['protocol']}://"
+                f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                f"{endpoint}",
+                params=data,
+                headers=self.session_headers
             )
-            # grab main database:
-            _db = _client[self.config['database']['db']]
-        except Exception as _e:
-            raise ConnectionRefusedError
-        try:
-            # authenticate
-            _db.authenticate(self.config['database']['username'], self.config['database']['password'])
-        except Exception as _e:
-            raise ConnectionRefusedError
+        else:
+            response = methods[method.lower()](
+                f"{config['skyportal']['protocol']}://"
+                f"{config['skyportal']['host']}:{config['skyportal']['port']}"
+                f"{endpoint}",
+                json=data,
+                headers=self.session_headers
+            )
 
-        return {'client': _client, 'db': _db}
-
-    def insert_db_entry(self, _collection=None, _db_entry=None):
-        """
-            Insert a document _doc to collection _collection in DB.
-            It is monitored for timeout in case DB connection hangs for some reason
-        :param _collection:
-        :param _db_entry:
-        :return:
-        """
-        if _collection is None:
-            raise ValueError('Must specify collection')
-        if _db_entry is None:
-            raise ValueError('Must specify document to insert')
-
-        try:
-            self.db['db'][_collection].insert_one(_db_entry)
-        except Exception as _e:
-            print(f'{time_stamp()}: Error inserting {str(_db_entry["_id"])} into {_collection}')
-            traceback.print_exc()
-            print(_e)
-
-    def insert_multiple_db_entries(self, _collection=None, _db_entries=None):
-        """
-            Insert a document _doc to collection _collection in DB.
-            It is monitored for timeout in case DB connection hangs for some reason
-        :param _collection:
-        :param _db_entries:
-        :return:
-        """
-        if _collection is None:
-            raise ValueError('Must specify collection')
-        if _db_entries is None:
-            raise ValueError('Must specify documents to insert')
-
-        try:
-            # ordered=False ensures that every insert operation will be attempted
-            # so that if, e.g., a document already exists, it will be simply skipped
-            self.db['db'][_collection].insert_many(_db_entries, ordered=False)
-        except BulkWriteError as bwe:
-            print(time_stamp(), bwe.details)
-        except Exception as _e:
-            traceback.print_exc()
-            print(_e)
+        return response
 
     @staticmethod
     def alert_mongify(alert):
@@ -677,6 +731,259 @@ class AlertConsumer(object):
 
         return doc, prv_candidates
 
+    def alert_post_candidate(self, alert, filter_ids):
+        # post metadata with all filter_ids in single call to /api/candidates
+        alert_thin = {
+            "id": alert['objectId'],
+            "ra": alert['candidate'].get('ra'),
+            "dec": alert['candidate'].get('dec'),
+            "score": alert['candidate'].get('drb', alert['candidate']['rb']),
+            "filter_ids": filter_ids,
+            "passing_alert_id": alert["candid"],
+        }
+        if self.verbose > 1:
+            log(alert_thin)
+
+        tic = time.time()
+        response = self.api_skyportal("POST", f"/api/candidates", alert_thin)
+        toc = time.time()
+        if self.verbose > 1:
+            log(f"Posting metadata to SkyPortal took {toc - tic} s")
+        if response.json()['status'] == 'success':
+            log(f"Posted {alert['objectId']} {alert['candid']} metadata to SkyPortal")
+        else:
+            log(f"Failed to post {alert['objectId']} {alert['candid']} metadata to SkyPortal")
+            log(response.json())
+
+    def alert_post_annotations(self, alert, passed_filters):
+        for passed_filter in passed_filters:
+            annotations = {
+                "obj_id": alert["objectId"],
+                "origin": f"{passed_filter.get('group_name')}:{passed_filter.get('filter_name')}",
+                "data": passed_filter.get('data', dict()).get('annotations', dict()),
+                "group_ids": [passed_filter.get("group_id")]
+            }
+            tic = time.time()
+            response = self.api_skyportal("POST", f"/api/annotation", annotations)
+            toc = time.time()
+            if self.verbose > 1:
+                log(f"Posting annotation for {alert['objectId']} to skyportal took {toc - tic} s")
+            if response.json()['status'] == 'success':
+                log(f"Posted {alert['objectId']} annotation to SkyPortal")
+            else:
+                log(f"Failed to post {alert['objectId']} annotation to SkyPortal")
+                log(response.json())
+
+    def alert_post_thumbnails(self, alert):
+        for ttype, ztftype in [('new', 'Science'), ('ref', 'Template'), ('sub', 'Difference')]:
+            tic = time.time()
+            thumb = make_thumbnail(alert, ttype, ztftype)
+            toc = time.time()
+            if self.verbose > 1:
+                log(f"Making {ztftype} thumbnail took {toc - tic} s")
+
+            tic = time.time()
+            response = self.api_skyportal("POST", f"/api/thumbnail", thumb)
+            toc = time.time()
+            if self.verbose > 1:
+                log(f"Posting {ztftype} thumbnail to SkyPortal took {toc - tic} s")
+
+            if response.json()['status'] == 'success':
+                log(f"Posted {alert['objectId']} {alert['candid']} {ztftype} cutout to SkyPortal")
+            else:
+                log(f"Failed to post {alert['objectId']} {alert['candid']} {ztftype} cutout to SkyPortal")
+                log(response.json())
+
+    def alert_put_photometry(self, alert, groups):
+        """PUT photometry to SkyPortal
+
+        :param alert:
+        :param groups: array of dicts containing at least
+                       [{"group_id": <group_id>, "permissions": <list of program ids the group has access to>}]
+        :return:
+        """
+        tic = time.time()
+        df_photometry = make_photometry(alert)
+        toc = time.time()
+        if self.verbose > 1:
+            log(f"Making alert photometry took {toc - tic} s")
+
+        # post data from different program_id's
+        for pid in set(df_photometry.programid.unique()):
+            group_ids = [f.get("group_id") for f in groups if pid in f.get("permissions", [1])]
+
+            if len(group_ids) > 0:
+                pid_mask = df_photometry.programid == int(pid)
+
+                photometry = {
+                    "obj_id": alert['objectId'],
+                    "group_ids": group_ids,
+                    "instrument_id": self.instrument_id,
+                    "mjd": df_photometry.loc[pid_mask, "mjd"].tolist(),
+                    "mag": df_photometry.loc[pid_mask, "magpsf"].tolist(),
+                    "magerr": df_photometry.loc[pid_mask, "sigmapsf"].tolist(),
+                    "limiting_mag": df_photometry.loc[pid_mask, "diffmaglim"].tolist(),
+                    "magsys": df_photometry.loc[pid_mask, "magsys"].tolist(),
+                    "filter": df_photometry.loc[pid_mask, "ztf_filter"].tolist(),
+                    "ra": df_photometry.loc[pid_mask, "ra"].tolist(),
+                    "dec": df_photometry.loc[pid_mask, "dec"].tolist(),
+                }
+
+                if len(photometry.get('mag', ())) > 0:
+                    tic = time.time()
+                    response = self.api_skyportal("PUT", f"/api/photometry", photometry)
+                    toc = time.time()
+                    if self.verbose > 1:
+                        log(
+                            f"Posting photometry of {alert['objectId']} {alert['candid']}, "
+                            f"program_id={pid} to SkyPortal took {toc - tic} s"
+                        )
+                    if response.json()['status'] == 'success':
+                        log(f"Posted {alert['objectId']} program_id={pid} photometry to SkyPortal")
+                    else:
+                        log(f"Failed to post {alert['objectId']} program_id={pid} photometry to SkyPortal")
+                    log(response.json())
+
+    def alert_sentinel_skyportal(self, alert, prv_candidates, passed_filters):
+        """
+        Post alerts to SkyPortal, if need be.
+
+        Logic:
+        - check if candidate/source exist on SP
+        - if candidate does not exist:
+          - if len(passed_filters) > 0
+            - post metadata with all filter_ids in single call to /api/candidates
+            - post full light curve with all group_ids in single call to /api/photometry
+            - post thumbnails
+        - if candidate exists:
+          - get filter_ids of saved candidate from SP
+          - post to /api/candidates with new_filter_ids, if any
+          - post alert curve with group_ids of corresponding filters in single call to /api/photometry
+        - if source exists:
+          - get groups and check stream access
+          - decide which points to post to what groups based on permissions
+          - post alert curve with all group_ids in single call to /api/photometry
+
+        :param alert: ZTF_alert with a stripped-off prv_candidates section
+        :param prv_candidates: could be plain prv_candidates section of an alert, or extended alert history
+        :param passed_filters: list of filters that alert passed, with their output
+        :return:
+        """
+        # check if candidate/source exist in SP:
+        tic = time.time()
+        response = self.api_skyportal("HEAD", f"/api/candidates/{alert['objectId']}")
+        toc = time.time()
+        is_candidate = response.status_code == 200
+        if self.verbose > 1:
+            log(f"Checking if object is Candidate took {toc - tic} s")
+            log(f"{alert['objectId']} {'is' if is_candidate else 'is not'} Candidate in SkyPortal")
+        tic = time.time()
+        response = self.api_skyportal("HEAD", f"/api/sources/{alert['objectId']}")
+        toc = time.time()
+        is_source = response.status_code == 200
+        if self.verbose > 1:
+            log(f"Checking if object is Source took {toc - tic} s")
+            log(f"{alert['objectId']} {'is' if is_source else 'is not'} Source in SkyPortal")
+
+        # obj does not exit in SP:
+        if (not is_candidate) and (not is_source):
+            # passed any filters?
+            if len(passed_filters) > 0:
+                # post candidate
+                filter_ids = [f.get("filter_id") for f in passed_filters]
+                self.alert_post_candidate(alert, filter_ids)
+
+                # post annotations
+                self.alert_post_annotations(alert, passed_filters)
+
+                # post full light curve
+                try:
+                    alert['prv_candidates'] = list(self.mongo.db[self.collection_alerts_aux].find(
+                        {'_id': alert["objectId"]},
+                        {"prv_candidates": 1},
+                        limit=1
+                    ))[0]["prv_candidates"]
+                except Exception as e:
+                    # this should never happen, but just in case
+                    log(e)
+                    alert['prv_candidates'] = prv_candidates
+
+                self.alert_put_photometry(alert, passed_filters)
+
+                # post thumbnails
+                self.alert_post_thumbnails(alert)
+
+        # obj exists in SP:
+        else:
+            if len(passed_filters) > 0:
+                filter_ids = [f.get("filter_id") for f in passed_filters]
+                # already posted as a candidate?
+                if is_candidate:
+                    # get filter_ids of saved candidate from SP
+                    tic = time.time()
+                    response = self.api_skyportal("GET", f"/api/candidates/{alert['objectId']}")
+                    toc = time.time()
+                    if self.verbose > 1:
+                        log(f"Getting candidate info on {alert['objectId']} took {toc - tic} s")
+                    if response.json()['status'] == 'success':
+                        existing_filter_ids = response.json()['data']["filter_ids"]
+                        filter_ids = list(set(filter_ids) - set(existing_filter_ids))
+                    else:
+                        log(f"Failed to get candidate info on {alert['objectId']}")
+
+                if len(filter_ids) > 0:
+                    # post candidate with new filter ids
+                    self.alert_post_candidate(alert, filter_ids)
+
+                    # post annotations
+                    self.alert_post_annotations(
+                        alert,
+                        [pf for pf in passed_filters if pf.get("filter_id") in filter_ids]
+                    )
+
+            groups = passed_filters
+            group_ids = [f.get("group_id") for f in passed_filters]
+            # already saved as a source?
+            if is_source:
+                # get info on the corresponding groups:
+                tic = time.time()
+                response = self.api_skyportal("GET", f"/api/sources/{alert['objectId']}")
+                toc = time.time()
+                if self.verbose > 1:
+                    log(f"Getting source info on {alert['objectId']} took {toc - tic} s")
+                if response.json()['status'] == 'success':
+                    existing_group_ids = [g["id"] for g in response.json()['data']["groups"]]
+                    for group_id in set(existing_group_ids) - set(group_ids):
+                        tic = time.time()
+                        response = self.api_skyportal("GET", f"/api/groups/{group_id}")
+                        toc = time.time()
+                        if self.verbose > 1:
+                            log(f"Getting info on group id={group_id} from SkyPortal took {toc - tic} s")
+                            log(response.json())
+                        if response.json()['status'] == 'success':
+                            selector = {1}
+                            for stream in response.json()['data']["streams"]:
+                                if "ztf" in stream["name"].lower():
+                                    selector.update(set(stream["altdata"].get("selector", [])))
+
+                            selector = list(selector)
+
+                            groups.append(
+                                {
+                                    "group_id": group_id,
+                                    "permissions": selector
+                                }
+                            )
+                        else:
+                            log(f"Failed to get info on group id={group_id} from SkyPortal")
+                else:
+                    log(f"Failed to get source info on {alert['objectId']}")
+
+            # post alert photometry with all group_ids in single call to /api/photometry
+            alert['prv_candidates'] = prv_candidates
+
+            self.alert_put_photometry(alert, groups)
+
     def poll(self, verbose=2):
         """
         Polls Kafka broker to consume topic.
@@ -684,7 +991,6 @@ class AlertConsumer(object):
         :param verbose: 1 - main, 2 - debug
         :return:
         """
-        # msg = self.consumer.poll(timeout=timeout)
         msg = self.consumer.poll()
 
         if msg is None:
@@ -703,10 +1009,10 @@ class AlertConsumer(object):
                     candid = record['candid']
                     objectId = record['objectId']
 
-                    print(f'{time_stamp()}: {self.topic} {objectId} {candid}')
+                    log(f"{self.topic} {objectId} {candid}")
 
                     # check that candid not in collection_alerts
-                    if self.db['db'][self.collection_alerts].count_documents({'candid': candid}, limit=1) == 0:
+                    if self.mongo.db[self.collection_alerts].count_documents({'candid': candid}, limit=1) == 0:
                         # candid not in db, ingest decoded avro packet into db
                         # todo: ?? restructure alerts even further?
                         #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
@@ -727,42 +1033,46 @@ class AlertConsumer(object):
 
                         print(f'{time_stamp()}: ingesting {alert["candid"]} into db')
                         tic = time.time()
-                        self.insert_db_entry(_collection=self.collection_alerts, _db_entry=alert)
+                        self.mongo.insert_one(collection=self.collection_alerts, document=alert)
                         toc = time.time()
                         if verbose > 1:
-                            print(f'{time_stamp()}: ingesting took {toc - tic} s')
+                            print(f'{time_stamp()}: ingesting {alert["candid"]} took {toc - tic} s')
 
                         # prv_candidates: pop nulls - save space
-                        prv_candidates = [{kk: vv for kk, vv in prv_candidate.items() if vv is not None}
-                                          for prv_candidate in prv_candidates]
+                        prv_candidates = [
+                            {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
+                            for prv_candidate in prv_candidates
+                        ]
 
                         # cross-match with external catalogs if objectId not in collection_alerts_aux:
-                        if self.db['db'][self.collection_alerts_aux].count_documents({'_id': objectId}, limit=1) == 0:
+                        if self.mongo.db[self.collection_alerts_aux].count_documents({'_id': objectId}, limit=1) == 0:
                             tic = time.time()
-                            xmatches = alert_filter__xmatch(self.db['db'], alert)
+                            xmatches = alert_filter__xmatch(self.mongo.db, alert)
                             toc = time.time()
                             if verbose > 1:
-                                print(f'{time_stamp()}: xmatch took {toc - tic} s')
+                                log(f"Xmatch took {toc - tic} s")
                             # CLU cross-match:
                             tic = time.time()
-                            xmatches = {**xmatches, **alert_filter__xmatch_clu(self.db['db'], alert)}
+                            xmatches = {**xmatches, **alert_filter__xmatch_clu(self.mongo.db, alert)}
                             toc = time.time()
                             if verbose > 1:
-                                print(f'{time_stamp()}: clu xmatch took {toc - tic} s')
+                                log(f"CLU xmatch took {toc - tic} s")
 
-                            alert_aux = {'_id': objectId,
-                                         'cross_matches': xmatches,
-                                         'prv_candidates': prv_candidates}
+                            alert_aux = {
+                                '_id': objectId,
+                                'cross_matches': xmatches,
+                                'prv_candidates': prv_candidates
+                            }
 
                             tic = time.time()
-                            self.insert_db_entry(_collection=self.collection_alerts_aux, _db_entry=alert_aux)
+                            self.mongo.insert_one(collection=self.collection_alerts_aux, document=alert_aux)
                             toc = time.time()
                             if verbose > 1:
                                 print(f'{time_stamp()}: aux ingesting took {toc - tic} s')
 
                         else:
                             tic = time.time()
-                            self.db['db'][self.collection_alerts_aux].update_one(
+                            self.mongo.db[self.collection_alerts_aux].update_one(
                                 {'_id': objectId},
                                 {'$addToSet': {'prv_candidates': {'$each': prv_candidates}}},
                                 upsert=True
@@ -771,174 +1081,21 @@ class AlertConsumer(object):
                             if verbose > 1:
                                 print(f'{time_stamp()}: aux updating took {toc - tic} s')
 
-                        # execute user-defined alert filters
-                        tic = time.time()
-                        passed_filters = alert_filter__user_defined(self.db['db'], self.filter_templates, alert)
-                        toc = time.time()
-                        if verbose > 1:
-                            print(f'{time_stamp()}: filtering took {toc-tic} s')
-
-                        # todo: if is_tracked, post new photometry to /api/sources or /api/candidates
-                        if config['misc']['post_to_skyportal'] and (len(passed_filters) > 0):
-                            # check if candidate already exists:
+                        if config['misc']['broker']:
+                            # execute user-defined alert filters
                             tic = time.time()
-                            resp = self.session.get(
-                                f"{config['skyportal']['protocol']}://"
-                                f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                f"/api/candidates/{alert['objectId']}",
-                                headers=self.session_headers, timeout=5,
-                            )
+                            passed_filters = alert_filter__user_defined(self.mongo.db, self.filter_templates, alert)
                             toc = time.time()
-                            candidate_exists = resp.json()['status'] == 'success'
                             if verbose > 1:
-                                print(f'{time_stamp()}: checking if candidate exists took {toc - tic} s')
-                            if candidate_exists:
-                                saved_candidate_meta = resp.json()['data']
-                                print(f"{time_stamp()}: Candidate {alert['candid']} exists in SkyPortal")
-                            else:
-                                saved_candidate_meta = dict()
-                                print(f"{time_stamp()}: Candidate {alert['candid']} does not exist in SkyPortal")
+                                log(f"Filtering took {toc-tic} s")
 
-                            for passed_filter in passed_filters:
-                                # post metadata
-                                alert_thin = {
-                                    "id": alert['objectId'],
-                                    "ra": alert['candidate'].get('ra'),
-                                    "dec": alert['candidate'].get('dec'),
-                                    "score": alert['candidate'].get('drb', alert['candidate']['rb']),
-
-                                    "altdata": {
-                                        "group_id": passed_filter.get("group_id"),
-                                        "filter_id": passed_filter.get("filter_id"),
-                                        "fid": passed_filter.get("fid"),
-                                    },
-
-                                    "filter_ids": [passed_filter.get("filter_id")],
-                                    "passing_alert_id": alert["candid"],
-                                }
-                                if verbose > 1:
-                                    print(f'{time_stamp()}: {alert_thin}')
-
-                                if not candidate_exists:
-                                    tic = time.time()
-                                    resp = self.session.post(
-                                        f"{config['skyportal']['protocol']}://"
-                                        f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                        "/api/candidates",
-                                        json=alert_thin, headers=self.session_headers, timeout=5,
-                                    )
-                                    toc = time.time()
-                                    if verbose > 1:
-                                        print(f'{time_stamp()}: posting metadata to skyportal took {toc - tic} s')
-                                    if resp.json()['status'] == 'success':
-                                        print(f"{time_stamp()}: Posted {alert['candid']} metadata to SkyPortal")
-                                    else:
-                                        print(f"{time_stamp()}: Failed to post {alert['candid']} metadata to SkyPortal")
-                                        print(resp.json())
-
-                                    # post photometry
-                                    tic = time.time()
-                                    alert['prv_candidates'] = prv_candidates
-                                    if candidate_exists:
-                                        last_detected = saved_candidate_meta.get("last_detected")
-                                        if last_detected:
-                                            last_detected = datetime.datetime.fromisoformat(
-                                                saved_candidate_meta.get("last_detected")
-                                            )
-                                            last_detected_jd = datetime_to_jd(last_detected)
-                                            photometry = make_photometry(deepcopy(alert), jd_start=last_detected_jd)
-                                        else:
-                                            photometry = make_photometry(deepcopy(alert))
-                                    else:
-                                        photometry = make_photometry(deepcopy(alert))
-                                    toc = time.time()
-                                    if verbose > 1:
-                                        print(f'{time_stamp()}: making alert photometry took {toc - tic} s')
-
-                                    if len(photometry.get('mag', ())) > 0:
-                                        photometry["group_ids"] = [passed_filter.get("group_id")]
-                                        photometry["instrument_id"] = self.instrument_id
-
-                                        tic = time.time()
-                                        resp = self.session.post(
-                                            f"{config['skyportal']['protocol']}://"
-                                            f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                            "/api/photometry",
-                                            json=photometry, headers=self.session_headers, timeout=5,
-                                        )
-                                        toc = time.time()
-                                        if verbose > 1:
-                                            print(f'{time_stamp()}: posting photometry to skyportal took {toc - tic} s')
-                                        if resp.json()['status'] == 'success':
-                                            print(f"{time_stamp()}: Posted {alert['candid']} photometry to SkyPortal")
-                                        else:
-                                            print(
-                                                f"{time_stamp()}: Failed to post {alert['candid']} "
-                                                "photometry to SkyPortal"
-                                            )
-                                        print(resp.json())
-
-                                    # post comments:
-                                    annotations = passed_filter.get('data', dict()).get('annotations', dict())
-                                    for k, v in annotations.items():
-                                        tic = time.time()
-                                        resp = self.session.post(
-                                            f"{config['skyportal']['protocol']}://"
-                                            f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                            "/api/comment",
-                                            json={
-                                                "obj_id": alert['objectId'],
-                                                "text": f"{k}: {v}",
-                                                "group_ids": [passed_filter.get("group_id")]
-                                            },
-                                            headers=self.session_headers,
-                                            timeout=5,
-                                        )
-                                        toc = time.time()
-                                        if verbose > 1:
-                                            print(f'{time_stamp()}: posting annotation to skyportal took {toc - tic} s')
-                                        if resp.json()['status'] == 'success':
-                                            print(f"{time_stamp()}: Posted {alert['candid']} annotation to SkyPortal")
-                                        else:
-                                            print(
-                                                f"{time_stamp()}: Failed to post {alert['candid']}"
-                                                " annotation to SkyPortal"
-                                            )
-                                            print(resp.json())
-
-                            # post thumbnails for new candidates only
-                            if not candidate_exists:
-                                for ttype, ztftype in [('new', 'Science'), ('ref', 'Template'), ('sub', 'Difference')]:
-
-                                    tic = time.time()
-                                    thumb = make_thumbnail(deepcopy(alert), ttype, ztftype)
-                                    toc = time.time()
-                                    if verbose > 1:
-                                        print(f'{time_stamp()}: making {ztftype} thumbnail took {toc - tic} s')
-
-                                    tic = time.time()
-                                    resp = self.session.post(
-                                        f"{config['skyportal']['protocol']}://"
-                                        f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-                                        "/api/thumbnail",
-                                        json=thumb, headers=self.session_headers, timeout=5,
-                                    )
-                                    toc = time.time()
-                                    if verbose > 1:
-                                        print(
-                                            f'{time_stamp()}: posting {ztftype} '
-                                            f'thumbnail to skyportal took {toc - tic} s'
-                                        )
-
-                                    if resp.json()['status'] == 'success':
-                                        print(f"{time_stamp()}: Posted {alert['candid']} {ztftype} cutout to SkyPortal")
-                                    else:
-                                        print(f"{time_stamp()}: Failed to post {alert['candid']} {ztftype}"
-                                              " cutout to SkyPortal")
-                                        print(resp.json())
+                            # post to SkyPortal
+                            self.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
 
             except Exception as e:
-                print(f"{time_stamp()}: {str(e)}")
+                log(e)
+                _err = traceback.format_exc()
+                log(_err)
 
     @staticmethod
     def decode_message(msg):
@@ -985,8 +1142,10 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest', group=None, t
     """
 
     # Configure consumer connection to Kafka broker
-    conf = {'bootstrap.servers': bootstrap_servers,
-            'default.topic.config': {'auto.offset.reset': offset_reset}}
+    conf = {
+        'bootstrap.servers': bootstrap_servers,
+        'default.topic.config': {'auto.offset.reset': offset_reset}
+    }
     if group is not None:
         conf['group.id'] = group
     else:
@@ -1040,12 +1199,20 @@ def ingester(obs_date=None, test=False):
             # get kafka topic names with kafka-topics command
             if not test:
                 # Production Kafka stream at IPAC
-                kafka_cmd = [os.path.join(config['path']['kafka'], 'bin', 'kafka-topics.sh'),
-                             '--zookeeper', config['kafka']['zookeeper'], '-list']
+                kafka_cmd = [
+                    os.path.join(config['path']['kafka'], 'bin', 'kafka-topics.sh'),
+                    '--zookeeper',
+                    config['kafka']['zookeeper'],
+                    '-list'
+                ]
             else:
                 # Local test stream
-                kafka_cmd = [os.path.join(config['path']['kafka'], 'bin', 'kafka-topics.sh'),
-                             '--zookeeper', config['kafka']['zookeeper.test'], '-list']
+                kafka_cmd = [
+                    os.path.join(config['path']['kafka'], 'bin', 'kafka-topics.sh'),
+                    '--zookeeper',
+                    config['kafka']['zookeeper.test'],
+                    '-list'
+                ]
 
             topics = subprocess.run(kafka_cmd, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')[:-1]
 
@@ -1066,7 +1233,7 @@ def ingester(obs_date=None, test=False):
                         bootstrap_servers = config['kafka']['bootstrap.servers']
                     else:
                         bootstrap_servers = config['kafka']['bootstrap.test.servers']
-                    group = '{:s}'.format(config['kafka']['group'])
+                    group = config['kafka']['group']
 
                     topics_on_watch[t] = multiprocessing.Process(
                         target=listener,
@@ -1096,9 +1263,9 @@ def ingester(obs_date=None, test=False):
                 break
 
         except Exception as e:
-            print(f'{time_stamp()}:  {str(e)}')
+            log(str(e))
             _err = traceback.format_exc()
-            print(f'{time_stamp()}: {str(_err)}')
+            log(str(_err))
 
         if obs_date is None:
             time.sleep(60)

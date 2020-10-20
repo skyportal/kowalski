@@ -17,7 +17,7 @@ git clone https://github.com/dmitryduev/kowalski.git
 cd kowalski
 ```
 
-Use the `kowalski.py` utility to manage `kowalski`.
+Use the `kowalski.py` utility to manage `Kowalski`.
 
 Make sure the requirements to run the `kowalski.py` utility are met, e.g.:
 
@@ -25,7 +25,7 @@ Make sure the requirements to run the `kowalski.py` utility are met, e.g.:
 pip install -r requirements.txt
 ```
 
-Start up `kowalski` using the default configs and secrets (copying them over):
+Start up `Kowalski` using the default config/secrets (copying them over):
 
 ```bash
 ./kowalski.py up
@@ -50,7 +50,7 @@ together with all the secrets, so be careful when committing code / pushing dock
 There are several available deployment scenarios:
 
 - Bare-bones
-- Bare-bones alongside locally-running `SkyPortal`
+- Bare-bones + broker for `SkyPortal` / `Fritz`
 - Behind `traefik`
 
 #### Bare-bones
@@ -59,11 +59,11 @@ Use `docker-compose.defaults.yaml` as a template for `docker-compose.yaml`.
 Note that the environment variables for the `mongo` service must match 
 `admin_*` under `kowalski.database` in `config.yaml`.
 
-#### Bare-bones alongside locally-running [`SkyPortal`](https://skyportal.io/)
+#### Bare-bones + broker for [`SkyPortal`](https://skyportal.io/) / [`Fritz`](https://fritz-marshal.org/)
 
 Use `docker-compose.fritz.defaults.yaml` as a template for `docker-compose.yaml`.
 If you want the alert ingester to post (filtered) alerts to `SkyPortal`, make sure 
-`{"misc": {"post_to_skyportal": true}}` in `config.yaml`.
+`{"misc": {"broker": true}}` in `config.yaml`.
 
 #### Behind `traefik`
 
@@ -85,7 +85,7 @@ In `docker-compose.yaml`:
 ./kowalski.py test
 ```
 
-## Shut down `kowalski`
+## Shut down `Kowalski`
 
 ```bash
 ./kowalski.py down
@@ -93,4 +93,4 @@ In `docker-compose.yaml`:
 
 ## Docs
 
-OpenAPI specs are to be found under `/docs/api` once `kowalski` is up and running.
+OpenAPI specs are to be found under `/docs/api` once `Kowalski` is up and running.

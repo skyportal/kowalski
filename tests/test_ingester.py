@@ -14,14 +14,15 @@ from utils import load_config, time_stamp
 config = load_config(config_file='config.yaml')['kowalski']
 
 
-class Program(object):
-    def __init__(self, group_name="FRITZ_TEST_PROGRAM"):
+class Program:
+    def __init__(self, group_name="FRITZ_TEST", group_nickname="Fritz"):
         self.access_token = config['skyportal']['token']
         self.base_url = f"{config['skyportal']['protocol']}://" \
                         f"{config['skyportal']['host']}:{config['skyportal']['port']}"
         self.headers = {'Authorization': f'token {self.access_token}'}
 
         self.group_name = group_name
+        self.group_nickname = group_nickname
         self.group_id, self.filter_id = self.create()
 
     def get_groups(self):
@@ -37,7 +38,7 @@ class Program(object):
         assert 'data' in result
         assert 'user_groups' in result['data']
 
-        user_groups = {g['name']: g['id'] for g in result['data']['user_groups']}
+        user_groups = {g['name']: g['id'] for g in result['data']['user_accessible_groups']}
 
         return user_groups
 
@@ -60,7 +61,7 @@ class Program(object):
     def create(self):
         user_groups = self.get_groups()
 
-        stream_id = 1
+        stream_ids = [1, 2]
 
         if self.group_name in user_groups.keys():
             # already exists? grab its id then:
@@ -69,7 +70,7 @@ class Program(object):
             # else, create a new group and add stream access to it
             resp = requests.post(
                 self.base_url + f"/api/groups",
-                json={"name": self.group_name, "group_admins": ["kowalski@caltech.edu"]},
+                json={"name": self.group_name, "nickname": self.group_nickname},
                 headers=self.headers, timeout=3,
             )
             result = resp.json()
@@ -80,16 +81,17 @@ class Program(object):
 
             group_id = result['data']['id']
 
-            #
-            resp = requests.post(
-                self.base_url + f"/api/groups/{group_id}/streams",
-                json={"stream_id": stream_id},
-                headers=self.headers, timeout=3,
-            )
-            result = resp.json()
-            # print(result)
-            assert result['status'] == 'success'
-            assert result["data"]["stream_id"] == stream_id
+            # grant stream access to group
+            for stream_id in stream_ids:
+                resp = requests.post(
+                    self.base_url + f"/api/groups/{group_id}/streams",
+                    json={"stream_id": stream_id},
+                    headers=self.headers, timeout=3,
+                )
+                result = resp.json()
+                # print(result)
+                assert result['status'] == 'success'
+                assert result["data"]["stream_id"] == stream_id
 
         # grab filter_ids defined for this group:
         group_filter_ids = self.get_group_filters(group_id=group_id)
@@ -98,7 +100,7 @@ class Program(object):
             # none created so far? make one:
             resp = requests.post(
                 self.base_url + f"/api/filters",
-                json={"name": "Orange Transients", "stream_id": stream_id, "group_id": group_id},
+                json={"name": "Orange Transients", "stream_id": max(stream_ids), "group_id": group_id},
                 headers=self.headers, timeout=3,
             )
             result = resp.json()
@@ -186,9 +188,6 @@ class Filter(object):
                         "candidate.drb": {
                             "$gt": 0.9
                         },
-                        "cross_matches.CLU_20190625.0": {
-                            "$exists": False
-                        }
                     }
                 },
                 {
@@ -273,7 +272,7 @@ class TestIngester(object):
             path_logs.mkdir(parents=True, exist_ok=True)
 
         print(f'{time_stamp()}: Setting up test program in Fritz')
-        program = Program(group_name="FRITZ_TEST_PROGRAM")
+        program = Program(group_name="FRITZ_TEST", group_nickname="Fritz")
 
         # clean up old Kafka logs
         print(f'{time_stamp()}: Cleaning up Kafka logs')
