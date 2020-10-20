@@ -102,33 +102,38 @@ def log(message):
 def make_photometry(alert: dict, jd_start: float = None):
     try:
         a = deepcopy(alert)
-        df = pd.DataFrame(a['candidate'], index=[0])
+        df_candidate = pd.DataFrame(a['candidate'], index=[0])
 
-        df_prv = pd.DataFrame(a['prv_candidates'])
-        dflc = pd.concat(
-            [df, df_prv],
+        df_prv_candidates = pd.DataFrame(a['prv_candidates'])
+        df_light_curve = pd.concat(
+            [df_candidate, df_prv_candidates],
             ignore_index=True,
             sort=False
         )
 
         ztf_filters = {1: 'ztfg', 2: 'ztfr', 3: 'ztfi'}
-        dflc['ztf_filter'] = dflc['fid'].apply(lambda x: ztf_filters[x])
-        dflc['magsys'] = "ab"
-        dflc['zp'] = 25.0
-        dflc['mjd'] = dflc['jd'] - 2400000.5
+        df_light_curve['ztf_filter'] = df_light_curve['fid'].apply(lambda x: ztf_filters[x])
+        df_light_curve['magsys'] = "ab"
+        df_light_curve['zp'] = 25.0
+        df_light_curve['mjd'] = df_light_curve['jd'] - 2400000.5
 
-        dflc['mjd'] = dflc['mjd'].apply(lambda x: np.float64(x))
-        dflc['magpsf'] = dflc['magpsf'].apply(lambda x: np.float32(x))
-        dflc['sigmapsf'] = dflc['sigmapsf'].apply(lambda x: np.float32(x))
+        df_light_curve['mjd'] = df_light_curve['mjd'].apply(lambda x: np.float64(x))
+        df_light_curve['magpsf'] = df_light_curve['magpsf'].apply(lambda x: np.float32(x))
+        df_light_curve['sigmapsf'] = df_light_curve['sigmapsf'].apply(lambda x: np.float32(x))
 
-        dflc = dflc.drop_duplicates(subset=["mjd", "magpsf"]).reset_index(drop=True).sort_values(by=['mjd'])
+        df_light_curve = (
+            df_light_curve
+            .drop_duplicates(subset=["mjd", "magpsf"])
+            .reset_index(drop=True)
+            .sort_values(by=['mjd'])
+        )
 
         # only "new" photometry requested?
         if jd_start is not None:
-            w = dflc['jd'] > jd_start
-            dflc = dflc.loc[w]
+            w_after_jd = df_light_curve['jd'] > jd_start
+            df_light_curve = df_light_curve.loc[w_after_jd]
 
-        return dflc
+        return df_light_curve
 
     except Exception as e:
         log(e)
@@ -523,7 +528,7 @@ class AlertConsumer(object):
                 total=3,
                 backoff_factor=1,
                 status_forcelist=[405, 429, 500, 502, 503, 504],
-                method_whitelist=["HEAD", "GET", "PUT", "POST"]
+                method_whitelist=["HEAD", "GET", "PUT", "POST", "PATCH"]
             )
             adapter = TimeoutHTTPAdapter(timeout=5, max_retries=retries)
             self.session.mount("https://", adapter)
@@ -769,7 +774,7 @@ class AlertConsumer(object):
                 log(f"Failed to post {alert['objectId']} {alert['candid']} {ztftype} cutout to SkyPortal")
                 log(resp.json())
 
-    def alert_post_photometry(self, alert, groups):
+    def alert_put_photometry(self, alert, groups):
         tic = time.time()
         df_photometry = make_photometry(alert)
         toc = time.time()
@@ -850,7 +855,7 @@ class AlertConsumer(object):
             log(f"Checking if object is Source took {toc - tic} s")
             log(f"{alert['objectId']} {'is' if is_source else 'is not'} Source in SkyPortal")
 
-        # obj does not exits in SP:
+        # obj does not exit in SP:
         if (not is_candidate) and (not is_source):
             # passed any filters?
             if len(passed_filters) > 0:
@@ -873,7 +878,7 @@ class AlertConsumer(object):
                     log(e)
                     alert['prv_candidates'] = prv_candidates
 
-                self.alert_post_photometry(alert, passed_filters)
+                self.alert_put_photometry(alert, passed_filters)
 
                 # post thumbnails
                 self.alert_post_thumbnails(alert)
@@ -947,7 +952,7 @@ class AlertConsumer(object):
             # post alert photometry with all group_ids in single call to /api/photometry
             alert['prv_candidates'] = prv_candidates
 
-            self.alert_post_photometry(alert, groups)
+            self.alert_put_photometry(alert, groups)
 
     def poll(self, verbose=2):
         """

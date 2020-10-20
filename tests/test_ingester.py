@@ -188,9 +188,6 @@ class Filter(object):
                         "candidate.drb": {
                             "$gt": 0.9
                         },
-                        # "cross_matches.CLU_20190625.0": {
-                        #     "$exists": False
-                        # }
                     }
                 },
                 {
@@ -405,8 +402,8 @@ class TestIngester(object):
         # shut down Kafka server and ZooKeeper
         time.sleep(10)
 
-        # print(f'{time_stamp()}: Removing the test filter')
-        # test_filter.remove()
+        print(f'{time_stamp()}: Removing the test filter')
+        test_filter.remove()
 
         print(f'{time_stamp()}: Shutting down Kafka Server at localhost:9092')
         # start the Kafka server:
