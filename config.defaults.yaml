@@ -48,6 +48,8 @@ kowalski:
     # fixme: use strong password if exposing the database to the world
     password: "ztf"
 
+    build_indexes: True
+
     collections:
       users: "users"
       filters: "filters"
