@@ -515,11 +515,12 @@ class AlertConsumer(object):
         )
 
         # create indexes
-        for index_name, index in self.config['database']['indexes'][self.collection_alerts].items():
-            ind = [tuple(ii) for ii in index]
-            self.mongo.db[self.collection_alerts].create_index(
-                keys=ind, name=index_name, background=True
-            )
+        if self.config["database"]["build_indexes"]:
+            for index_name, index in self.config['database']['indexes'][self.collection_alerts].items():
+                ind = [tuple(ii) for ii in index]
+                self.mongo.db[self.collection_alerts].create_index(
+                    keys=ind, name=index_name, background=True
+                )
 
         # ML models:
         self.ml_models = dict()
