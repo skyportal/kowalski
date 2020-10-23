@@ -132,7 +132,7 @@ def make_photometry(alert: dict, jd_start: float = None):
         .sort_values(by=['mjd'])
     )
 
-    # filter out old bad data:
+    # filter out bad data:
     w_bad_diffmaglim = df_light_curve["diffmaglim"] > 0
     df_light_curve = df_light_curve.loc[w_bad_diffmaglim]
 
