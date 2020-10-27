@@ -745,6 +745,7 @@ class AlertConsumer(object):
             "score": alert['candidate'].get('drb', alert['candidate']['rb']),
             "filter_ids": filter_ids,
             "passing_alert_id": alert["candid"],
+            "passed_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")
         }
         if self.verbose > 1:
             log(alert_thin)
