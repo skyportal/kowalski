@@ -761,6 +761,27 @@ class AlertConsumer(object):
             log(f"Failed to post {alert['objectId']} {alert['candid']} metadata to SkyPortal")
             log(response.json())
 
+    def alert_put_candidate(self, alert, filter_ids):
+        # update candidate metadata for (existing) filter_ids
+        alert_thin = {
+            "filter_ids": filter_ids,
+            "passing_alert_id": alert["candid"],
+            "passed_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")
+        }
+        if self.verbose > 1:
+            log(alert_thin)
+
+        tic = time.time()
+        response = self.api_skyportal("PUT", f"/api/candidates/{alert['objectId']}", alert_thin)
+        toc = time.time()
+        if self.verbose > 1:
+            log(f"Putting metadata to SkyPortal took {toc - tic} s")
+        if response.json()['status'] == 'success':
+            log(f"Put {alert['objectId']} {alert['candid']} metadata to SkyPortal")
+        else:
+            log(f"Failed to put {alert['objectId']} {alert['candid']} metadata to SkyPortal")
+            log(response.json())
+
     def alert_post_annotations(self, alert, passed_filters):
         for passed_filter in passed_filters:
             annotations = {
@@ -933,7 +954,10 @@ class AlertConsumer(object):
                         log(f"Getting candidate info on {alert['objectId']} took {toc - tic} s")
                     if response.json()['status'] == 'success':
                         existing_filter_ids = response.json()['data']["filter_ids"]
+                        # do not post to existing_filter_ids
                         filter_ids = list(set(filter_ids) - set(existing_filter_ids))
+                        # update existing candidate info
+                        self.alert_put_candidate(alert, existing_filter_ids)
                     else:
                         log(f"Failed to get candidate info on {alert['objectId']}")
 
