@@ -2766,30 +2766,27 @@ async def ztf_alert_get_cutout(request):
                                       'message': f'file format {file_format} not in {str(known_file_formats)}'},
                                      status=400)
 
-        if (interval is None) or (interval.lower() not in ['min_max', 'zscale']):
-            interval = MinMaxInterval()
-        elif interval.lower() == "min_max":
-            interval = MinMaxInterval()
-        elif interval.lower() == "zscale":
-            interval = ZScaleInterval(
+        normalization_methods = {
+            'min_max': MinMaxInterval(),
+            'zscale': ZScaleInterval(
                 nsamples=600,
                 contrast=0.045,
                 krej=2.5
-            )
+            ),
+        }
+        if interval is None:
+            interval = 'min_max'
+        normalizer = normalization_methods.get(interval.lower(), MinMaxInterval())
 
-        if (stretch is None) or (stretch.lower() not in ["linear", "log", "asinh", "sqrt"]):
-            if cutout == "Difference":
-                stretch = LinearStretch()
-            else:
-                stretch = LogStretch()
-        elif stretch.lower() == "linear":
-            stretch = LinearStretch()
-        elif stretch.lower() == "log":
-            stretch = LogStretch()
-        elif stretch.lower() == "asinh":
-            stretch = AsinhStretch()
-        elif stretch.lower() == "sqrt":
-            stretch = SqrtStretch()
+        stretching_methods = {
+            'linear': LinearStretch(),
+            'log': LogStretch(),
+            'asinh': AsinhStretch(),
+            'sqrt': SqrtStretch(),
+        }
+        if stretch is None:
+            stretch = "log" if cutout != "Difference" else "linear"
+        stretcher = stretching_methods.get(stretch.lower(), LogStretch())
 
         if (cmap is None) or (cmap.lower() not in ['bone', 'gray', 'cividis', 'viridis', 'magma']):
             cmap = 'bone'
@@ -2819,8 +2816,11 @@ async def ztf_alert_get_cutout(request):
             stamp_fits = io.BytesIO()
             hdul.writeto(fileobj=stamp_fits)
 
-            return web.Response(body=stamp_fits.getvalue(), content_type='image/fits',
-                                headers=MultiDict({'Content-Disposition': f'Attachment;filename={fits_name}'}), )
+            return web.Response(
+                body=stamp_fits.getvalue(),
+                content_type='image/fits',
+                headers=MultiDict({'Content-Disposition': f'Attachment;filename={fits_name}'}),
+            )
 
         if file_format == 'png':
             buff = io.BytesIO()
@@ -2837,8 +2837,8 @@ async def ztf_alert_get_cutout(request):
 
             norm = ImageNormalize(
                 img,
-                interval=interval,
-                stretch=stretch
+                interval=normalizer,
+                stretch=stretcher
             )
             ax.imshow(img, cmap=cmap, origin='lower', norm=norm)
 
