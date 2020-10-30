@@ -2779,14 +2779,14 @@ async def ztf_alert_get_cutout(request):
         normalizer = normalization_methods.get(interval.lower(), MinMaxInterval())
 
         stretching_methods = {
-            'linear': LinearStretch(),
-            'log': LogStretch(),
-            'asinh': AsinhStretch(),
-            'sqrt': SqrtStretch(),
+            'linear': LinearStretch,
+            'log': LogStretch,
+            'asinh': AsinhStretch,
+            'sqrt': SqrtStretch,
         }
         if stretch is None:
             stretch = "log" if cutout != "Difference" else "linear"
-        stretcher = stretching_methods.get(stretch.lower(), LogStretch())
+        stretcher = stretching_methods.get(stretch.lower(), LogStretch)()
 
         if (cmap is None) or (cmap.lower() not in ['bone', 'gray', 'cividis', 'viridis', 'magma']):
             cmap = 'bone'
