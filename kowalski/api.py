@@ -2,7 +2,11 @@ import aiofiles
 from aiohttp import web
 from aiohttp_swagger3 import SwaggerDocs, ReDocUiSettings
 from astropy.io import fits
-from astropy.visualization import ZScaleInterval
+from astropy.visualization import (
+    MinMaxInterval, ZScaleInterval,
+    LinearStretch, LogStretch, AsinhStretch, SqrtStretch,
+    ImageNormalize
+)
 import asyncio
 from ast import literal_eval
 from bson.json_util import dumps, loads
@@ -2690,12 +2694,19 @@ async def ztf_alert_get_cutout(request):
           type: string
           enum: [fits, png]
       - in: query
-        name: scaling
-        description: "Scaling to use when rendering png"
+        name: interval
+        description: "Interval to use when rendering png"
         required: false
         schema:
           type: string
-          enum: [linear, log, arcsinh, zscale]
+          enum: [min_max, zscale]
+      - in: query
+        name: stretch
+        description: "Stretch to use when rendering png"
+        required: false
+        schema:
+          type: string
+          enum: [linear, log, asinh, sqrt]
       - in: query
         name: cmap
         description: "Color map to use when rendering png"
@@ -2740,7 +2751,8 @@ async def ztf_alert_get_cutout(request):
         candid = int(request.match_info['candid'])
         cutout = request.match_info['cutout'].capitalize()
         file_format = request.match_info['file_format']
-        scaling = request.query.get('scaling', None)
+        interval = request.query.get("interval")
+        stretch = request.query.get("stretch")
         cmap = request.query.get('cmap', None)
 
         known_cutouts = ['Science', 'Template', 'Difference']
@@ -2754,15 +2766,27 @@ async def ztf_alert_get_cutout(request):
                                       'message': f'file format {file_format} not in {str(known_file_formats)}'},
                                      status=400)
 
-        default_scaling = {
-            'Science': 'log',
-            'Template': 'log',
-            'Difference': 'linear'
+        normalization_methods = {
+            'min_max': MinMaxInterval(),
+            'zscale': ZScaleInterval(
+                nsamples=600,
+                contrast=0.045,
+                krej=2.5
+            ),
         }
-        if (scaling is None) or (scaling.lower() not in ('log', 'linear', 'zscale', 'arcsinh')):
-            scaling = default_scaling[cutout]
-        else:
-            scaling = scaling.lower()
+        if interval is None:
+            interval = 'min_max'
+        normalizer = normalization_methods.get(interval.lower(), MinMaxInterval())
+
+        stretching_methods = {
+            'linear': LinearStretch,
+            'log': LogStretch,
+            'asinh': AsinhStretch,
+            'sqrt': SqrtStretch,
+        }
+        if stretch is None:
+            stretch = "log" if cutout != "Difference" else "linear"
+        stretcher = stretching_methods.get(stretch.lower(), LogStretch)()
 
         if (cmap is None) or (cmap.lower() not in ['bone', 'gray', 'cividis', 'viridis', 'magma']):
             cmap = 'bone'
@@ -2792,8 +2816,11 @@ async def ztf_alert_get_cutout(request):
             stamp_fits = io.BytesIO()
             hdul.writeto(fileobj=stamp_fits)
 
-            return web.Response(body=stamp_fits.getvalue(), content_type='image/fits',
-                                headers=MultiDict({'Content-Disposition': f'Attachment;filename={fits_name}'}), )
+            return web.Response(
+                body=stamp_fits.getvalue(),
+                content_type='image/fits',
+                headers=MultiDict({'Content-Disposition': f'Attachment;filename={fits_name}'}),
+            )
 
         if file_format == 'png':
             buff = io.BytesIO()
@@ -2808,21 +2835,12 @@ async def ztf_alert_get_cutout(request):
             img = np.array(data_flipped_y)
             img = np.nan_to_num(img)
 
-            if scaling == 'log':
-                img[img <= 0] = np.median(img)
-                ax.imshow(img, cmap=cmap, norm=LogNorm(), origin='lower')
-            elif scaling == 'linear':
-                ax.imshow(img, cmap=cmap, origin='lower')
-            elif scaling == 'zscale':
-                interval = ZScaleInterval(
-                    nsamples=img.shape[0] * img.shape[1],
-                    contrast=0.045,
-                    krej=2.5
-                )
-                limits = interval.get_limits(img)
-                ax.imshow(img, origin='lower', cmap=cmap, vmin=limits[0], vmax=limits[1])
-            elif scaling == 'arcsinh':
-                ax.imshow(np.arcsinh(img - np.median(img)), cmap=cmap, origin='lower')
+            norm = ImageNormalize(
+                img,
+                interval=normalizer,
+                stretch=stretcher
+            )
+            ax.imshow(img, cmap=cmap, origin='lower', norm=norm)
 
             plt.savefig(buff, dpi=42)
 

@@ -1,6 +1,7 @@
 import argparse
 from ast import literal_eval
 from astropy.io import fits
+from astropy.visualization import MinMaxInterval, LinearStretch, LogStretch, ImageNormalize
 import base64
 from bson.json_util import loads
 import confluent_kafka
@@ -9,7 +10,6 @@ import datetime
 import fastavro
 import gzip
 import io
-from matplotlib.colors import LogNorm
 import matplotlib.pyplot as plt
 import multiprocessing
 import numpy as np
@@ -172,11 +172,12 @@ def make_thumbnail(alert, ttype: str, ztftype: str):
     img = np.array(data_flipped_y)
     img = np.nan_to_num(img)
 
-    if ztftype != 'Difference':
-        img[img <= 0] = np.median(img)
-        plt.imshow(img, cmap="bone", norm=LogNorm(), origin='lower')
-    else:
-        plt.imshow(img, cmap="bone", origin='lower')
+    norm = ImageNormalize(
+        img,
+        interval=MinMaxInterval(),
+        stretch=LinearStretch() if ztftype == "Difference" else LogStretch()
+    )
+    ax.imshow(img, cmap="bone", origin='lower', norm=norm)
     plt.savefig(buff, dpi=42)
 
     buff.seek(0)
