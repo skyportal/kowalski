@@ -1,10 +1,12 @@
 import argparse
-import sys
-import traceback
 import datetime
-import time
+import numpy as np
 import pandas as pd
 import pytz
+import sys
+import time
+import traceback
+
 from utils import (
     load_config,
     log,
@@ -25,19 +27,31 @@ def mongify(_dict):
     """
     _tmp = dict(_dict)
 
-    doc = {_key.lower().replace('.', '_').replace(' ', '_'): _tmp[_key] for _key in _tmp}
+    doc = {
+        _key.lower().replace('.', '_').replace(' ', '_'): _tmp[_key]
+        for _key in _tmp
+        if not pd.isnull(_tmp[_key])
+    }
 
-    doc['_id'] = int(_dict['ID'])
+    doc['_id'] = _dict['ID']
+    doc.pop('id')
 
     # discovery date as datetime
     try:
         doc['discovery_date'] = datetime.datetime.strptime(
             _dict['Discovery Date (UT)'],
-            '%Y-%m-%d %H:%M:%S'
+            '%Y-%m-%d %H:%M:%S.%f'
         ).astimezone(pytz.utc)
     except Exception as _e:
         log(_e)
-        doc['discovery_date'] = None
+        try:
+            doc['discovery_date'] = datetime.datetime.strptime(
+                _dict['Discovery Date (UT)'],
+                '%Y-%m-%d %H:%M:%S'
+            ).astimezone(pytz.utc)
+        except Exception as _e:
+            log(_e)
+            doc['discovery_date'] = None
 
     # GeoJSON for 2D indexing
     doc['coordinates'] = {}
@@ -94,8 +108,8 @@ def get_tns_date2date(grab_all=False):
 
     log("Fetching data...")
 
-    # grab the last 10 pages (with 50 entries each) by default
-    num_pages = 10
+    # grab the last 20 pages (with 50 entries each) by default
+    num_pages = 20
 
     if grab_all:
         # grab the latest data:
@@ -145,7 +159,10 @@ def main(grab_all=False):
             log(str(e))
             log(traceback.print_exc())
 
-        time.sleep(300)
+        if not grab_all:
+            time.sleep(120)
+        else:
+            time.sleep(86400)
 
 
 if __name__ == '__main__':
