@@ -641,7 +641,7 @@ class AlertConsumer(object):
                 log(f"Group name: {group_name}, filter name: {filter_name}")
 
                 # prepend upstream aggregation stages:
-                pipeline = self.filter_pipeline_upstream + loads(active_filter['fv']['pipeline'])
+                pipeline = deepcopy(self.filter_pipeline_upstream) + loads(active_filter['fv']['pipeline'])
                 # match permissions
                 pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter['permissions']
                 pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter['permissions']
@@ -653,7 +653,7 @@ class AlertConsumer(object):
                     'filter_name': filter_name,
                     'fid': active_filter['fv']['fid'],
                     'permissions': active_filter['permissions'],
-                    'pipeline': pipeline
+                    'pipeline': deepcopy(pipeline)
                 }
 
                 self.filter_templates.append(filter_template)
