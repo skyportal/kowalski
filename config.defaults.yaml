@@ -319,7 +319,7 @@ kowalski:
         serverurl: unix:///dev/shm/supervisor.sock
 
       "program:gunicorn":
-        # fixme: adjust number of workers -w for your system (e.g. -w 20 for kowalski.caltech.edu)
+        # fixme: adjust number of workers -w for your system (e.g. -w 40 for kowalski.caltech.edu)
         command: >
           /usr/local/bin/gunicorn
           -w 10
@@ -366,9 +366,8 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/alert_watcher_ztf_stdout.log
+        stdout_logfile: /data/logs/alert_watcher_ztf.log
         stdout_logfile_maxbytes: 30MB
-        stderr_logfile: /data/logs/alert_watcher_ztf_stderr.log
         redirect_stderr: True
         environment: "PRODUCTION=1"
 
@@ -378,8 +377,18 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/ops_watcher_ztf_stdout.log
+        stdout_logfile: /data/logs/ops_watcher_ztf.log
         stdout_logfile_maxbytes: 30MB
-        stderr_logfile: /data/logs/ops_watcher_ztf_stderr.log
+        redirect_stderr: True
+        environment: "PRODUCTION=1"
+
+      "program:tns-watcher":
+        command: /usr/local/bin/python tns_watcher.py
+        directory: /app
+        user: root
+        autostart: true
+        autorestart: true
+        stdout_logfile: /data/logs/tns_watcher.log
+        stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: "PRODUCTION=1"

@@ -36,6 +36,10 @@ def time_stamp():
     return datetime.datetime.utcnow().strftime('%Y%m%d_%H:%M:%S')
 
 
+def log(message):
+    print(f"{time_stamp()}: {message}")
+
+
 def generate_password_hash(password, salt_rounds=12):
     password_bin = password.encode('utf-8')
     hashed = bcrypt.hashpw(password_bin, bcrypt.gensalt(salt_rounds))
