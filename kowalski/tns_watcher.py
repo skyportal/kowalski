@@ -71,7 +71,7 @@ def mongify(_dict):
     return doc
 
 
-def get_tns_date2date(grab_all=False):
+def get_tns(grab_all=False):
     """
     Queries the TNS and obtains the targets reported to it.
 
@@ -148,7 +148,7 @@ def main(grab_all=False):
 
     while True:
         try:
-            get_tns_date2date(grab_all)
+            get_tns(grab_all)
 
         except KeyboardInterrupt:
             log("Aborted by user")
@@ -166,11 +166,8 @@ def main(grab_all=False):
 
 
 if __name__ == '__main__':
-    ''' Create command line argument parser '''
     parser = argparse.ArgumentParser()
-
     parser.add_argument('--graball', action='store_true', help='grab all data from TNS')
-
     args = parser.parse_args()
 
     main(grab_all=args.graball)
