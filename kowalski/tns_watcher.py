@@ -162,7 +162,7 @@ def main(grab_all=False):
         if not grab_all:
             time.sleep(120)
         else:
-            time.sleep(86400)
+            time.sleep(86400*7)
 
 
 if __name__ == '__main__':
