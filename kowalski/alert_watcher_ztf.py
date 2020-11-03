@@ -1,7 +1,7 @@
 import argparse
 from ast import literal_eval
 from astropy.io import fits
-from astropy.visualization import MinMaxInterval, LinearStretch, LogStretch, ImageNormalize
+from astropy.visualization import AsymmetricPercentileInterval, LinearStretch, LogStretch, ImageNormalize
 import base64
 from bson.json_util import loads
 import confluent_kafka
@@ -174,10 +174,15 @@ def make_thumbnail(alert, ttype: str, ztftype: str):
 
     norm = ImageNormalize(
         img,
-        interval=MinMaxInterval(),
         stretch=LinearStretch() if ztftype == "Difference" else LogStretch()
     )
-    ax.imshow(img, cmap="bone", origin='lower', norm=norm)
+    img_norm = norm(img)
+    normalizer = AsymmetricPercentileInterval(
+        lower_percentile=1,
+        upper_percentile=100
+    )
+    vmin, vmax = normalizer.get_limits(img_norm)
+    ax.imshow(img_norm, cmap="bone", origin='lower', vmin=vmin, vmax=vmax)
     plt.savefig(buff, dpi=42)
 
     buff.seek(0)

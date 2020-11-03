@@ -3,7 +3,7 @@ from aiohttp import web
 from aiohttp_swagger3 import SwaggerDocs, ReDocUiSettings
 from astropy.io import fits
 from astropy.visualization import (
-    MinMaxInterval, ZScaleInterval,
+    AsymmetricPercentileInterval, MinMaxInterval, ZScaleInterval,
     LinearStretch, LogStretch, AsinhStretch, SqrtStretch,
     ImageNormalize
 )
@@ -2767,6 +2767,10 @@ async def ztf_alert_get_cutout(request):
                                      status=400)
 
         normalization_methods = {
+            'asymmetric_percentile': AsymmetricPercentileInterval(
+                lower_percentile=1,
+                upper_percentile=100
+            ),
             'min_max': MinMaxInterval(),
             'zscale': ZScaleInterval(
                 nsamples=600,
@@ -2775,8 +2779,14 @@ async def ztf_alert_get_cutout(request):
             ),
         }
         if interval is None:
-            interval = 'min_max'
-        normalizer = normalization_methods.get(interval.lower(), MinMaxInterval())
+            interval = 'asymmetric_percentile'
+        normalizer = normalization_methods.get(
+            interval.lower(),
+            AsymmetricPercentileInterval(
+                lower_percentile=1,
+                upper_percentile=100
+            )
+        )
 
         stretching_methods = {
             'linear': LinearStretch,
@@ -2837,10 +2847,11 @@ async def ztf_alert_get_cutout(request):
 
             norm = ImageNormalize(
                 img,
-                interval=normalizer,
                 stretch=stretcher
             )
-            ax.imshow(img, cmap=cmap, origin='lower', norm=norm)
+            img_norm = norm(img)
+            vmin, vmax = normalizer.get_limits(img_norm)
+            ax.imshow(img_norm, cmap=cmap, origin='lower', vmin=vmin, vmax=vmax)
 
             plt.savefig(buff, dpi=42)
 
