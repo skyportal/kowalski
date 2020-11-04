@@ -31,6 +31,7 @@ from utils import (
     great_circle_distance,
     in_ellipse,
     load_config,
+    log,
     Mongo,
     radec2lb,
     time_stamp,
@@ -93,10 +94,6 @@ class EopError(Exception):
 
     def __str__(self):
         return self.message
-
-
-def log(message):
-    print(f"{time_stamp()}: {message}")
 
 
 def make_photometry(alert: dict, jd_start: float = None):
