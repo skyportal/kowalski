@@ -108,19 +108,20 @@ def get_tns(grab_all=False):
 
     log("Fetching data...")
 
-    # grab the last 20 pages (with 50 entries each) by default
-    num_pages = 20
+    entries_per_page = 100
 
     if grab_all:
-        # grab the latest data:
-        url = f'https://wis-tns.weizmann.ac.il/search?format=csv&num_page=50&page=0'
+        # grab the latest data (5 is the minimum):
+        url = f'https://wis-tns.weizmann.ac.il/search?format=csv&num_page=5&page=0'
         data = pd.read_csv(url)
-        # TNS outputs a maximum of 50 entries per call/page
-        num_pages = data["ID"].max() // 50
+        num_pages = data["ID"].max() // entries_per_page
+    else:
+        # grab the last 10 pages (with <entries_per_page> entries each) by default
+        num_pages = 10
 
     for num_page in range(num_pages):
         log(f"Digesting page #{num_page+1} of {num_pages}...")
-        url = f'https://wis-tns.weizmann.ac.il/search?format=csv&num_page=50&page={num_page}'
+        url = f'https://wis-tns.weizmann.ac.il/search?format=csv&num_page={entries_per_page}&page={num_page}'
 
         data = pd.read_csv(url)
 
