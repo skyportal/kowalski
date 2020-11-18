@@ -739,7 +739,7 @@ class AlertConsumer:
 
 
 class AlertWorker:
-    """"""
+    """Tools to handle alert processing: database ingestion, filtering, ml'ing, cross-matches, reporting to SP"""
 
     def __init__(self, **kwargs):
 
