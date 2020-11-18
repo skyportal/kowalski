@@ -6,6 +6,7 @@ import base64
 from bson.json_util import loads
 import confluent_kafka
 from copy import deepcopy
+import dask.distributed
 import datetime
 import fastavro
 import gzip
@@ -22,6 +23,7 @@ import subprocess
 import sys
 from tensorflow.keras.models import load_model
 import time
+import threading
 import traceback
 
 from utils import (
@@ -450,7 +452,21 @@ def alert_filter__user_defined(
     return passed_filters
 
 
-class AlertConsumer(object):
+def process_alert(
+        alert,
+        topic,
+):
+    candid = alert['candid']
+    objectId = alert['objectId']
+
+    worker = dask.distributed.get_worker()
+    plugin = worker.plugins['worker-init']
+
+    log(f"{topic} {objectId} {candid} {plugin.verbose} {worker.address}")
+    return True
+
+
+class AlertConsumer:
     """
     Creates an alert stream Kafka consumer for a given topic.
 
@@ -464,9 +480,11 @@ class AlertConsumer(object):
         Keyword arguments for configuring confluent_kafka.Consumer().
     """
 
-    def __init__(self, topic, **kwargs):
+    def __init__(self, topic, dask_client, **kwargs):
 
         self.verbose = kwargs.get("verbose", 2)
+
+        self.dask_client = dask_client
 
         # keep track of disconnected partitions
         self.num_disconnected_partitions = 0
@@ -501,6 +519,169 @@ class AlertConsumer(object):
 
         self.consumer.subscribe([topic], on_assign=on_assign)
 
+    def poll(self):
+        """
+        Polls Kafka broker to consume a topic.
+
+        :return:
+        """
+        msg = self.consumer.poll()
+
+        if msg is None:
+            log('Caught error: msg is None')
+
+        if msg.error():
+            log(f'Caught error: {msg.error()}')
+            raise EopError(msg)
+
+        elif msg is not None:
+            try:
+                # decode avro packet
+                tic = time.time()
+                msg_decoded = self.decode_message(msg)
+                toc = time.time()
+                if self.verbose > 1:
+                    log(f"Decoding alert took {toc - tic} s")
+                for record in msg_decoded:
+
+                    self.dask_client.submit(
+                        process_alert,
+                        record,
+                        self.topic,
+                        # pure=False
+                    )
+
+                    # # check that candid not in collection_alerts
+                    # if self.mongo.db[self.collection_alerts].count_documents({'candid': candid}, limit=1) == 0:
+                    #     # candid not in db, ingest decoded avro packet into db
+                    #     # todo: ?? restructure alerts even further?
+                    #     #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
+                    #     #       group by objectId similar to prv_candidates?? maybe this is too much
+                    #     tic = time.time()
+                    #     alert, prv_candidates = self.alert_mongify(record)
+                    #     toc = time.time()
+                    #     if verbose > 1:
+                    #         print(f'{time_stamp()}: mongification took {toc - tic} s')
+                    #
+                    #     # ML models:
+                    #     tic = time.time()
+                    #     scores = alert_filter__ml(record, ml_models=self.ml_models)
+                    #     alert['classifications'] = scores
+                    #     toc = time.time()
+                    #     if verbose > 1:
+                    #         print(f'{time_stamp()}: mling took {toc - tic} s')
+                    #
+                    #     print(f'{time_stamp()}: ingesting {alert["candid"]} into db')
+                    #     tic = time.time()
+                    #     # fixme:
+                    #     # self.mongo.insert_one(collection=self.collection_alerts, document=alert)
+                    #     toc = time.time()
+                    #     if verbose > 1:
+                    #         print(f'{time_stamp()}: ingesting {alert["candid"]} took {toc - tic} s')
+                    #
+                    #     # prv_candidates: pop nulls - save space
+                    #     prv_candidates = [
+                    #         {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
+                    #         for prv_candidate in prv_candidates
+                    #     ]
+                    #
+                    #     # cross-match with external catalogs if objectId not in collection_alerts_aux:
+                    #     if self.mongo.db[self.collection_alerts_aux].count_documents({'_id': objectId}, limit=1) == 0:
+                    #         tic = time.time()
+                    #         xmatches = alert_filter__xmatch(self.mongo.db, alert)
+                    #         toc = time.time()
+                    #         if verbose > 1:
+                    #             log(f"Xmatch took {toc - tic} s")
+                    #         # CLU cross-match:
+                    #         tic = time.time()
+                    #         xmatches = {**xmatches, **alert_filter__xmatch_clu(self.mongo.db, alert)}
+                    #         toc = time.time()
+                    #         if verbose > 1:
+                    #             log(f"CLU xmatch took {toc - tic} s")
+                    #
+                    #         alert_aux = {
+                    #             '_id': objectId,
+                    #             'cross_matches': xmatches,
+                    #             'prv_candidates': prv_candidates
+                    #         }
+                    #
+                    #         tic = time.time()
+                    #         # fixme:
+                    #         # self.mongo.insert_one(collection=self.collection_alerts_aux, document=alert_aux)
+                    #         toc = time.time()
+                    #         if verbose > 1:
+                    #             print(f'{time_stamp()}: aux ingesting took {toc - tic} s')
+                    #
+                    #     else:
+                    #         tic = time.time()
+                    #         # fixme:
+                    #         # self.mongo.db[self.collection_alerts_aux].update_one(
+                    #         #     {'_id': objectId},
+                    #         #     {'$addToSet': {'prv_candidates': {'$each': prv_candidates}}},
+                    #         #     upsert=True
+                    #         # )
+                    #         toc = time.time()
+                    #         if verbose > 1:
+                    #             print(f'{time_stamp()}: aux updating took {toc - tic} s')
+                    #
+                    #     if config['misc']['broker']:
+                    #         # execute user-defined alert filters
+                    #         tic = time.time()
+                    #         passed_filters = alert_filter__user_defined(self.mongo.db, self.filter_templates, alert)
+                    #         toc = time.time()
+                    #         if verbose > 1:
+                    #             log(f"Filtering took {toc-tic} s")
+                    #
+                    #         # post to SkyPortal
+                    #         # fixme:
+                    #         # self.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+
+            except Exception as e:
+                log(e)
+                _err = traceback.format_exc()
+                log(_err)
+
+    @staticmethod
+    def decode_message(msg):
+        """Decode Avro message according to a schema.
+
+        Parameters
+        ----------
+        msg : Kafka message
+            The Kafka message result from consumer.poll().
+
+        Returns
+        -------
+        `dict`
+            Decoded message.
+        """
+        # print(msg.topic(), msg.offset(), msg.error(), msg.key(), msg.value())
+        message = msg.value()
+        decoded_msg = message
+
+        try:
+            bytes_io = io.BytesIO(message)
+            decoded_msg = read_schema_data(bytes_io)
+        except AssertionError:
+            decoded_msg = None
+        except IndexError:
+            literal_msg = literal_eval(str(message, encoding='utf-8'))  # works to give bytes
+            bytes_io = io.BytesIO(literal_msg)  # works to give <class '_io.BytesIO'>
+            decoded_msg = read_schema_data(bytes_io)  # yields reader
+        except Exception:
+            decoded_msg = message
+        finally:
+            return decoded_msg
+
+
+class AlertWorker:
+    """
+
+    """
+
+    def __init__(self, **kwargs):
+
+        self.verbose = kwargs.get("verbose", 2)
         self.config = config
 
         # MongoDB collections to store the alerts:
@@ -525,19 +706,19 @@ class AlertConsumer(object):
                     keys=ind, name=index_name, background=True
                 )
 
-        # ML models:
+        # fixme: ML models:
         self.ml_models = dict()
-        for model in config['ml_models']:
-            try:
-                model_version = config["ml_models"][model]["version"]
-                # todo: allow other formats such as SavedModel
-                model_filepath = os.path.join(config["path"]["ml_models"], f'{model}_{model_version}.h5')
-                self.ml_models[model] = {'model': load_model(model_filepath), 'version': model_version}
-            except Exception as e:
-                log(f"Error loading ML model {model}: {str(e)}")
-                _err = traceback.format_exc()
-                log(_err)
-                continue
+        # for model in config['ml_models']:
+        #     try:
+        #         model_version = config["ml_models"][model]["version"]
+        #         # todo: allow other formats such as SavedModel
+        #         model_filepath = os.path.join(config["path"]["ml_models"], f'{model}_{model_version}.h5')
+        #         self.ml_models[model] = {'model': load_model(model_filepath), 'version': model_version}
+        #     except Exception as e:
+        #         log(f"Error loading ML model {model}: {str(e)}")
+        #         _err = traceback.format_exc()
+        #         log(_err)
+        #         continue
 
         # talking to SkyPortal?
         if config['misc']['broker']:
@@ -546,8 +727,8 @@ class AlertConsumer(object):
             self.session_headers = {'Authorization': f"token {config['skyportal']['token']}"}
 
             retries = Retry(
-                total=3,
-                backoff_factor=1,
+                total=5,
+                backoff_factor=2,
                 status_forcelist=[405, 429, 500, 502, 503, 504],
                 method_whitelist=["HEAD", "GET", "PUT", "POST", "PATCH"]
             )
@@ -764,6 +945,27 @@ class AlertConsumer(object):
             log(f"Failed to post {alert['objectId']} {alert['candid']} metadata to SkyPortal")
             log(response.json())
 
+    def alert_put_candidate(self, alert, filter_ids):
+        # update candidate metadata for (existing) filter_ids
+        alert_thin = {
+            "filter_ids": filter_ids,
+            "passing_alert_id": alert["candid"],
+            "passed_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")
+        }
+        if self.verbose > 1:
+            log(alert_thin)
+
+        tic = time.time()
+        response = self.api_skyportal("PUT", f"/api/candidates/{alert['objectId']}", alert_thin)
+        toc = time.time()
+        if self.verbose > 1:
+            log(f"Putting metadata to SkyPortal took {toc - tic} s")
+        if response.json()['status'] == 'success':
+            log(f"Put {alert['objectId']} {alert['candid']} metadata to SkyPortal")
+        else:
+            log(f"Failed to put {alert['objectId']} {alert['candid']} metadata to SkyPortal")
+            log(response.json())
+
     def alert_post_annotations(self, alert, passed_filters):
         for passed_filter in passed_filters:
             annotations = {
@@ -924,20 +1126,44 @@ class AlertConsumer(object):
 
         # obj exists in SP:
         else:
-            filter_ids = [f.get("filter_id") for f in passed_filters]
+            if len(passed_filters) > 0:
+                filter_ids = [f.get("filter_id") for f in passed_filters]
+                # fixme: post all passed candidates and post and put annotations (depending on existence + prefs)
+                # already posted as a candidate?
+                if is_candidate:
+                    # get filter_ids of saved candidate from SP
+                    tic = time.time()
+                    response = self.api_skyportal("GET", f"/api/candidates/{alert['objectId']}")
+                    toc = time.time()
+                    if self.verbose > 1:
+                        log(f"Getting candidate info on {alert['objectId']} took {toc - tic} s")
+                    if response.json()['status'] == 'success':
+                        existing_filter_ids = response.json()['data']["filter_ids"]
+                        # do not post to existing_filter_ids
+                        filter_ids = list(set(filter_ids) - set(existing_filter_ids))
+                        # update existing candidate info if passed
+                        existing_filter_ids = [
+                            filter_id
+                            for filter_id in existing_filter_ids
+                            if filter_id in [f.get("filter_id") for f in passed_filters]
+                        ]
+                        if len(existing_filter_ids) > 0:
+                            self.alert_put_candidate(alert, existing_filter_ids)
+                    else:
+                        log(f"Failed to get candidate info on {alert['objectId']}")
 
-            if len(filter_ids) > 0:
-                # post candidate with new filter ids
-                self.alert_post_candidate(alert, filter_ids)
+                if len(filter_ids) > 0:
+                    # post candidate with new filter ids
+                    self.alert_post_candidate(alert, filter_ids)
 
-                # post annotations
-                self.alert_post_annotations(
-                    alert,
-                    [pf for pf in passed_filters if pf.get("filter_id") in filter_ids]
-                )
+                    # post annotations
+                    self.alert_post_annotations(
+                        alert,
+                        [pf for pf in passed_filters if pf.get("filter_id") in filter_ids]
+                    )
 
-            groups = deepcopy(passed_filters)
-            group_ids = [g.get("group_id") for g in groups]
+            groups = passed_filters
+            group_ids = [f.get("group_id") for f in passed_filters]
             # already saved as a source?
             if is_source:
                 # get info on the corresponding groups:
@@ -979,150 +1205,10 @@ class AlertConsumer(object):
 
             self.alert_put_photometry(alert, groups)
 
-    def poll(self, verbose=2):
-        """
-        Polls Kafka broker to consume topic.
 
-        :param verbose: 1 - main, 2 - debug
-        :return:
-        """
-        msg = self.consumer.poll()
-
-        if msg is None:
-            print(time_stamp(), 'Caught error: msg is None')
-
-        if msg.error():
-            print(time_stamp(), 'Caught error:', msg.error())
-            raise EopError(msg)
-
-        elif msg is not None:
-            try:
-                # decode avro packet
-                msg_decoded = self.decode_message(msg)
-                for record in msg_decoded:
-
-                    candid = record['candid']
-                    objectId = record['objectId']
-
-                    log(f"{self.topic} {objectId} {candid}")
-
-                    # check that candid not in collection_alerts
-                    if self.mongo.db[self.collection_alerts].count_documents({'candid': candid}, limit=1) == 0:
-                        # candid not in db, ingest decoded avro packet into db
-                        # todo: ?? restructure alerts even further?
-                        #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
-                        #       group by objectId similar to prv_candidates?? maybe this is too much
-                        tic = time.time()
-                        alert, prv_candidates = self.alert_mongify(record)
-                        toc = time.time()
-                        if verbose > 1:
-                            print(f'{time_stamp()}: mongification took {toc - tic} s')
-
-                        # ML models:
-                        tic = time.time()
-                        scores = alert_filter__ml(record, ml_models=self.ml_models)
-                        alert['classifications'] = scores
-                        toc = time.time()
-                        if verbose > 1:
-                            print(f'{time_stamp()}: mling took {toc - tic} s')
-
-                        print(f'{time_stamp()}: ingesting {alert["candid"]} into db')
-                        tic = time.time()
-                        self.mongo.insert_one(collection=self.collection_alerts, document=alert)
-                        toc = time.time()
-                        if verbose > 1:
-                            print(f'{time_stamp()}: ingesting {alert["candid"]} took {toc - tic} s')
-
-                        # prv_candidates: pop nulls - save space
-                        prv_candidates = [
-                            {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
-                            for prv_candidate in prv_candidates
-                        ]
-
-                        # cross-match with external catalogs if objectId not in collection_alerts_aux:
-                        if self.mongo.db[self.collection_alerts_aux].count_documents({'_id': objectId}, limit=1) == 0:
-                            tic = time.time()
-                            xmatches = alert_filter__xmatch(self.mongo.db, alert)
-                            toc = time.time()
-                            if verbose > 1:
-                                log(f"Xmatch took {toc - tic} s")
-                            # CLU cross-match:
-                            tic = time.time()
-                            xmatches = {**xmatches, **alert_filter__xmatch_clu(self.mongo.db, alert)}
-                            toc = time.time()
-                            if verbose > 1:
-                                log(f"CLU xmatch took {toc - tic} s")
-
-                            alert_aux = {
-                                '_id': objectId,
-                                'cross_matches': xmatches,
-                                'prv_candidates': prv_candidates
-                            }
-
-                            tic = time.time()
-                            self.mongo.insert_one(collection=self.collection_alerts_aux, document=alert_aux)
-                            toc = time.time()
-                            if verbose > 1:
-                                print(f'{time_stamp()}: aux ingesting took {toc - tic} s')
-
-                        else:
-                            tic = time.time()
-                            self.mongo.db[self.collection_alerts_aux].update_one(
-                                {'_id': objectId},
-                                {'$addToSet': {'prv_candidates': {'$each': prv_candidates}}},
-                                upsert=True
-                            )
-                            toc = time.time()
-                            if verbose > 1:
-                                print(f'{time_stamp()}: aux updating took {toc - tic} s')
-
-                        if config['misc']['broker']:
-                            # execute user-defined alert filters
-                            tic = time.time()
-                            passed_filters = alert_filter__user_defined(self.mongo.db, self.filter_templates, alert)
-                            toc = time.time()
-                            if verbose > 1:
-                                log(f"Filtering took {toc-tic} s")
-
-                            # post to SkyPortal
-                            self.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
-
-            except Exception as e:
-                log(e)
-                _err = traceback.format_exc()
-                log(_err)
-
-    @staticmethod
-    def decode_message(msg):
-        """Decode Avro message according to a schema.
-
-        Parameters
-        ----------
-        msg : Kafka message
-            The Kafka message result from consumer.poll().
-
-        Returns
-        -------
-        `dict`
-            Decoded message.
-        """
-        # print(msg.topic(), msg.offset(), msg.error(), msg.key(), msg.value())
-        message = msg.value()
-        decoded_msg = message
-
-        try:
-            bytes_io = io.BytesIO(message)
-            decoded_msg = read_schema_data(bytes_io)
-        except AssertionError:
-            decoded_msg = None
-        except IndexError:
-            literal_msg = literal_eval(str(message, encoding='utf-8'))  # works to give bytes
-            bytes_io = io.BytesIO(literal_msg)  # works to give <class '_io.BytesIO'>
-            decoded_msg = read_schema_data(bytes_io)  # yields reader
-        except Exception:
-            decoded_msg = message
-        finally:
-            return decoded_msg
+class WorkerInitializer(dask.distributed.WorkerPlugin):
+    def __init__(self, *args, **kwargs):
+        self.alert_worker = AlertWorker()
 
 
 def listener(topic, bootstrap_servers='', offset_reset='earliest', group=None, test=False):
@@ -1135,6 +1221,19 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest', group=None, t
     :param test: when testing, terminate once reached end of partition
     :return:
     """
+
+    # Configure dask client
+    dask_client = dask.distributed.Client(
+        address=f"{config['dask']['host']}:{config['dask']['scheduler_port']}"
+    )
+    # dask_client = dask.distributed.Client(
+    #     threads_per_worker=1,
+    #     n_workers=4,
+    #     # scheduler_port=8786,
+    # )
+
+    worker_initializer = WorkerInitializer()
+    dask_client.register_worker_plugin(worker_initializer, name='worker-init')
 
     # Configure consumer connection to Kafka broker
     conf = {
@@ -1150,7 +1249,7 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest', group=None, t
     conf['group.id'] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
 
     # Start alert stream consumer
-    stream_reader = AlertConsumer(topic, **conf)
+    stream_reader = AlertConsumer(topic, dask_client, **conf)
 
     while True:
         try:
@@ -1164,16 +1263,16 @@ def listener(topic, bootstrap_servers='', offset_reset='earliest', group=None, t
                 # when testing, terminate once reached end of partition:
                 sys.exit()
         except IndexError:
-            print(time_stamp(), '%% Data cannot be decoded\n')
+            log('%% Data cannot be decoded\n')
         except UnicodeDecodeError:
-            print(time_stamp(), '%% Unexpected data format received\n')
+            log('%% Unexpected data format received\n')
         except KeyboardInterrupt:
-            print(time_stamp(), '%% Aborted by user\n')
+            log('%% Aborted by user\n')
             sys.exit()
         except Exception as e:
-            print(time_stamp(), str(e))
+            log(str(e))
             _err = traceback.format_exc()
-            print(time_stamp(), str(_err))
+            log(_err)
             sys.exit()
 
 
@@ -1218,11 +1317,11 @@ def ingester(obs_date=None, test=False):
             # as of 20180403, the naming convention is ztf_%Y%m%d_programidN
             # exclude ZUDS, ingest separately
             topics_tonight = [t for t in topics if (datestr in t) and ('programid' in t) and ('zuds' not in t)]
-            print(f'{time_stamp()}: Topics: {topics_tonight}')
+            log(f'Topics: {topics_tonight}')
 
             for t in topics_tonight:
                 if t not in topics_on_watch:
-                    print(f'{time_stamp()}: starting listener thread for {t}')
+                    log(f'Starting listener thread for {t}')
                     offset_reset = config['kafka']['default.topic.config']['auto.offset.reset']
                     if not test:
                         bootstrap_servers = config['kafka']['bootstrap.servers']
@@ -1230,6 +1329,10 @@ def ingester(obs_date=None, test=False):
                         bootstrap_servers = config['kafka']['bootstrap.test.servers']
                     group = config['kafka']['group']
 
+                    # topics_on_watch[t] = threading.Thread(
+                    #     target=listener,
+                    #     args=(t, bootstrap_servers, offset_reset, group, test)
+                    # )
                     topics_on_watch[t] = multiprocessing.Process(
                         target=listener,
                         args=(t, bootstrap_servers, offset_reset, group, test)
@@ -1238,21 +1341,22 @@ def ingester(obs_date=None, test=False):
                     topics_on_watch[t].start()
 
                 else:
-                    print(f'{time_stamp()}: performing thread health check for {t}')
+                    log(f'Performing thread health check for {t}')
                     try:
                         if not topics_on_watch[t].is_alive():
-                            print(f'{time_stamp()}: {t} died, removing')
+                            log(f'Thread {t} died, removing')
                             # topics_on_watch[t].terminate()
                             topics_on_watch.pop(t, None)
                         else:
-                            print(f'{time_stamp()}: {t} appears normal')
+                            log(f'Thread {t} appears normal')
                     except Exception as _e:
-                        print(f'{time_stamp()}: Failed to perform health check', str(_e))
+                        log(f'Failed to perform health check: {_e}')
                         pass
 
             if test:
-                time.sleep(240)
+                time.sleep(120)
                 # when testing, wait for topic listeners to pull all the data, then break
+                # fixme: do this more gracefully
                 for t in topics_on_watch:
                     topics_on_watch[t].kill()
                 break
@@ -1262,12 +1366,13 @@ def ingester(obs_date=None, test=False):
             _err = traceback.format_exc()
             log(str(_err))
 
-        if obs_date is None:
-            time.sleep(60)
+        time.sleep(60)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Fetch AVRO packets from Kafka streams and ingest them into DB')
+    parser = argparse.ArgumentParser(
+        description="Kowalski's ZTF Alert Broker"
+    )
     parser.add_argument('--obsdate', help='observing date YYYYMMDD')
     parser.add_argument('--test', help='listen to the test stream', action='store_true')
 

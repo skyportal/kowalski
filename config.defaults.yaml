@@ -286,6 +286,12 @@ kowalski:
     username: "username"
     password: "password"
 
+  dask:
+    host: 127.0.0.1
+    scheduler_port: 8786
+    n_workers: 20
+    threads_per_worker: 1
+
   misc:
     # fixme: set to False if running stand-alone
     broker: True
