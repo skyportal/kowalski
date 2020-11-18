@@ -391,10 +391,10 @@ def alert_filter__xmatch_clu(database, alert, size_margin=3, clu_version='CLU_20
             if redshift < 0:
                 #some galaxies in CLU have negative redshifts, do 10 arcminute arcsecond crossmatches for them
                 cm_radius = 600./3600
-            if redshift > 0 and redshift < 0.01:
+            if redshift >= 0 and redshift < 0.01:
                 #for very nearby galaxies, the cross-match radius will get unphysically large, set to maximum of 10 arcminutes
                 cm_radius = 600./3600
-            if redshift > 0.01:
+            if redshift >= 0.01:
                 #For everything else, set the crossmatch radius to 100 kpc at the redshift of the host galaxy
                 cm_radius = 100. * (0.05/redshift) / 3600
 
