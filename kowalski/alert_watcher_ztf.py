@@ -384,10 +384,26 @@ def alert_filter__xmatch_clu(database, alert, size_margin=3, clu_version='CLU_20
                 axis_ratio = 0.61
             if PA0 < -990:
                 PA0 = 86.0
+      
+            cm_radius = 100./3600 # previous default crossmatch radius in degrees
+        
+            redshift = galaxy['z']
+            if redshift < 0:
+                #some galaxies in CLU have negative redshifts, do 10 arcminute arcsecond crossmatches for them
+                cm_radius = 600./3600
+            if redshift > 0 and redshift < 0.01:
+                #for very nearby galaxies, the cross-match radius will get unphysically large, set to maximum of 10 arcminutes
+                cm_radius = 600./3600
+            if redshift > 0.01:
+                #For everything else, set the crossmatch radius to 100 kpc at the redshift of the host galaxy
+                cm_radius = 100. * (0.05/redshift) / 3600
 
-            in_galaxy = in_ellipse(ra, dec, alpha1, delta01, size_margin * d0, axis_ratio, PA0)
+            in_galaxy = in_ellipse(ra, dec, alpha1, delta01, cm_radius, 1, 0)
 
-            if in_galaxy:
+            #Now only select sources within 150 Mpc
+            in_volume = redshift < 0.036
+
+            if in_galaxy and in_volume:
                 match = galaxy
                 distance_arcsec = round(great_circle_distance(ra, dec, alpha1, delta01) * 3600, 2)
                 match['coordinates']['distance_arcsec'] = distance_arcsec
