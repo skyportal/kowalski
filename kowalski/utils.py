@@ -112,7 +112,7 @@ async def add_admin(_mongo, config):
 class Mongo(object):
     def __init__(
             self,
-            host: str = '127.0.0.1', port: str = '27017',
+            host: str = '127.0.0.1', port: int = 27017,
             username: str = None, password: str = None,
             db: str = None,
             verbose=0,

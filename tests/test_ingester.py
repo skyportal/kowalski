@@ -6,8 +6,8 @@ import requests
 import subprocess
 import time
 
-from alert_watcher_ztf import ingester
-from utils import load_config, time_stamp
+from alert_broker_ztf import watchdog
+from utils import load_config, log
 
 
 ''' load config and secrets '''
@@ -243,9 +243,9 @@ def delivery_report(err, msg):
     """ Called once for each message produced to indicate delivery result.
         Triggered by poll() or flush(). """
     if err is not None:
-        print(f'{time_stamp()}: Message delivery failed: {err}')
+        log(f'Message delivery failed: {err}')
     else:
-        print(f'{time_stamp()}: Message delivered to {msg.topic()} [{msg.partition()}]')
+        log(f'Message delivered to {msg.topic()} [{msg.partition()}]')
 
 
 class TestIngester(object):
@@ -264,18 +264,18 @@ class TestIngester(object):
 
     def test_ingester(self):
 
-        print(f'{time_stamp()}: Setting up paths')
+        log(f'Setting up paths')
         path_kafka = pathlib.Path(config['path']['kafka'])
 
         path_logs = pathlib.Path(config['path']['logs'])
         if not path_logs.exists():
             path_logs.mkdir(parents=True, exist_ok=True)
 
-        print(f'{time_stamp()}: Setting up test program in Fritz')
+        log(f'Setting up test program in Fritz')
         program = Program(group_name="FRITZ_TEST", group_nickname="Fritz")
 
         # clean up old Kafka logs
-        print(f'{time_stamp()}: Cleaning up Kafka logs')
+        log(f'Cleaning up Kafka logs')
         subprocess.run([
             'rm',
             '-rf',
@@ -283,7 +283,7 @@ class TestIngester(object):
             "/tmp/zookeeper"
         ])
 
-        print(f'{time_stamp()}: Starting up ZooKeeper at localhost:2181')
+        log(f'Starting up ZooKeeper at localhost:2181')
 
         # start ZooKeeper in the background
         cmd_zookeeper = [os.path.join(config['path']['kafka'], 'bin', 'zookeeper-server-start.sh'),
@@ -296,7 +296,7 @@ class TestIngester(object):
         # take a nap while it fires up
         time.sleep(3)
 
-        print(f'{time_stamp()}: Starting up Kafka Server at localhost:9092')
+        log(f'Starting up Kafka Server at localhost:9092')
 
         # start the Kafka server:
         cmd_kafka_server = [os.path.join(config['path']['kafka'], 'bin', 'kafka-server-start.sh'),
@@ -316,7 +316,7 @@ class TestIngester(object):
                       '-list']
 
         topics = subprocess.run(cmd_topics, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')[:-1]
-        print(f'{time_stamp()}: Found topics: {topics}')
+        log(f'Found topics: {topics}')
 
         # create a test ZTF topic for the current UTC date
         date = datetime.datetime.utcnow().strftime("%Y%m%d")
@@ -330,12 +330,12 @@ class TestIngester(object):
             # print(kafka_cmd)
             remove_topic = subprocess.run(cmd_remove_topic,
                                           stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')[:-1]
-            print(f'{time_stamp()}: {remove_topic}')
-            print(f'{time_stamp()}: Removed topic: {topic_name}')
+            log(f'{remove_topic}')
+            log(f'Removed topic: {topic_name}')
             time.sleep(1)
 
         if topic_name not in topics:
-            print(f'{time_stamp()}: Creating topic {topic_name}')
+            log(f'Creating topic {topic_name}')
 
             cmd_create_topic = [os.path.join(config['path']['kafka'], 'bin', 'kafka-topics.sh'),
                                 "--create",
@@ -346,7 +346,7 @@ class TestIngester(object):
             with open(os.path.join(config['path']['logs'], 'create_topic.stdout'), 'w') as stdout_create_topic:
                 p_create_topic = subprocess.run(cmd_create_topic, stdout=stdout_create_topic, stderr=subprocess.STDOUT)
 
-        print(f'{time_stamp()}: Starting up Kafka Producer')
+        log(f'Starting up Kafka Producer')
 
         # spin up Kafka producer
         producer = Producer({'bootstrap.servers': config['kafka']['bootstrap.test.servers']})
@@ -355,27 +355,27 @@ class TestIngester(object):
         path_alerts = pathlib.Path('/app/data/ztf_alerts/20200202/')
         # grab some more alerts from gs://ztf-fritz/sample-public-alerts
         try:
-            print(f'{time_stamp()}: Grabbing more alerts from gs://ztf-fritz/sample-public-alerts')
+            log(f'Grabbing more alerts from gs://ztf-fritz/sample-public-alerts')
             r = requests.get('https://www.googleapis.com/storage/v1/b/ztf-fritz/o')
             aa = r.json()['items']
             ids = [pathlib.Path(a['id']).parent for a in aa if 'avro' in a['id']]
         except Exception as e:
-            print(f'{time_stamp()}: Grabbing alerts from gs://ztf-fritz/sample-public-alerts failed, but it is ok')
-            print(f'{time_stamp()}: {e}')
+            log(f'Grabbing alerts from gs://ztf-fritz/sample-public-alerts failed, but it is ok')
+            log(f'{e}')
             ids = []
         subprocess.run([
             "gsutil", "-m", "cp", "-n",
             "gs://ztf-fritz/sample-public-alerts/*.avro",
             "/app/data/ztf_alerts/20200202/"
         ])
-        print(f'{time_stamp()}: Fetched {len(ids)} alerts from gs://ztf-fritz/sample-public-alerts')
+        log(f'Fetched {len(ids)} alerts from gs://ztf-fritz/sample-public-alerts')
         # push!
         for p in path_alerts.glob('*.avro'):
             with open(str(p), 'rb') as data:
                 # Trigger any available delivery report callbacks from previous produce() calls
                 producer.poll(0)
 
-                print(f'{time_stamp()}: Pushing {p}')
+                log(f'Pushing {p}')
 
                 # Asynchronously produce a message, the delivery report callback
                 # will be triggered from poll() above, or flush() below, when the message has
@@ -386,26 +386,26 @@ class TestIngester(object):
                 # callbacks to be triggered.
         producer.flush()
 
-        print(f'{time_stamp()}: Creating a test filter')
+        log(f'Creating a test filter')
         test_filter = Filter(
             collection='ZTF_alerts',
             group_id=program.group_id,
             filter_id=program.filter_id
         )
 
-        print(f'{time_stamp()}: Starting up Ingester')
+        log(f'Starting up Ingester')
 
         # digest and ingest
-        ingester(obs_date=date, test=True)
-        print(f'{time_stamp()}: Digested and ingested: all done!')
+        watchdog(obs_date=date, test=True)
+        log(f'Digested and ingested: all done!')
 
         # shut down Kafka server and ZooKeeper
         time.sleep(10)
 
-        print(f'{time_stamp()}: Removing the test filter')
+        log(f'Removing the test filter')
         test_filter.remove()
 
-        print(f'{time_stamp()}: Shutting down Kafka Server at localhost:9092')
+        log(f'Shutting down Kafka Server at localhost:9092')
         # start the Kafka server:
         cmd_kafka_server_stop = [os.path.join(config['path']['kafka'], 'bin', 'kafka-server-stop.sh'),
                                  os.path.join(config['path']['kafka'], 'config', 'server.properties')]
@@ -414,7 +414,7 @@ class TestIngester(object):
             p_kafka_server_stop = subprocess.run(cmd_kafka_server_stop,
                                                  stdout=stdout_kafka_server, stderr=subprocess.STDOUT)
 
-        print(f'{time_stamp()}: Shutting down ZooKeeper at localhost:2181')
+        log(f'Shutting down ZooKeeper at localhost:2181')
 
         # start ZooKeeper in the background (using Popen and not run with shell=True for safety)
         cmd_zookeeper_stop = [os.path.join(config['path']['kafka'], 'bin', 'zookeeper-server-stop.sh'),

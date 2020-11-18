@@ -5,6 +5,7 @@ from utils import load_config, log
 
 
 ''' load config and secrets '''
+# config = load_config(path='./', config_file='config.yaml')['kowalski']
 config = load_config(config_file='config.yaml')['kowalski']
 
 
@@ -15,7 +16,7 @@ if __name__ == '__main__':
         n_workers=config['dask']['n_workers'],
         scheduler_port=config['dask']['scheduler_port'],
     )
-    print(cluster)
+    log(cluster)
 
     while True:
         time.sleep(60)
