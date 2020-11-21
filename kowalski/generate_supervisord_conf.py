@@ -4,32 +4,34 @@ import yaml
 
 
 def generate_conf(service):
-    if service not in config['kowalski']['supervisord'].keys():
-        raise ValueError(f"{service} service def not found in config['kowalski']['supervisord']")
+    if service not in config["kowalski"]["supervisord"].keys():
+        raise ValueError(
+            f"{service} service def not found in config['kowalski']['supervisord']"
+        )
 
-    sc = ''
-    for k in config['kowalski']['supervisord'][service].keys():
+    sc = ""
+    for k in config["kowalski"]["supervisord"][service].keys():
         sc += f"[{k}]\n"
-        for kk, vv in config['kowalski']['supervisord'][service][k].items():
+        for kk, vv in config["kowalski"]["supervisord"][service][k].items():
             sc += f"{kk} = {vv}\n"
 
-    with open(f'/app/supervisord_{service}.conf', 'w') as fsc:
+    with open(f"/app/supervisord_{service}.conf", "w") as fsc:
         fsc.write(sc)
 
 
 def api(args):
-    generate_conf('api')
+    generate_conf("api")
 
 
 def ingester(args):
-    generate_conf('ingester')
+    generate_conf("ingester")
 
 
-with open('/app/config.yaml', 'r') as f:
+with open("/app/config.yaml", "r") as f:
     config = yaml.load(f, Loader=yaml.FullLoader)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title="commands", dest="command")
