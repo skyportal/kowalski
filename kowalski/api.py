@@ -805,7 +805,7 @@ def parse_query(task, save: bool = False):
                 else:
                     radec = f"[({ra}, {dec})]"
 
-            # print(task['object_coordinates']['radec'])
+            # log(task['object_coordinates']['radec'])
             objects = literal_eval(radec)
             # print(type(objects), isinstance(objects, dict), isinstance(objects, list))
         elif (
@@ -1181,9 +1181,9 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
         return task_hash, result
 
     except Exception as e:
-        print(f"{datetime.datetime.now()} got error: {str(e)}")
+        log(f"Got error: {str(e)}")
         _err = traceback.format_exc()
-        print(_err)
+        log(_err)
 
         # book-keeping:
         if save:
@@ -1490,9 +1490,7 @@ async def queries_post(request: web.Request) -> web.Response:
         try:
             _query = await request.json()
         except Exception as _e:
-            print(
-                f"{datetime.datetime.utcnow()} Cannot extract json() from request, trying post(): {str(_e)}"
-            )
+            log(f"Cannot extract json() from request, trying post(): {str(_e)}")
             _query = await request.post()
 
         # parse query
@@ -1549,9 +1547,9 @@ async def queries_post(request: web.Request) -> web.Response:
             )
 
     except Exception as _e:
-        print(f"{datetime.datetime.utcnow()} Got error: {str(_e)}")
+        log(f"Got error: {str(_e)}")
         _err = traceback.format_exc()
-        print(_err)
+        log(_err)
         return web.json_response(
             {"status": "error", "message": f"failure: {_err}"}, status=400
         )
@@ -1607,9 +1605,9 @@ async def queries_get(request):
             )
 
     except Exception as _e:
-        print(f"{datetime.datetime.utcnow()} Got error: {str(_e)}")
+        log(f"Got error: {str(_e)}")
         _err = traceback.format_exc()
-        print(_err)
+        log(_err)
         return web.json_response(
             {"status": "error", "message": f"failure: {_err}"}, status=500
         )
@@ -1654,9 +1652,9 @@ async def queries_delete(request):
         )
 
     except Exception as _e:
-        print(f"{datetime.datetime.utcnow()} Got error: {str(_e)}")
+        log(f"Got error: {str(_e)}")
         _err = traceback.format_exc()
-        print(_err)
+        log(_err)
         return web.json_response(
             {"status": "error", "message": f"failure: {_err}"}, status=500
         )
@@ -1774,9 +1772,9 @@ async def filters_get_group_id(request):
         )
 
     except Exception as _e:
-        print(f"{datetime.datetime.utcnow()} Got error: {str(_e)}")
+        log(f"Got error: {str(_e)}")
         _err = traceback.format_exc()
-        print(_err)
+        log(_err)
         return web.json_response(
             {"status": "error", "message": f"failure: {_err}"}, status=400
         )
@@ -1900,9 +1898,9 @@ async def filters_get_group_id_filter_id(request):
         )
 
     except Exception as _e:
-        print(f"{datetime.datetime.utcnow()} Got error: {str(_e)}")
+        log(f"Got error: {str(_e)}")
         _err = traceback.format_exc()
-        print(_err)
+        log(_err)
         return web.json_response(
             {"status": "error", "message": f"failure: {_err}"}, status=400
         )
@@ -2087,9 +2085,7 @@ async def filters_post(request):
         try:
             filter_spec = await request.json()
         except Exception as _e:
-            print(
-                f"{datetime.datetime.utcnow()}: Cannot extract json() from request, trying post(): {str(_e)}"
-            )
+            log(f"Cannot extract json() from request, trying post(): {str(_e)}")
             filter_spec = await request.post()
 
         # checks:
@@ -2161,7 +2157,7 @@ async def filters_post(request):
             )
             alert = await select.to_list(length=1)
             alert = alert[0]
-            # print(alert)
+            # log(alert)
 
             # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
             # including archival photometry and cross-matches:
@@ -2174,18 +2170,18 @@ async def filters_post(request):
             filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][
                 0
             ]["$in"][1] = permissions
-            # print(filter_template)
+            # log(filter_template)
             cursor = request.app["mongo"][catalog].aggregate(
                 filter_template, allowDiskUse=False, maxTimeMS=3000
             )
             # passed_filter = await cursor.to_list(length=None)
             await cursor.to_list(length=None)
         else:
-            print(
-                f"{datetime.datetime.utcnow()} No alerts in db, cannot test filter: "
+            log(
+                f"No alerts in db, cannot test filter: "
                 f"group_id {group_id}, filter_id {filter_id}"
             )
-            print(f"{datetime.datetime.utcnow()} Saving blindly, which is not great!")
+            log("Saving blindly, which is not great!")
 
         # use a short fid and avoid random name collisions
         fid = uid(length=6)
@@ -2233,9 +2229,9 @@ async def filters_post(request):
         )
 
     except Exception as _e:
-        print(f"{datetime.datetime.utcnow()} Got error: {str(_e)}")
+        log(f"Got error: {str(_e)}")
         _err = traceback.format_exc()
-        print(_err)
+        log(_err)
         return web.json_response(
             {"status": "error", "message": f"failure: {_err}"}, status=400
         )
@@ -2421,9 +2417,7 @@ async def filters_test_post(request):
         try:
             filter_spec = await request.json()
         except Exception as _e:
-            print(
-                f"{datetime.datetime.utcnow()}: Cannot extract json() from request, trying post(): {str(_e)}"
-            )
+            log(f"Cannot extract json() from request, trying post(): {str(_e)}")
             filter_spec = await request.post()
 
         # checks:
@@ -2487,7 +2481,7 @@ async def filters_test_post(request):
             )
             alert = await select.to_list(length=1)
             alert = alert[0]
-            # print(alert)
+            # log(alert)
 
             # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
             # including archival photometry and cross-matches:
@@ -2500,7 +2494,7 @@ async def filters_test_post(request):
             filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][
                 0
             ]["$in"][1] = permissions
-            # print(f'{datetime.datetime.utcnow()} {filter_template}')
+            # log(filter_template)
             cursor = request.app["mongo"][catalog].aggregate(
                 filter_template, allowDiskUse=False, maxTimeMS=500
             )
@@ -2666,9 +2660,7 @@ async def filters_put(request):
         try:
             filter_spec = await request.json()
         except Exception as _e:
-            print(
-                f"{datetime.datetime.utcnow()}: Cannot extract json() from request, trying post(): {str(_e)}"
-            )
+            log(f"Cannot extract json() from request, trying post(): {str(_e)}")
             filter_spec = await request.post()
 
         # checks:
@@ -2761,9 +2753,9 @@ async def filters_put(request):
             )
 
     except Exception as _e:
-        print(f"{datetime.datetime.utcnow()} Got error: {str(_e)}")
+        log(f"Got error: {str(_e)}")
         _err = traceback.format_exc()
-        print(_err)
+        log(_err)
         return web.json_response(
             {"status": "error", "message": f"failure: {_err}"}, status=500
         )
@@ -2876,9 +2868,7 @@ async def filters_delete(request):
         try:
             filter_spec = await request.json()
         except Exception as _e:
-            print(
-                f"{datetime.datetime.utcnow()}: Cannot extract json() from request, trying post(): {str(_e)}"
-            )
+            log(f"Cannot extract json() from request, trying post(): {str(_e)}")
             filter_spec = await request.post()
 
         # checks:
@@ -2918,9 +2908,9 @@ async def filters_delete(request):
             )
 
     except Exception as _e:
-        print(f"{datetime.datetime.utcnow()} Got error: {str(_e)}")
+        log(f"Got error: {str(_e)}")
         _err = traceback.format_exc()
-        print(_err)
+        log(_err)
         return web.json_response(
             {"status": "error", "message": f"failure: {_err}"}, status=500
         )
@@ -3132,9 +3122,9 @@ async def ztf_alert_get_cutout(request):
             return web.Response(body=buff, content_type="image/png")
 
     except Exception as _e:
-        print(f"{datetime.datetime.utcnow()} Got error: {str(_e)}")
+        log(f"Got error: {str(_e)}")
         _err = traceback.format_exc()
-        print(_err)
+        log(_err)
         return web.json_response(
             {"status": "error", "message": f"failure: {_err}"}, status=400
         )
@@ -3332,9 +3322,9 @@ async def zuds_alert_get_cutout(request):
             return web.Response(body=buff, content_type="image/png")
 
     except Exception as _e:
-        print(f"{datetime.datetime.utcnow()} Got error: {str(_e)}")
+        log(f"Got error: {str(_e)}")
         _err = traceback.format_exc()
-        print(_err)
+        log(_err)
         return web.json_response(
             {"status": "error", "message": f"failure: {_err}"}, status=400
         )
