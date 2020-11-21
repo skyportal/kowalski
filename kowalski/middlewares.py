@@ -5,7 +5,7 @@ import jwt
 from utils import load_config
 
 
-config = load_config(config_file='config.yaml')['kowalski']
+config = load_config(config_file="config.yaml")["kowalski"]
 
 
 @web.middleware
@@ -17,20 +17,25 @@ async def auth_middleware(request, handler):
     :return:
     """
     request.user = None
-    jwt_token = request.headers.get('authorization', None)
+    jwt_token = request.headers.get("authorization", None)
 
     if jwt_token:
         try:
             # accept both "Authorization: Bearer <token>" and "Authorization: <token>" headers
-            if 'bearer' in deepcopy(jwt_token).lower():
+            if "bearer" in deepcopy(jwt_token).lower():
                 jwt_token = jwt_token.split()[1]
 
-            payload = jwt.decode(jwt_token, request.app['JWT']['JWT_SECRET'],
-                                 algorithms=[request.app['JWT']['JWT_ALGORITHM']])
+            payload = jwt.decode(
+                jwt_token,
+                request.app["JWT"]["JWT_SECRET"],
+                algorithms=[request.app["JWT"]["JWT_ALGORITHM"]],
+            )
         except (jwt.DecodeError, jwt.ExpiredSignatureError):
-            return web.json_response({'status': 'error', 'message': 'token is invalid'}, status=400)
+            return web.json_response(
+                {"status": "error", "message": "token is invalid"}, status=400
+            )
 
-        request.user = payload['user_id']
+        request.user = payload["user_id"]
 
     response = await handler(request)
 
@@ -43,11 +48,15 @@ def auth_required(func):
     :param func:
     :return:
     """
+
     @wraps(func)
     def wrapper(request):
         if not request.user:
-            return web.json_response({'status': 'error', 'message': 'auth required'}, status=401)
+            return web.json_response(
+                {"status": "error", "message": "auth required"}, status=401
+            )
         return func(request)
+
     return wrapper
 
 
@@ -57,13 +66,19 @@ def admin_required(func):
     :param func:
     :return:
     """
+
     @wraps(func)
     def wrapper(request):
         if not request.user:
-            return web.json_response({'status': 'error', 'message': 'auth required'}, status=401)
-        if request.user != config['server']['admin_username']:
-            return web.json_response({'status': 'error', 'message': 'admin rights required'}, status=403)
+            return web.json_response(
+                {"status": "error", "message": "auth required"}, status=401
+            )
+        if request.user != config["server"]["admin_username"]:
+            return web.json_response(
+                {"status": "error", "message": "admin rights required"}, status=403
+            )
         return func(request)
+
     return wrapper
 
 
