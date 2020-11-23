@@ -6,7 +6,7 @@ import requests
 import subprocess
 import time
 
-from alert_watcher_ztf import ingester
+from alert_broker_ztf import watchdog
 from utils import load_config, log, time_stamp
 
 
@@ -446,7 +446,7 @@ class TestIngester(object):
         log("Starting up Ingester")
 
         # digest and ingest
-        ingester(obs_date=date, test=True)
+        watchdog(obs_date=date, test=True)
         log("Digested and ingested: all done!")
 
         # shut down Kafka server and ZooKeeper

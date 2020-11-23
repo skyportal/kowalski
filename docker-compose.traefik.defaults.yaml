@@ -74,9 +74,9 @@ services:
     build:
       context: .
       dockerfile: ingester.Dockerfile
-    #    entrypoint: supervisord -n -c supervisord_ingester.conf
-    #    entrypoint: python -m pytest -s test_ingester.py
     image: dmitryduev/kowalski_ingester:latest
+    ports:
+      - "8787:8787"
     volumes:
       - data:/data
     links:

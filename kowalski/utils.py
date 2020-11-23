@@ -1,5 +1,6 @@
 import bcrypt
 import base64
+from contextlib import contextmanager
 import datetime
 import hashlib
 import math
@@ -11,6 +12,7 @@ import pymongo
 from pymongo.errors import BulkWriteError
 import secrets
 import string
+import time
 import traceback
 import yaml
 
@@ -38,6 +40,15 @@ def time_stamp():
 
 def log(message):
     print(f"{time_stamp()}: {message}")
+
+
+@contextmanager
+def timer(description, verbose: bool = True):
+    tic = time.time()
+    yield
+    toc = time.time()
+    if verbose:
+        log(f"{description} took {toc-tic} s")
 
 
 def generate_password_hash(password, salt_rounds=12):

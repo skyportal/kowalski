@@ -11,6 +11,7 @@ import base64
 from bson.json_util import loads
 import confluent_kafka
 from copy import deepcopy
+import dask.distributed
 import datetime
 import fastavro
 import gzip
@@ -39,6 +40,7 @@ from utils import (
     Mongo,
     radec2lb,
     time_stamp,
+    timer,
 )
 
 
@@ -258,7 +260,6 @@ def alert_filter__ml(alert, ml_models: dict = None) -> dict:
         triplet = make_triplet(alert)
         triplets = np.expand_dims(triplet, axis=0)
         braai = ml_models["braai"]["model"].predict(x=triplets)[0]
-        # braai = 1.0
         scores["braai"] = float(braai)
         scores["braai_version"] = ml_models["braai"]["version"]
     except Exception as e:
@@ -497,23 +498,110 @@ def alert_filter__user_defined(
     return passed_filters
 
 
-class AlertConsumer(object):
+def process_alert(record, topic):
+    """Brokering task run by dask workers
+
+    :param record: decoded alert from IPAC's Kafka stream
+    :param topic: Kafka stream topic name for bookkeeping
+    :return:
+    """
+    candid = record["candid"]
+    objectId = record["objectId"]
+
+    # get worker running current task
+    worker = dask.distributed.get_worker()
+    alert_worker = worker.plugins["worker-init"].alert_worker
+
+    log(f"{topic} {objectId} {candid} {worker.address}")
+
+    # return if this alert packet has already been processed and ingested into collection_alerts:
+    if (
+        alert_worker.mongo.db[alert_worker.collection_alerts].count_documents(
+            {"candid": candid}, limit=1
+        )
+        == 1
+    ):
+        return
+
+    # candid not in db, ingest decoded avro packet into db
+    # todo: ?? restructure alerts even further?
+    #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
+    #       group by objectId similar to prv_candidates?? maybe this is too much
+    with timer(f"Mongification of {objectId} {candid}", alert_worker.verbose > 1):
+        alert, prv_candidates = alert_worker.alert_mongify(record)
+
+    # ML models:
+    with timer(f"MLing of {objectId} {candid}", alert_worker.verbose > 1):
+        scores = alert_filter__ml(record, ml_models=alert_worker.ml_models)
+        alert["classifications"] = scores
+
+    with timer(f"Ingesting {objectId} {candid}", alert_worker.verbose > 1):
+        alert_worker.mongo.insert_one(
+            collection=alert_worker.collection_alerts, document=alert
+        )
+
+    # prv_candidates: pop nulls - save space
+    prv_candidates = [
+        {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
+        for prv_candidate in prv_candidates
+    ]
+
+    # cross-match with external catalogs if objectId not in collection_alerts_aux:
+    if (
+        alert_worker.mongo.db[alert_worker.collection_alerts_aux].count_documents(
+            {"_id": objectId}, limit=1
+        )
+        == 0
+    ):
+        with timer(f"Cross-match of {objectId} {candid}", alert_worker.verbose > 1):
+            xmatches = alert_filter__xmatch(alert_worker.mongo.db, alert)
+        # CLU cross-match:
+        with timer(f"CLU cross-match {objectId} {candid}", alert_worker.verbose > 1):
+            xmatches = {
+                **xmatches,
+                **alert_filter__xmatch_clu(alert_worker.mongo.db, alert),
+            }
+
+        alert_aux = {
+            "_id": objectId,
+            "cross_matches": xmatches,
+            "prv_candidates": prv_candidates,
+        }
+
+        with timer(f"Aux ingesting {objectId} {candid}", alert_worker.verbose > 1):
+            alert_worker.mongo.insert_one(
+                collection=alert_worker.collection_alerts_aux, document=alert_aux
+            )
+
+    else:
+        with timer(f"Aux updating of {objectId} {candid}", alert_worker.verbose > 1):
+            alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
+                {"_id": objectId},
+                {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
+                upsert=True,
+            )
+
+    if config["misc"]["broker"]:
+        # execute user-defined alert filters
+        with timer(f"Filtering of {objectId} {candid}", alert_worker.verbose > 1):
+            passed_filters = alert_filter__user_defined(
+                alert_worker.mongo.db, alert_worker.filter_templates, alert
+            )
+
+        # post to SkyPortal
+        alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+
+
+class AlertConsumer:
     """
     Creates an alert stream Kafka consumer for a given topic.
-
-    Parameters
-    ----------
-    topic : `str`
-        Name of the topic to subscribe to.
-    schema_files : Avro schema files
-        The reader Avro schema files for decoding data. Optional.
-    **kwargs
-        Keyword arguments for configuring confluent_kafka.Consumer().
     """
 
-    def __init__(self, topic, **kwargs):
+    def __init__(self, topic, dask_client, **kwargs):
 
         self.verbose = kwargs.get("verbose", 2)
+
+        self.dask_client = dask_client
 
         # keep track of disconnected partitions
         self.num_disconnected_partitions = 0
@@ -550,6 +638,70 @@ class AlertConsumer(object):
 
         self.consumer.subscribe([topic], on_assign=on_assign)
 
+    def poll(self):
+        """
+        Polls Kafka broker to consume a topic.
+
+        :return:
+        """
+        msg = self.consumer.poll()
+
+        if msg is None:
+            log("Caught error: msg is None")
+
+        if msg.error():
+            log(f"Caught error: {msg.error()}")
+            raise EopError(msg)
+
+        elif msg is not None:
+            try:
+                # decode avro packet
+                with timer("Decoding alert", self.verbose > 1):
+                    msg_decoded = self.decode_message(msg)
+
+                for record in msg_decoded:
+                    self.dask_client.submit(
+                        process_alert, record, self.topic, pure=False
+                    )
+
+            except Exception as e:
+                log(e)
+                _err = traceback.format_exc()
+                log(_err)
+
+    @staticmethod
+    def decode_message(msg):
+        """Decode Avro message according to a schema.
+
+        :param msg: The Kafka message result from consumer.poll()
+        :return:
+        """
+        message = msg.value()
+        decoded_msg = message
+
+        try:
+            bytes_io = io.BytesIO(message)
+            decoded_msg = read_schema_data(bytes_io)
+        except AssertionError:
+            decoded_msg = None
+        except IndexError:
+            literal_msg = literal_eval(
+                str(message, encoding="utf-8")
+            )  # works to give bytes
+            bytes_io = io.BytesIO(literal_msg)  # works to give <class '_io.BytesIO'>
+            decoded_msg = read_schema_data(bytes_io)  # yields reader
+        except Exception:
+            decoded_msg = message
+        finally:
+            return decoded_msg
+
+
+class AlertWorker:
+    """Tools to handle alert processing: database ingestion, filtering, ml'ing, cross-matches, reporting to SP"""
+
+    def __init__(self, **kwargs):
+
+        self.verbose = kwargs.get("verbose", 2)
         self.config = config
 
         # MongoDB collections to store the alerts:
@@ -580,7 +732,7 @@ class AlertConsumer(object):
                     keys=ind, name=index_name, background=True
                 )
 
-        # ML models:
+        # fixme: ML models:
         self.ml_models = dict()
         for model in config["ml_models"]:
             try:
@@ -608,8 +760,8 @@ class AlertConsumer(object):
             }
 
             retries = Retry(
-                total=3,
-                backoff_factor=1,
+                total=5,
+                backoff_factor=2,
                 status_forcelist=[405, 429, 500, 502, 503, 504],
                 method_whitelist=["HEAD", "GET", "PUT", "POST", "PATCH"],
             )
@@ -620,11 +772,12 @@ class AlertConsumer(object):
             # get ZTF instrument id
             self.instrument_id = 1
             try:
-                tic = time.time()
-                response = self.api_skyportal("GET", "/api/instrument", {"name": "ZTF"})
-                toc = time.time()
-                if self.verbose > 1:
-                    log(f"Getting ZTF instrument_id from SkyPortal took {toc - tic} s")
+                with timer(
+                    "Getting ZTF instrument_id from SkyPortal", self.verbose > 1
+                ):
+                    response = self.api_skyportal(
+                        "GET", "/api/instrument", {"name": "ZTF"}
+                    )
                 if (
                     response.json()["status"] == "success"
                     and len(response.json()["data"]) > 0
@@ -682,15 +835,14 @@ class AlertConsumer(object):
             self.filter_templates = []
             for active_filter in active_filters:
                 # collect additional info from SkyPortal
-                tic = time.time()
-                response = self.api_skyportal(
-                    "GET", f"/api/groups/{active_filter['group_id']}"
-                )
-                toc = time.time()
-                if self.verbose > 1:
-                    log(
-                        f"Getting info on group id={active_filter['group_id']} from SkyPortal took {toc - tic} s"
+                with timer(
+                    f"Getting info on group id={active_filter['group_id']} from SkyPortal",
+                    self.verbose > 1,
+                ):
+                    response = self.api_skyportal(
+                        "GET", f"/api/groups/{active_filter['group_id']}"
                     )
+                if self.verbose > 1:
                     log(response.json())
                 if response.json()["status"] == "success":
                     group_name = (
@@ -830,41 +982,16 @@ class AlertConsumer(object):
         if self.verbose > 1:
             log(alert_thin)
 
-        tic = time.time()
-        response = self.api_skyportal("POST", "/api/candidates", alert_thin)
-        toc = time.time()
-        if self.verbose > 1:
-            log(f"Posting metadata to SkyPortal took {toc - tic} s")
+        with timer(
+            f"Posting metadata of {alert['objectId']} {alert['candid']} to SkyPortal",
+            self.verbose > 1,
+        ):
+            response = self.api_skyportal("POST", "/api/candidates", alert_thin)
         if response.json()["status"] == "success":
             log(f"Posted {alert['objectId']} {alert['candid']} metadata to SkyPortal")
         else:
             log(
                 f"Failed to post {alert['objectId']} {alert['candid']} metadata to SkyPortal"
-            )
-            log(response.json())
-
-    def alert_put_candidate(self, alert, filter_ids):
-        # update candidate metadata for (existing) filter_ids
-        alert_thin = {
-            "filter_ids": filter_ids,
-            "passing_alert_id": alert["candid"],
-            "passed_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f"),
-        }
-        if self.verbose > 1:
-            log(alert_thin)
-
-        tic = time.time()
-        response = self.api_skyportal(
-            "PUT", f"/api/candidates/{alert['objectId']}", alert_thin
-        )
-        toc = time.time()
-        if self.verbose > 1:
-            log(f"Putting metadata to SkyPortal took {toc - tic} s")
-        if response.json()["status"] == "success":
-            log(f"Put {alert['objectId']} {alert['candid']} metadata to SkyPortal")
-        else:
-            log(
-                f"Failed to put {alert['objectId']} {alert['candid']} metadata to SkyPortal"
             )
             log(response.json())
 
@@ -876,13 +1003,11 @@ class AlertConsumer(object):
                 "data": passed_filter.get("data", dict()).get("annotations", dict()),
                 "group_ids": [passed_filter.get("group_id")],
             }
-            tic = time.time()
-            response = self.api_skyportal("POST", "/api/annotation", annotations)
-            toc = time.time()
-            if self.verbose > 1:
-                log(
-                    f"Posting annotation for {alert['objectId']} to skyportal took {toc - tic} s"
-                )
+            with timer(
+                f"Posting annotation for {alert['objectId']} {alert['candid']} to SkyPortal",
+                self.verbose > 1,
+            ):
+                response = self.api_skyportal("POST", "/api/annotation", annotations)
             if response.json()["status"] == "success":
                 log(f"Posted {alert['objectId']} annotation to SkyPortal")
             else:
@@ -895,17 +1020,17 @@ class AlertConsumer(object):
             ("ref", "Template"),
             ("sub", "Difference"),
         ]:
-            tic = time.time()
-            thumb = make_thumbnail(alert, ttype, ztftype)
-            toc = time.time()
-            if self.verbose > 1:
-                log(f"Making {ztftype} thumbnail took {toc - tic} s")
+            with timer(
+                f"Making {ztftype} thumbnail for {alert['objectId']} {alert['candid']}",
+                self.verbose > 1,
+            ):
+                thumb = make_thumbnail(alert, ttype, ztftype)
 
-            tic = time.time()
-            response = self.api_skyportal("POST", "/api/thumbnail", thumb)
-            toc = time.time()
-            if self.verbose > 1:
-                log(f"Posting {ztftype} thumbnail to SkyPortal took {toc - tic} s")
+            with timer(
+                f"Posting {ztftype} thumbnail for {alert['objectId']} {alert['candid']} to SkyPortal",
+                self.verbose > 1,
+            ):
+                response = self.api_skyportal("POST", "/api/thumbnail", thumb)
 
             if response.json()["status"] == "success":
                 log(
@@ -925,11 +1050,11 @@ class AlertConsumer(object):
                        [{"group_id": <group_id>, "permissions": <list of program ids the group has access to>}]
         :return:
         """
-        tic = time.time()
-        df_photometry = make_photometry(alert)
-        toc = time.time()
-        if self.verbose > 1:
-            log(f"Making alert photometry took {toc - tic} s")
+        with timer(
+            f"Making alert photometry of {alert['objectId']} {alert['candid']}",
+            self.verbose > 1,
+        ):
+            df_photometry = make_photometry(alert)
 
         # post data from different program_id's
         for pid in set(df_photometry.programid.unique()):
@@ -955,13 +1080,13 @@ class AlertConsumer(object):
                 }
 
                 if len(photometry.get("mag", ())) > 0:
-                    tic = time.time()
-                    response = self.api_skyportal("PUT", "/api/photometry", photometry)
-                    toc = time.time()
-                    if self.verbose > 1:
-                        log(
-                            f"Posting photometry of {alert['objectId']} {alert['candid']}, "
-                            f"program_id={pid} to SkyPortal took {toc - tic} s"
+                    with timer(
+                        f"Posting photometry of {alert['objectId']} {alert['candid']}, "
+                        f"program_id={pid} to SkyPortal",
+                        self.verbose > 1,
+                    ):
+                        response = self.api_skyportal(
+                            "PUT", "/api/photometry", photometry
                         )
                     if response.json()["status"] == "success":
                         log(
@@ -999,21 +1124,24 @@ class AlertConsumer(object):
         :return:
         """
         # check if candidate/source exist in SP:
-        tic = time.time()
-        response = self.api_skyportal("HEAD", f"/api/candidates/{alert['objectId']}")
-        toc = time.time()
+        with timer(
+            f"Checking if {alert['objectId']} is Candidate in SkyPortal",
+            self.verbose > 1,
+        ):
+            response = self.api_skyportal(
+                "HEAD", f"/api/candidates/{alert['objectId']}"
+            )
         is_candidate = response.status_code == 200
         if self.verbose > 1:
-            log(f"Checking if object is Candidate took {toc - tic} s")
             log(
                 f"{alert['objectId']} {'is' if is_candidate else 'is not'} Candidate in SkyPortal"
             )
-        tic = time.time()
-        response = self.api_skyportal("HEAD", f"/api/sources/{alert['objectId']}")
-        toc = time.time()
+        with timer(
+            f"Checking if {alert['objectId']} is Source in SkyPortal", self.verbose > 1
+        ):
+            response = self.api_skyportal("HEAD", f"/api/sources/{alert['objectId']}")
         is_source = response.status_code == 200
         if self.verbose > 1:
-            log(f"Checking if object is Source took {toc - tic} s")
             log(
                 f"{alert['objectId']} {'is' if is_source else 'is not'} Source in SkyPortal"
             )
@@ -1050,26 +1178,6 @@ class AlertConsumer(object):
         else:
             if len(passed_filters) > 0:
                 filter_ids = [f.get("filter_id") for f in passed_filters]
-                # already posted as a candidate?
-                if is_candidate:
-                    # get filter_ids of saved candidate from SP
-                    tic = time.time()
-                    response = self.api_skyportal(
-                        "GET", f"/api/candidates/{alert['objectId']}"
-                    )
-                    toc = time.time()
-                    if self.verbose > 1:
-                        log(
-                            f"Getting candidate info on {alert['objectId']} took {toc - tic} s"
-                        )
-                    if response.json()["status"] == "success":
-                        existing_filter_ids = response.json()["data"]["filter_ids"]
-                        # do not post to existing_filter_ids
-                        filter_ids = list(set(filter_ids) - set(existing_filter_ids))
-                        # update existing candidate info
-                        self.alert_put_candidate(alert, existing_filter_ids)
-                    else:
-                        log(f"Failed to get candidate info on {alert['objectId']}")
 
                 if len(filter_ids) > 0:
                     # post candidate with new filter ids
@@ -1090,27 +1198,26 @@ class AlertConsumer(object):
             # already saved as a source?
             if is_source:
                 # get info on the corresponding groups:
-                tic = time.time()
-                response = self.api_skyportal(
-                    "GET", f"/api/sources/{alert['objectId']}"
-                )
-                toc = time.time()
-                if self.verbose > 1:
-                    log(
-                        f"Getting source info on {alert['objectId']} took {toc - tic} s"
+                with timer(
+                    f"Getting source info on  {alert['objectId']} from SkyPortal",
+                    self.verbose > 1,
+                ):
+                    response = self.api_skyportal(
+                        "GET", f"/api/sources/{alert['objectId']}"
                     )
                 if response.json()["status"] == "success":
                     existing_group_ids = [
                         g["id"] for g in response.json()["data"]["groups"]
                     ]
                     for group_id in set(existing_group_ids) - set(group_ids):
-                        tic = time.time()
-                        response = self.api_skyportal("GET", f"/api/groups/{group_id}")
-                        toc = time.time()
-                        if self.verbose > 1:
-                            log(
-                                f"Getting info on group id={group_id} from SkyPortal took {toc - tic} s"
+                        with timer(
+                            f"Getting info on group id={group_id} from SkyPortal",
+                            self.verbose > 1,
+                        ):
+                            response = self.api_skyportal(
+                                "GET", f"/api/groups/{group_id}"
                             )
+                        if self.verbose > 1:
                             log(response.json())
                         if response.json()["status"] == "success":
                             selector = {1}
@@ -1137,192 +1244,21 @@ class AlertConsumer(object):
 
             self.alert_put_photometry(alert, groups)
 
-    def poll(self, verbose=2):
-        """
-        Polls Kafka broker to consume topic.
 
-        :param verbose: 1 - main, 2 - debug
-        :return:
-        """
-        msg = self.consumer.poll()
+class WorkerInitializer(dask.distributed.WorkerPlugin):
+    def __init__(self, *args, **kwargs):
+        self.alert_worker = None
 
-        if msg is None:
-            print(time_stamp(), "Caught error: msg is None")
-
-        if msg.error():
-            print(time_stamp(), "Caught error:", msg.error())
-            raise EopError(msg)
-
-        elif msg is not None:
-            try:
-                # decode avro packet
-                msg_decoded = self.decode_message(msg)
-                for record in msg_decoded:
-
-                    candid = record["candid"]
-                    objectId = record["objectId"]
-
-                    log(f"{self.topic} {objectId} {candid}")
-
-                    # check that candid not in collection_alerts
-                    if (
-                        self.mongo.db[self.collection_alerts].count_documents(
-                            {"candid": candid}, limit=1
-                        )
-                        == 0
-                    ):
-                        # candid not in db, ingest decoded avro packet into db
-                        # todo: ?? restructure alerts even further?
-                        #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
-                        #       group by objectId similar to prv_candidates?? maybe this is too much
-                        tic = time.time()
-                        alert, prv_candidates = self.alert_mongify(record)
-                        toc = time.time()
-                        if verbose > 1:
-                            print(f"{time_stamp()}: mongification took {toc - tic} s")
-
-                        # ML models:
-                        tic = time.time()
-                        scores = alert_filter__ml(record, ml_models=self.ml_models)
-                        alert["classifications"] = scores
-                        toc = time.time()
-                        if verbose > 1:
-                            print(f"{time_stamp()}: mling took {toc - tic} s")
-
-                        print(f'{time_stamp()}: ingesting {alert["candid"]} into db')
-                        tic = time.time()
-                        self.mongo.insert_one(
-                            collection=self.collection_alerts, document=alert
-                        )
-                        toc = time.time()
-                        if verbose > 1:
-                            print(
-                                f'{time_stamp()}: ingesting {alert["candid"]} took {toc - tic} s'
-                            )
-
-                        # prv_candidates: pop nulls - save space
-                        prv_candidates = [
-                            {
-                                kk: vv
-                                for kk, vv in prv_candidate.items()
-                                if vv is not None
-                            }
-                            for prv_candidate in prv_candidates
-                        ]
-
-                        # cross-match with external catalogs if objectId not in collection_alerts_aux:
-                        if (
-                            self.mongo.db[self.collection_alerts_aux].count_documents(
-                                {"_id": objectId}, limit=1
-                            )
-                            == 0
-                        ):
-                            tic = time.time()
-                            xmatches = alert_filter__xmatch(self.mongo.db, alert)
-                            toc = time.time()
-                            if verbose > 1:
-                                log(f"Xmatch took {toc - tic} s")
-                            # CLU cross-match:
-                            tic = time.time()
-                            xmatches = {
-                                **xmatches,
-                                **alert_filter__xmatch_clu(self.mongo.db, alert),
-                            }
-                            toc = time.time()
-                            if verbose > 1:
-                                log(f"CLU xmatch took {toc - tic} s")
-
-                            alert_aux = {
-                                "_id": objectId,
-                                "cross_matches": xmatches,
-                                "prv_candidates": prv_candidates,
-                            }
-
-                            tic = time.time()
-                            self.mongo.insert_one(
-                                collection=self.collection_alerts_aux,
-                                document=alert_aux,
-                            )
-                            toc = time.time()
-                            if verbose > 1:
-                                print(
-                                    f"{time_stamp()}: aux ingesting took {toc - tic} s"
-                                )
-
-                        else:
-                            tic = time.time()
-                            self.mongo.db[self.collection_alerts_aux].update_one(
-                                {"_id": objectId},
-                                {
-                                    "$addToSet": {
-                                        "prv_candidates": {"$each": prv_candidates}
-                                    }
-                                },
-                                upsert=True,
-                            )
-                            toc = time.time()
-                            if verbose > 1:
-                                print(
-                                    f"{time_stamp()}: aux updating took {toc - tic} s"
-                                )
-
-                        if config["misc"]["broker"]:
-                            # execute user-defined alert filters
-                            tic = time.time()
-                            passed_filters = alert_filter__user_defined(
-                                self.mongo.db, self.filter_templates, alert
-                            )
-                            toc = time.time()
-                            if verbose > 1:
-                                log(f"Filtering took {toc-tic} s")
-
-                            # post to SkyPortal
-                            self.alert_sentinel_skyportal(
-                                alert, prv_candidates, passed_filters
-                            )
-
-            except Exception as e:
-                log(e)
-                _err = traceback.format_exc()
-                log(_err)
-
-    @staticmethod
-    def decode_message(msg):
-        """Decode Avro message according to a schema.
-
-        Parameters
-        ----------
-        msg : Kafka message
-            The Kafka message result from consumer.poll().
-
-        Returns
-        -------
-        `dict`
-            Decoded message.
-        """
-        # print(msg.topic(), msg.offset(), msg.error(), msg.key(), msg.value())
-        message = msg.value()
-        decoded_msg = message
-
-        try:
-            bytes_io = io.BytesIO(message)
-            decoded_msg = read_schema_data(bytes_io)
-        except AssertionError:
-            decoded_msg = None
-        except IndexError:
-            literal_msg = literal_eval(
-                str(message, encoding="utf-8")
-            )  # works to give bytes
-            bytes_io = io.BytesIO(literal_msg)  # works to give <class '_io.BytesIO'>
-            decoded_msg = read_schema_data(bytes_io)  # yields reader
-        except Exception:
-            decoded_msg = message
-        finally:
-            return decoded_msg
+    def setup(self, worker: dask.distributed.Worker):
+        self.alert_worker = AlertWorker()
 
 
-def listener(
-    topic, bootstrap_servers="", offset_reset="earliest", group=None, test=False
+def topic_listener(
+    topic,
+    bootstrap_servers: str,
+    offset_reset: str = "earliest",
+    group: str = None,
+    test: bool = False,
 ):
     """
         Listen to a topic
@@ -1334,6 +1270,15 @@ def listener(
     :return:
     """
 
+    # Configure dask client
+    dask_client = dask.distributed.Client(
+        address=f"{config['dask']['host']}:{config['dask']['scheduler_port']}"
+    )
+
+    # init each worker with AlertWorker instance
+    worker_initializer = WorkerInitializer()
+    dask_client.register_worker_plugin(worker_initializer, name="worker-init")
+
     # Configure consumer connection to Kafka broker
     conf = {
         "bootstrap.servers": bootstrap_servers,
@@ -1344,13 +1289,11 @@ def listener(
     else:
         conf["group.id"] = os.environ.get("HOSTNAME", "kowalski")
 
-    # make it unique:
-    conf[
-        "group.id"
-    ] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
+    # fixme? make it unique:
+    # conf['group.id'] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
 
     # Start alert stream consumer
-    stream_reader = AlertConsumer(topic, **conf)
+    stream_reader = AlertConsumer(topic, dask_client, **conf)
 
     while True:
         try:
@@ -1359,25 +1302,25 @@ def listener(
 
         except EopError as e:
             # Write when reaching end of partition
-            print(f"{time_stamp()}: {e.message}")
+            log(e.message)
             if test:
                 # when testing, terminate once reached end of partition:
                 sys.exit()
         except IndexError:
-            print(time_stamp(), "%% Data cannot be decoded\n")
+            log("Data cannot be decoded\n")
         except UnicodeDecodeError:
-            print(time_stamp(), "%% Unexpected data format received\n")
+            log("Unexpected data format received\n")
         except KeyboardInterrupt:
-            print(time_stamp(), "%% Aborted by user\n")
+            log("Aborted by user\n")
             sys.exit()
         except Exception as e:
-            print(time_stamp(), str(e))
+            log(str(e))
             _err = traceback.format_exc()
-            print(time_stamp(), str(_err))
+            log(_err)
             sys.exit()
 
 
-def ingester(obs_date=None, test=False):
+def watchdog(obs_date: str = None, test: bool = False):
     """
         Watchdog for topic listeners
 
@@ -1426,11 +1369,11 @@ def ingester(obs_date=None, test=False):
                 for t in topics
                 if (datestr in t) and ("programid" in t) and ("zuds" not in t)
             ]
-            print(f"{time_stamp()}: Topics: {topics_tonight}")
+            log(f"Topics: {topics_tonight}")
 
             for t in topics_tonight:
                 if t not in topics_on_watch:
-                    print(f"{time_stamp()}: starting listener thread for {t}")
+                    log(f"Starting listener thread for {t}")
                     offset_reset = config["kafka"]["default.topic.config"][
                         "auto.offset.reset"
                     ]
@@ -1441,30 +1384,29 @@ def ingester(obs_date=None, test=False):
                     group = config["kafka"]["group"]
 
                     topics_on_watch[t] = multiprocessing.Process(
-                        target=listener,
+                        target=topic_listener,
                         args=(t, bootstrap_servers, offset_reset, group, test),
                     )
                     topics_on_watch[t].daemon = True
                     topics_on_watch[t].start()
 
                 else:
-                    print(f"{time_stamp()}: performing thread health check for {t}")
+                    log(f"Performing thread health check for {t}")
                     try:
                         if not topics_on_watch[t].is_alive():
-                            print(f"{time_stamp()}: {t} died, removing")
+                            log(f"Thread {t} died, removing")
                             # topics_on_watch[t].terminate()
                             topics_on_watch.pop(t, None)
                         else:
-                            print(f"{time_stamp()}: {t} appears normal")
+                            log(f"Thread {t} appears normal")
                     except Exception as _e:
-                        print(
-                            f"{time_stamp()}: Failed to perform health check", str(_e)
-                        )
+                        log(f"Failed to perform health check: {_e}")
                         pass
 
             if test:
-                time.sleep(240)
+                time.sleep(120)
                 # when testing, wait for topic listeners to pull all the data, then break
+                # fixme: do this more gracefully
                 for t in topics_on_watch:
                     topics_on_watch[t].kill()
                 break
@@ -1474,17 +1416,14 @@ def ingester(obs_date=None, test=False):
             _err = traceback.format_exc()
             log(str(_err))
 
-        if obs_date is None:
-            time.sleep(60)
+        time.sleep(60)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Fetch AVRO packets from Kafka streams and ingest them into DB"
-    )
+    parser = argparse.ArgumentParser(description="Kowalski's ZTF Alert Broker")
     parser.add_argument("--obsdate", help="observing date YYYYMMDD")
     parser.add_argument("--test", help="listen to the test stream", action="store_true")
 
     args = parser.parse_args()
 
-    ingester(obs_date=args.obsdate, test=args.test)
+    watchdog(obs_date=args.obsdate, test=args.test)

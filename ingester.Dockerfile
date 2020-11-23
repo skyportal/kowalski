@@ -28,7 +28,8 @@ COPY data/ztf_alerts/ /app/data/ztf_alerts/
 
 # copy over the config and the code
 COPY ["config.yaml", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py",\
-      "kowalski/alert_watcher_ztf.py",\
+      "kowalski/dask_cluster.py",\
+      "kowalski/alert_broker_ztf.py",\
       "kowalski/ops_watcher_ztf.py",\
       "kowalski/tns_watcher.py",\
       "kowalski/requirements_ingester.txt", "tests/test_ingester.py",\

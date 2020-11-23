@@ -286,6 +286,12 @@ kowalski:
     username: "username"
     password: "password"
 
+  dask:
+    host: 127.0.0.1
+    scheduler_port: 8786
+    n_workers: 4
+    threads_per_worker: 1
+
   misc:
     # fixme: set to False if running stand-alone
     broker: True
@@ -347,7 +353,7 @@ kowalski:
       supervisord:
         logfile: /data/logs/supervisord.log
         logfile_maxbytes: 50MB
-        logfile_backups: 20
+        logfile_backups: 30
         loglevel: info
         pidfile: /tmp/supervisord.pid
         nodaemon: True
@@ -360,13 +366,24 @@ kowalski:
       supervisorctl:
         serverurl: unix:///dev/shm/supervisor.sock
 
-      "program:alert-watcher-ztf":
-        command: /usr/local/bin/python alert_watcher_ztf.py
+      "program:dask-cluster":
+        command: /usr/local/bin/python dask_cluster.py
         directory: /app
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/alert_watcher_ztf.log
+        stdout_logfile: /data/logs/dask_cluster.log
+        stdout_logfile_maxbytes: 50MB
+        redirect_stderr: True
+        environment: "PRODUCTION=1"
+
+      "program:alert-broker-ztf":
+        command: /usr/local/bin/python alert_broker_ztf.py
+        directory: /app
+        user: root
+        autostart: true
+        autorestart: true
+        stdout_logfile: /data/logs/alert_broker_ztf.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: "PRODUCTION=1"
