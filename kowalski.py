@@ -7,17 +7,17 @@ import subprocess
 import yaml
 
 
-def check_configs(cfgs=('config.*yaml', 'docker-compose.*yaml')):
+def check_configs(cfgs=("config.*yaml", "docker-compose.*yaml")):
     path = pathlib.Path(__file__).parent.absolute()
 
     # use config defaults if configs do not exist?
     for cfg in cfgs:
-        c = cfg.replace('*', '')
+        c = cfg.replace("*", "")
         if not (path / c).exists():
             answer = questionary.select(
                 f"{c} does not exist, do you want to use one of the following"
                 " (not recommended without inspection)?",
-                choices=[p.name for p in path.glob(cfg)]
+                choices=[p.name for p in path.glob(cfg)],
             ).ask()
             subprocess.run(["cp", f"{path / answer}", f"{path / c}"])
 
@@ -29,24 +29,21 @@ def up(arguments):
     :param arguments:
     :return:
     """
-    print('Spinning up Kowalski 🚀')
+    print("Spinning up Kowalski 🚀")
 
-    cfgs = [
-        'config.*yaml',
-        'docker-compose.*yaml'
-    ]
+    cfgs = ["config.*yaml", "docker-compose.*yaml"]
 
-    command = ["docker-compose", "-f", 'docker-compose.yaml', "up", "-d"]
+    command = ["docker-compose", "-f", "docker-compose.yaml", "up", "-d"]
 
     if args.build:
         command += ["--build"]
 
     # check configuration
-    print('Checking configuration')
+    print("Checking configuration")
     check_configs(cfgs=cfgs)
 
     # start up Kowalski
-    print('Starting up')
+    print("Starting up")
     subprocess.run(command)
 
 
@@ -56,8 +53,8 @@ def down(arguments):
     :param arguments:
     :return:
     """
-    print('Shutting down Kowalski')
-    command = ["docker-compose", "-f", 'docker-compose.yaml', "down"]
+    print("Shutting down Kowalski")
+    command = ["docker-compose", "-f", "docker-compose.yaml", "down"]
 
     subprocess.run(command)
 
@@ -68,23 +65,20 @@ def build(arguments):
     :param arguments:
     :return:
     """
-    print('Building Kowalski')
+    print("Building Kowalski")
 
-    cfgs = [
-        'config.*yaml',
-        'docker-compose.*yaml'
-    ]
+    cfgs = ["config.*yaml", "docker-compose.*yaml"]
 
     # always use docker-compose.yaml
-    command = ["docker-compose", "-f", 'docker-compose.yaml', "build"]
+    command = ["docker-compose", "-f", "docker-compose.yaml", "build"]
 
     # check configuration
-    print('Checking configuration')
+    print("Checking configuration")
     check_configs(cfgs=cfgs)
 
     subprocess.run(command)
-    
-    
+
+
 def seed(arguments):
     print("Ingesting catalog dumps into a running Kowalski instance")
 
@@ -92,7 +86,7 @@ def seed(arguments):
         raise ValueError("Source not set, aborting")
 
     # check configuration
-    print('Checking configuration')
+    print("Checking configuration")
     check_configs(cfgs=["config.*yaml"])
 
     with open(pathlib.Path(__file__).parent.absolute() / "config.yaml") as cyaml:
@@ -108,8 +102,8 @@ def seed(arguments):
             return False
 
         answer = questionary.checkbox(
-            f"Found the following collection dumps. Which ones would you like to ingest?",
-            choices=dumps
+            "Found the following collection dumps. Which ones would you like to ingest?",
+            choices=dumps,
         ).ask()
 
         command = [
@@ -121,7 +115,7 @@ def seed(arguments):
             f"-u={config['database']['admin_username']}",
             f"-p={config['database']['admin_password']}",
             "--authenticationDatabase=admin",
-            "--archive"
+            "--archive",
         ]
 
         if arguments.drop:
@@ -129,10 +123,7 @@ def seed(arguments):
 
         for dump in answer:
             with open(f"{path / dump}") as f:
-                subprocess.call(
-                    command,
-                    stdin=f
-                )
+                subprocess.call(command, stdin=f)
 
     if arguments.gcs:
         # print("Make sure gsutil is properly configured")
@@ -140,15 +131,54 @@ def seed(arguments):
 
 
 def test(arguments):
-    print('Running the test suite')
+    print("Running the test suite")
 
-    print('Testing ZTF alert ingestion')
-    command = ["docker", "exec", "-it", "kowalski_ingester_1", "python", "-m", "pytest", "-s", "test_ingester.py"]
+    print("Testing ZTF alert ingestion")
+    command = [
+        "docker",
+        "exec",
+        "-it",
+        "kowalski_ingester_1",
+        "python",
+        "-m",
+        "pytest",
+        "-s",
+        "test_ingester.py",
+    ]
     subprocess.run(command)
 
-    print('Testing API')
-    command = ["docker", "exec", "-it", "kowalski_api_1", "python", "-m", "pytest", "-s", "test_api.py"]
+    print("Testing API")
+    command = [
+        "docker",
+        "exec",
+        "-it",
+        "kowalski_api_1",
+        "python",
+        "-m",
+        "pytest",
+        "-s",
+        "test_api.py",
+    ]
     subprocess.run(command)
+
+
+def develop(arguments=None):
+    """
+    Install developer tools.
+    """
+    subprocess.run(["pre-commit", "install"])
+
+
+def lint(arguments):
+    try:
+        import pre_commit  # noqa: F401
+    except ImportError:
+        develop()
+
+    try:
+        subprocess.run(["pre-commit", "run", "--all-files"], check=True)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -166,6 +196,8 @@ if __name__ == "__main__":
         ("build", "Build Kowalski's containers"),
         ("seed", "Ingest catalog dumps into Kowalski"),
         ("test", "Run the test suite"),
+        ("develop", "Install tools for developing Fritz"),
+        ("lint", "Lint the full code base"),
         ("help", "Print this message"),
     ]
 
@@ -181,7 +213,9 @@ if __name__ == "__main__":
         "--local", type=str, help="Local path to look for stored collection dumps"
     )
     parsers["seed"].add_argument(
-        "--gcs", type=str, help="Google Cloud Storage bucket name to look for collection dumps"
+        "--gcs",
+        type=str,
+        help="Google Cloud Storage bucket name to look for collection dumps",
     )
     parsers["seed"].add_argument(
         "--drop", action="store_true", help="Drop collections before ingestion"

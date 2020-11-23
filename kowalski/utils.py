@@ -124,7 +124,7 @@ class Mongo(object):
     def __init__(
         self,
         host: str = "127.0.0.1",
-        port: int = 27017,
+        port: str = "27017",
         username: str = None,
         password: str = None,
         db: str = None,
@@ -500,9 +500,9 @@ def radec2lb(ra, dec):
     ug = np.dot(RGE, u)
 
     x, y, z = ug
-    l = np.arctan2(y, x)
-    b = np.arctan2(z, (x * x + y * y) ** 0.5)
-    return np.rad2deg(l), np.rad2deg(b)
+    galactic_l = np.arctan2(y, x)
+    galactic_b = np.arctan2(z, (x * x + y * y) ** 0.5)
+    return np.rad2deg(galactic_l), np.rad2deg(galactic_b)
 
 
 def datetime_to_jd(_t: datetime.datetime) -> float:
@@ -611,15 +611,15 @@ def jd_to_date(jd):
     """
     jd = jd + 0.5
 
-    F, I = math.modf(jd)
-    I = int(I)
+    F, Ii = math.modf(jd)
+    Ii = int(Ii)
 
-    A = math.trunc((I - 1867216.25) / 36524.25)
+    A = math.trunc((Ii - 1867216.25) / 36524.25)
 
-    if I > 2299160:
-        B = I + 1 + A - math.trunc(A / 4.0)
+    if Ii > 2299160:
+        B = Ii + 1 + A - math.trunc(A / 4.0)
     else:
-        B = I
+        B = Ii
 
     C = B + 1524
 

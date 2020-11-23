@@ -7,7 +7,7 @@ import subprocess
 import time
 
 from alert_broker_ztf import watchdog
-from utils import load_config, log
+from utils import load_config, log, time_stamp
 
 
 """ load config and secrets """
@@ -29,7 +29,7 @@ class Program:
 
     def get_groups(self):
         resp = requests.get(
-            self.base_url + f"/api/groups",
+            self.base_url + "/api/groups",
             headers=self.headers,
             timeout=3,
         )
@@ -49,7 +49,7 @@ class Program:
 
     def get_group_filters(self, group_id: int):
         resp = requests.get(
-            self.base_url + f"/api/filters",
+            self.base_url + "/api/filters",
             headers=self.headers,
             timeout=3,
         )
@@ -77,7 +77,7 @@ class Program:
         else:
             # else, create a new group and add stream access to it
             resp = requests.post(
-                self.base_url + f"/api/groups",
+                self.base_url + "/api/groups",
                 json={"name": self.group_name, "nickname": self.group_nickname},
                 headers=self.headers,
                 timeout=3,
@@ -109,7 +109,7 @@ class Program:
         if len(group_filter_ids) == 0:
             # none created so far? make one:
             resp = requests.post(
-                self.base_url + f"/api/filters",
+                self.base_url + "/api/filters",
                 json={
                     "name": "Orange Transients",
                     "stream_id": max(stream_ids),
@@ -268,21 +268,21 @@ class TestIngester(object):
 
     def test_ingester(self):
 
-        log(f"Setting up paths")
-        path_kafka = pathlib.Path(config["path"]["kafka"])
+        log("Setting up paths")
+        # path_kafka = pathlib.Path(config["path"]["kafka"])
 
         path_logs = pathlib.Path(config["path"]["logs"])
         if not path_logs.exists():
             path_logs.mkdir(parents=True, exist_ok=True)
 
-        log(f"Setting up test program in Fritz")
+        log("Setting up test program in Fritz")
         program = Program(group_name="FRITZ_TEST", group_nickname="Fritz")
 
         # clean up old Kafka logs
-        log(f"Cleaning up Kafka logs")
+        log("Cleaning up Kafka logs")
         subprocess.run(["rm", "-rf", path_logs / "kafka-logs", "/tmp/zookeeper"])
 
-        log(f"Starting up ZooKeeper at localhost:2181")
+        log("Starting up ZooKeeper at localhost:2181")
 
         # start ZooKeeper in the background
         cmd_zookeeper = [
@@ -292,14 +292,15 @@ class TestIngester(object):
         ]
 
         with open(path_logs / "zookeeper.stdout", "w") as stdout_zookeeper:
-            p_zookeeper = subprocess.run(
+            # p_zookeeper =
+            subprocess.run(
                 cmd_zookeeper, stdout=stdout_zookeeper, stderr=subprocess.STDOUT
             )
 
         # take a nap while it fires up
         time.sleep(3)
 
-        log(f"Starting up Kafka Server at localhost:9092")
+        log("Starting up Kafka Server at localhost:9092")
 
         # start the Kafka server:
         cmd_kafka_server = [
@@ -312,7 +313,8 @@ class TestIngester(object):
             os.path.join(config["path"]["logs"], "kafka_server.stdout"), "w"
         ) as stdout_kafka_server:
             # p_kafka_server = subprocess.Popen(cmd_kafka_server, stdout=stdout_kafka_server, stderr=subprocess.STDOUT)
-            p_kafka_server = subprocess.run(cmd_kafka_server)
+            # p_kafka_server =
+            subprocess.run(cmd_kafka_server)
 
         # take a nap while it fires up
         time.sleep(3)
@@ -374,13 +376,14 @@ class TestIngester(object):
             with open(
                 os.path.join(config["path"]["logs"], "create_topic.stdout"), "w"
             ) as stdout_create_topic:
-                p_create_topic = subprocess.run(
+                # p_create_topic = \
+                subprocess.run(
                     cmd_create_topic,
                     stdout=stdout_create_topic,
                     stderr=subprocess.STDOUT,
                 )
 
-        log(f"Starting up Kafka Producer")
+        log("Starting up Kafka Producer")
 
         # spin up Kafka producer
         producer = Producer(
@@ -391,13 +394,15 @@ class TestIngester(object):
         path_alerts = pathlib.Path("/app/data/ztf_alerts/20200202/")
         # grab some more alerts from gs://ztf-fritz/sample-public-alerts
         try:
-            log(f"Grabbing more alerts from gs://ztf-fritz/sample-public-alerts")
+            print(
+                f"{time_stamp()}: Grabbing more alerts from gs://ztf-fritz/sample-public-alerts"
+            )
             r = requests.get("https://www.googleapis.com/storage/v1/b/ztf-fritz/o")
             aa = r.json()["items"]
             ids = [pathlib.Path(a["id"]).parent for a in aa if "avro" in a["id"]]
         except Exception as e:
-            log(
-                f"Grabbing alerts from gs://ztf-fritz/sample-public-alerts failed, but it is ok"
+            print(
+                f"{time_stamp()}: Grabbing alerts from gs://ztf-fritz/sample-public-alerts failed, but it is ok"
             )
             log(f"{e}")
             ids = []
@@ -411,7 +416,9 @@ class TestIngester(object):
                 "/app/data/ztf_alerts/20200202/",
             ]
         )
-        log(f"Fetched {len(ids)} alerts from gs://ztf-fritz/sample-public-alerts")
+        print(
+            f"{time_stamp()}: Fetched {len(ids)} alerts from gs://ztf-fritz/sample-public-alerts"
+        )
         # push!
         for p in path_alerts.glob("*.avro"):
             with open(str(p), "rb") as data:
@@ -429,26 +436,26 @@ class TestIngester(object):
                 # callbacks to be triggered.
         producer.flush()
 
-        log(f"Creating a test filter")
+        log("Creating a test filter")
         test_filter = Filter(
             collection="ZTF_alerts",
             group_id=program.group_id,
             filter_id=program.filter_id,
         )
 
-        log(f"Starting up Ingester")
+        log("Starting up Ingester")
 
         # digest and ingest
         watchdog(obs_date=date, test=True)
-        log(f"Digested and ingested: all done!")
+        log("Digested and ingested: all done!")
 
         # shut down Kafka server and ZooKeeper
         time.sleep(10)
 
-        log(f"Removing the test filter")
+        log("Removing the test filter")
         test_filter.remove()
 
-        log(f"Shutting down Kafka Server at localhost:9092")
+        log("Shutting down Kafka Server at localhost:9092")
         # start the Kafka server:
         cmd_kafka_server_stop = [
             os.path.join(config["path"]["kafka"], "bin", "kafka-server-stop.sh"),
@@ -458,13 +465,14 @@ class TestIngester(object):
         with open(
             os.path.join(config["path"]["logs"], "kafka_server.stdout"), "w"
         ) as stdout_kafka_server:
-            p_kafka_server_stop = subprocess.run(
+            # p_kafka_server_stop = \
+            subprocess.run(
                 cmd_kafka_server_stop,
                 stdout=stdout_kafka_server,
                 stderr=subprocess.STDOUT,
             )
 
-        log(f"Shutting down ZooKeeper at localhost:2181")
+        log("Shutting down ZooKeeper at localhost:2181")
 
         # start ZooKeeper in the background (using Popen and not run with shell=True for safety)
         cmd_zookeeper_stop = [
@@ -475,6 +483,7 @@ class TestIngester(object):
         with open(
             os.path.join(config["path"]["logs"], "zookeeper.stdout"), "w"
         ) as stdout_zookeeper:
-            p_zookeeper_stop = subprocess.run(
+            # p_zookeeper_stop = \
+            subprocess.run(
                 cmd_zookeeper_stop, stdout=stdout_zookeeper, stderr=subprocess.STDOUT
             )

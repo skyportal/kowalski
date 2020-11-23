@@ -4,9 +4,9 @@ import sys
 import yaml
 
 
-def load_config(config_file='../config.yaml'):
+def load_config(config_file="../config.yaml"):
     """
-        Load config and secrets
+    Load config and secrets
     """
     with open(config_file) as cyaml:
         conf = yaml.load(cyaml, Loader=yaml.FullLoader)
@@ -33,46 +33,75 @@ def ingest(arguments):
         # fixme: /_tmp must be properly mapped!
 
         # ingest pre-made dumps from the GCS
-        rcs = [0, ]
+        rcs = [
+            0,
+        ]
         # rcs = list(range(0, 64))
 
-        u = config['kowalski']['database']['admin_username']
-        p = config['kowalski']['database']['admin_password']
+        u = config["kowalski"]["database"]["admin_username"]
+        p = config["kowalski"]["database"]["admin_password"]
 
         # restore the sources collection
         for rc in rcs:
             # copy from GCS
-            subprocess.run([
-                "docker", "exec", "-it", "kowalski_ingester_1",
-                "/usr/local/bin/gsutil",
-                "-m", "cp",
-                f"gs://ztf-sources-{args.tag}/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
-                f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
-            ])
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "-it",
+                    "kowalski_ingester_1",
+                    "/usr/local/bin/gsutil",
+                    "-m",
+                    "cp",
+                    f"gs://ztf-sources-{args.tag}/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
+                    f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
+                ]
+            )
 
             # lbunzip2 the dump
-            subprocess.run([
-                "docker", "exec", "-it", "kowalski_ingester_1",
-                "lbunzip2", "-v", "-f",
-                "-n", str(arguments.np),
-                f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
-            ])
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "-it",
+                    "kowalski_ingester_1",
+                    "lbunzip2",
+                    "-v",
+                    "-f",
+                    "-n",
+                    str(arguments.np),
+                    f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
+                ]
+            )
 
             # restore
-            subprocess.run([
-                "docker", "exec", "kowalski_mongo_1",
-                f"mongorestore", f"-u={u}", f"-p={p}", "--authenticationDatabase=admin",
-                "--db=kowalski",
-                f"--collection=ZTF_sources_{args.tag}",
-                f"--archive=/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump",
-            ])
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "kowalski_mongo_1",
+                    "mongorestore",
+                    f"-u={u}",
+                    f"-p={p}",
+                    "--authenticationDatabase=admin",
+                    "--db=kowalski",
+                    f"--collection=ZTF_sources_{args.tag}",
+                    f"--archive=/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump",
+                ]
+            )
 
             # remove dump
-            subprocess.run([
-                "docker", "exec", "-it", "kowalski_ingester_1",
-                "rm", "-f",
-                f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump",
-            ])
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "-it",
+                    "kowalski_ingester_1",
+                    "rm",
+                    "-f",
+                    f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump",
+                ]
+            )
 
     else:
         # todo: ingest a local copy of the matchfiles
@@ -83,8 +112,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title="commands", dest="command")
 
-    parser.add_argument('--tag', type=str, default='20200401', help='matchfile release time tag')
-    parser.add_argument('--config', type=str, default='../config.yaml', help="config and secrets")
+    parser.add_argument(
+        "--tag", type=str, default="20200401", help="matchfile release time tag"
+    )
+    parser.add_argument(
+        "--config", type=str, default="../config.yaml", help="config and secrets"
+    )
 
     commands = [
         ("meta", "Get and save matchfile ids and urls"),

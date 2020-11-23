@@ -161,7 +161,7 @@ def make_thumbnail(alert, ttype: str, ztftype: str):
     cutout_data = alert[f"cutout{ztftype}"]["stampData"]
     with gzip.open(io.BytesIO(cutout_data), "rb") as f:
         with fits.open(io.BytesIO(f.read())) as hdu:
-            header = hdu[0].header
+            # header = hdu[0].header
             data_flipped_y = np.flipud(hdu[0].data)
     # fixme: png, switch to fits eventually
     buff = io.BytesIO()
@@ -644,7 +644,7 @@ class AlertConsumer:
             if err.code() == -195:
                 _self.num_disconnected_partitions += 1
                 if _self.num_disconnected_partitions == _self.num_partitions:
-                    log(f"All partitions got disconnected, killing thread")
+                    log("All partitions got disconnected, killing thread")
                     sys.exit()
                 else:
                     log(
@@ -1025,7 +1025,7 @@ class AlertWorker:
             log(alert_thin)
 
         tic = time.time()
-        response = self.api_skyportal("POST", f"/api/candidates", alert_thin)
+        response = self.api_skyportal("POST", "/api/candidates", alert_thin)
         toc = time.time()
         if self.verbose > 1:
             log(f"Posting metadata to SkyPortal took {toc - tic} s")
@@ -1046,7 +1046,7 @@ class AlertWorker:
                 "group_ids": [passed_filter.get("group_id")],
             }
             tic = time.time()
-            response = self.api_skyportal("POST", f"/api/annotation", annotations)
+            response = self.api_skyportal("POST", "/api/annotation", annotations)
             toc = time.time()
             if self.verbose > 1:
                 log(
@@ -1071,7 +1071,7 @@ class AlertWorker:
                 log(f"Making {ztftype} thumbnail took {toc - tic} s")
 
             tic = time.time()
-            response = self.api_skyportal("POST", f"/api/thumbnail", thumb)
+            response = self.api_skyportal("POST", "/api/thumbnail", thumb)
             toc = time.time()
             if self.verbose > 1:
                 log(f"Posting {ztftype} thumbnail to SkyPortal took {toc - tic} s")
@@ -1125,7 +1125,7 @@ class AlertWorker:
 
                 if len(photometry.get("mag", ())) > 0:
                     tic = time.time()
-                    response = self.api_skyportal("PUT", f"/api/photometry", photometry)
+                    response = self.api_skyportal("PUT", "/api/photometry", photometry)
                     toc = time.time()
                     if self.verbose > 1:
                         log(

@@ -1,5 +1,6 @@
 from api import app_factory
-import pytest
+
+# import pytest
 from utils import load_config, uid
 
 
@@ -19,7 +20,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         _auth = await client.post(
-            f"/api/auth",
+            "/api/auth",
             json={
                 "username": config["server"]["admin_username"],
                 "password": config["server"]["admin_password"],
@@ -41,7 +42,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         _auth = await client.post(
-            f"/api/auth",
+            "/api/auth",
             json={
                 "username": config["server"]["admin_username"],
                 "password": config["server"]["admin_password"],
@@ -61,7 +62,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         _auth = await client.post(
-            f"/api/auth", json={"username": "noname", "password": "nopass"}
+            "/api/auth", json={"username": "noname", "password": "nopass"}
         )
         assert _auth.status == 401
 
@@ -293,7 +294,7 @@ class TestAPIs(object):
         assert result["status"] == "success"
         assert "data" in result
         assert "active" in result["data"]
-        assert result["data"]["active"] == False
+        assert not result["data"]["active"]
 
         # retrieve again
         resp = await client.get(
@@ -308,7 +309,7 @@ class TestAPIs(object):
         )
         assert "data" in result
         assert "active" in result["data"]
-        assert result["data"]["active"] == False
+        assert not result["data"]["active"]
 
         # remove filter
         resp = await client.delete(
@@ -476,7 +477,7 @@ class TestAPIs(object):
                     "radec": {"object1": [71.6577756, -10.2263957]},
                 },
                 "catalogs": {
-                    "ZTF_alerts": {
+                    collection: {
                         "filter": {},
                         "projection": {"_id": 0, "candid": 1, "objectId": 1},
                     }
@@ -616,8 +617,6 @@ class TestAPIs(object):
         access_token = credentials["token"]
 
         headers = {"Authorization": access_token}
-
-        collection = "ZTF_alerts"
 
         # check catalog_names info
         qu = {"query_type": "info", "query": {"command": "catalog_names"}}
