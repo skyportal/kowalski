@@ -162,6 +162,25 @@ def test(arguments):
     subprocess.run(command)
 
 
+def develop(arguments=None):
+    """
+    Install developer tools.
+    """
+    subprocess.run(["pre-commit", "install"])
+
+
+def lint(arguments):
+    try:
+        import pre_commit  # noqa: F401
+    except ImportError:
+        develop()
+
+    try:
+        subprocess.run(["pre-commit", "run", "--all-files"], check=True)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title="commands", dest="command")
@@ -177,6 +196,8 @@ if __name__ == "__main__":
         ("build", "Build Kowalski's containers"),
         ("seed", "Ingest catalog dumps into Kowalski"),
         ("test", "Run the test suite"),
+        ("develop", "Install tools for developing Fritz"),
+        ("lint", "Lint the full code base"),
         ("help", "Print this message"),
     ]
 
