@@ -513,119 +513,112 @@ def process_alert(record, topic):
 
     log(f"{topic} {objectId} {candid} {worker.address}")
 
-    # check that candid not in collection_alerts
+    # return if this alert packet has already been processed and ingested into collection_alerts:
     if (
         alert_worker.mongo.db[alert_worker.collection_alerts].count_documents(
             {"candid": candid}, limit=1
         )
+        == 1
+    ):
+        return
+
+    # candid not in db, ingest decoded avro packet into db
+    # todo: ?? restructure alerts even further?
+    #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
+    #       group by objectId similar to prv_candidates?? maybe this is too much
+    tic = time.time()
+    alert, prv_candidates = alert_worker.alert_mongify(record)
+    toc = time.time()
+    if alert_worker.verbose > 1:
+        log(f"Mongification of {objectId} {candid} took {toc - tic} s")
+
+    # ML models:
+    tic = time.time()
+    scores = alert_filter__ml(record, ml_models=alert_worker.ml_models)
+    alert["classifications"] = scores
+    toc = time.time()
+    if alert_worker.verbose > 1:
+        log(f"MLing of {objectId} {candid} took {toc - tic} s")
+
+    log(f"Ingesting {objectId} {candid} into db")
+    tic = time.time()
+    alert_worker.mongo.insert_one(
+        collection=alert_worker.collection_alerts, document=alert
+    )
+    toc = time.time()
+    if alert_worker.verbose > 1:
+        log(f"Ingesting {objectId} {candid} took {toc - tic} s")
+
+    # prv_candidates: pop nulls - save space
+    prv_candidates = [
+        {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
+        for prv_candidate in prv_candidates
+    ]
+
+    # cross-match with external catalogs if objectId not in collection_alerts_aux:
+    if (
+        alert_worker.mongo.db[alert_worker.collection_alerts_aux].count_documents(
+            {"_id": objectId}, limit=1
+        )
         == 0
     ):
-        # candid not in db, ingest decoded avro packet into db
-        # todo: ?? restructure alerts even further?
-        #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
-        #       group by objectId similar to prv_candidates?? maybe this is too much
         tic = time.time()
-        alert, prv_candidates = alert_worker.alert_mongify(record)
+        xmatches = alert_filter__xmatch(alert_worker.mongo.db, alert)
         toc = time.time()
         if alert_worker.verbose > 1:
-            log(f"Mongification of {objectId} {candid} took {toc - tic} s")
-
-        # ML models:
+            log(f"Xmatch of {objectId} {candid} took {toc - tic} s")
+        # CLU cross-match:
         tic = time.time()
-        scores = alert_filter__ml(record, ml_models=alert_worker.ml_models)
-        alert["classifications"] = scores
+        xmatches = {
+            **xmatches,
+            **alert_filter__xmatch_clu(alert_worker.mongo.db, alert),
+        }
         toc = time.time()
         if alert_worker.verbose > 1:
-            log(f"MLing of {objectId} {candid} took {toc - tic} s")
+            log(f"CLU xmatch of {objectId} {candid} took {toc - tic} s")
 
-        log(f"Ingesting {objectId} {candid} into db")
+        alert_aux = {
+            "_id": objectId,
+            "cross_matches": xmatches,
+            "prv_candidates": prv_candidates,
+        }
+
         tic = time.time()
         alert_worker.mongo.insert_one(
-            collection=alert_worker.collection_alerts, document=alert
+            collection=alert_worker.collection_alerts_aux, document=alert_aux
         )
         toc = time.time()
         if alert_worker.verbose > 1:
-            log(f"Ingesting {objectId} {candid} took {toc - tic} s")
+            log(f"Aux ingesting of {objectId} {candid} took {toc - tic} s")
 
-        # prv_candidates: pop nulls - save space
-        prv_candidates = [
-            {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
-            for prv_candidate in prv_candidates
-        ]
+    else:
+        tic = time.time()
+        alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
+            {"_id": objectId},
+            {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
+            upsert=True,
+        )
+        toc = time.time()
+        if alert_worker.verbose > 1:
+            log(f"Aux updating of {objectId} {candid} took {toc - tic} s")
 
-        # cross-match with external catalogs if objectId not in collection_alerts_aux:
-        if (
-            alert_worker.mongo.db[alert_worker.collection_alerts_aux].count_documents(
-                {"_id": objectId}, limit=1
-            )
-            == 0
-        ):
-            tic = time.time()
-            xmatches = alert_filter__xmatch(alert_worker.mongo.db, alert)
-            toc = time.time()
-            if alert_worker.verbose > 1:
-                log(f"Xmatch of {objectId} {candid} took {toc - tic} s")
-            # CLU cross-match:
-            tic = time.time()
-            xmatches = {
-                **xmatches,
-                **alert_filter__xmatch_clu(alert_worker.mongo.db, alert),
-            }
-            toc = time.time()
-            if alert_worker.verbose > 1:
-                log(f"CLU xmatch of {objectId} {candid} took {toc - tic} s")
+    if config["misc"]["broker"]:
+        # execute user-defined alert filters
+        tic = time.time()
+        passed_filters = alert_filter__user_defined(
+            alert_worker.mongo.db, alert_worker.filter_templates, alert
+        )
+        toc = time.time()
+        if alert_worker.verbose > 1:
+            log(f"Filtering of {objectId} {candid} took {toc - tic} s")
 
-            alert_aux = {
-                "_id": objectId,
-                "cross_matches": xmatches,
-                "prv_candidates": prv_candidates,
-            }
-
-            tic = time.time()
-            alert_worker.mongo.insert_one(
-                collection=alert_worker.collection_alerts_aux, document=alert_aux
-            )
-            toc = time.time()
-            if alert_worker.verbose > 1:
-                log(f"Aux ingesting of {objectId} {candid} took {toc - tic} s")
-
-        else:
-            tic = time.time()
-            alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
-                {"_id": objectId},
-                {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
-                upsert=True,
-            )
-            toc = time.time()
-            if alert_worker.verbose > 1:
-                log(f"Aux updating of {objectId} {candid} took {toc - tic} s")
-
-        if config["misc"]["broker"]:
-            # execute user-defined alert filters
-            tic = time.time()
-            passed_filters = alert_filter__user_defined(
-                alert_worker.mongo.db, alert_worker.filter_templates, alert
-            )
-            toc = time.time()
-            if alert_worker.verbose > 1:
-                log(f"Filtering of {objectId} {candid} took {toc - tic} s")
-
-            # post to SkyPortal
-            alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        # post to SkyPortal
+        alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
 
 
 class AlertConsumer:
     """
     Creates an alert stream Kafka consumer for a given topic.
-
-    Parameters
-    ----------
-    topic : `str`
-        Name of the topic to subscribe to.
-    schema_files : Avro schema files
-        The reader Avro schema files for decoding data. Optional.
-    **kwargs
-        Keyword arguments for configuring confluent_kafka.Consumer().
     """
 
     def __init__(self, topic, dask_client, **kwargs):
@@ -707,17 +700,9 @@ class AlertConsumer:
     def decode_message(msg):
         """Decode Avro message according to a schema.
 
-        Parameters
-        ----------
-        msg : Kafka message
-            The Kafka message result from consumer.poll().
-
-        Returns
-        -------
-        `dict`
-            Decoded message.
+        :param msg: The Kafka message result from consumer.poll()
+        :return:
         """
-        # print(msg.topic(), msg.offset(), msg.error(), msg.key(), msg.value())
         message = msg.value()
         decoded_msg = message
 
