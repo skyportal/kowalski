@@ -40,6 +40,7 @@ from utils import (
     Mongo,
     radec2lb,
     time_stamp,
+    timer,
 )
 
 
@@ -526,28 +527,18 @@ def process_alert(record, topic):
     # todo: ?? restructure alerts even further?
     #       move cutouts to ZTF_alerts_cutouts? reduce the main db size for performance
     #       group by objectId similar to prv_candidates?? maybe this is too much
-    tic = time.time()
-    alert, prv_candidates = alert_worker.alert_mongify(record)
-    toc = time.time()
-    if alert_worker.verbose > 1:
-        log(f"Mongification of {objectId} {candid} took {toc - tic} s")
+    with timer(f"Mongification of {objectId} {candid}", alert_worker.verbose > 1):
+        alert, prv_candidates = alert_worker.alert_mongify(record)
 
     # ML models:
-    tic = time.time()
-    scores = alert_filter__ml(record, ml_models=alert_worker.ml_models)
-    alert["classifications"] = scores
-    toc = time.time()
-    if alert_worker.verbose > 1:
-        log(f"MLing of {objectId} {candid} took {toc - tic} s")
+    with timer(f"MLing of {objectId} {candid}", alert_worker.verbose > 1):
+        scores = alert_filter__ml(record, ml_models=alert_worker.ml_models)
+        alert["classifications"] = scores
 
-    log(f"Ingesting {objectId} {candid} into db")
-    tic = time.time()
-    alert_worker.mongo.insert_one(
-        collection=alert_worker.collection_alerts, document=alert
-    )
-    toc = time.time()
-    if alert_worker.verbose > 1:
-        log(f"Ingesting {objectId} {candid} took {toc - tic} s")
+    with timer(f"Ingesting {objectId} {candid}", alert_worker.verbose > 1):
+        alert_worker.mongo.insert_one(
+            collection=alert_worker.collection_alerts, document=alert
+        )
 
     # prv_candidates: pop nulls - save space
     prv_candidates = [
@@ -562,20 +553,14 @@ def process_alert(record, topic):
         )
         == 0
     ):
-        tic = time.time()
-        xmatches = alert_filter__xmatch(alert_worker.mongo.db, alert)
-        toc = time.time()
-        if alert_worker.verbose > 1:
-            log(f"Xmatch of {objectId} {candid} took {toc - tic} s")
+        with timer(f"Cross-match of {objectId} {candid}", alert_worker.verbose > 1):
+            xmatches = alert_filter__xmatch(alert_worker.mongo.db, alert)
         # CLU cross-match:
-        tic = time.time()
-        xmatches = {
-            **xmatches,
-            **alert_filter__xmatch_clu(alert_worker.mongo.db, alert),
-        }
-        toc = time.time()
-        if alert_worker.verbose > 1:
-            log(f"CLU xmatch of {objectId} {candid} took {toc - tic} s")
+        with timer(f"CLU cross-match {objectId} {candid}", alert_worker.verbose > 1):
+            xmatches = {
+                **xmatches,
+                **alert_filter__xmatch_clu(alert_worker.mongo.db, alert),
+            }
 
         alert_aux = {
             "_id": objectId,
@@ -583,34 +568,25 @@ def process_alert(record, topic):
             "prv_candidates": prv_candidates,
         }
 
-        tic = time.time()
-        alert_worker.mongo.insert_one(
-            collection=alert_worker.collection_alerts_aux, document=alert_aux
-        )
-        toc = time.time()
-        if alert_worker.verbose > 1:
-            log(f"Aux ingesting of {objectId} {candid} took {toc - tic} s")
+        with timer(f"Aux ingesting {objectId} {candid}", alert_worker.verbose > 1):
+            alert_worker.mongo.insert_one(
+                collection=alert_worker.collection_alerts_aux, document=alert_aux
+            )
 
     else:
-        tic = time.time()
-        alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
-            {"_id": objectId},
-            {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
-            upsert=True,
-        )
-        toc = time.time()
-        if alert_worker.verbose > 1:
-            log(f"Aux updating of {objectId} {candid} took {toc - tic} s")
+        with timer(f"Aux updating of {objectId} {candid}", alert_worker.verbose > 1):
+            alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
+                {"_id": objectId},
+                {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
+                upsert=True,
+            )
 
     if config["misc"]["broker"]:
         # execute user-defined alert filters
-        tic = time.time()
-        passed_filters = alert_filter__user_defined(
-            alert_worker.mongo.db, alert_worker.filter_templates, alert
-        )
-        toc = time.time()
-        if alert_worker.verbose > 1:
-            log(f"Filtering of {objectId} {candid} took {toc - tic} s")
+        with timer(f"Filtering of {objectId} {candid}", alert_worker.verbose > 1):
+            passed_filters = alert_filter__user_defined(
+                alert_worker.mongo.db, alert_worker.filter_templates, alert
+            )
 
         # post to SkyPortal
         alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
@@ -680,11 +656,8 @@ class AlertConsumer:
         elif msg is not None:
             try:
                 # decode avro packet
-                tic = time.time()
-                msg_decoded = self.decode_message(msg)
-                toc = time.time()
-                if self.verbose > 1:
-                    log(f"Decoding alert took {toc - tic} s")
+                with timer("Decoding alert", self.verbose > 1):
+                    msg_decoded = self.decode_message(msg)
 
                 for record in msg_decoded:
                     self.dask_client.submit(
@@ -799,11 +772,12 @@ class AlertWorker:
             # get ZTF instrument id
             self.instrument_id = 1
             try:
-                tic = time.time()
-                response = self.api_skyportal("GET", "/api/instrument", {"name": "ZTF"})
-                toc = time.time()
-                if self.verbose > 1:
-                    log(f"Getting ZTF instrument_id from SkyPortal took {toc - tic} s")
+                with timer(
+                    "Getting ZTF instrument_id from SkyPortal", self.verbose > 1
+                ):
+                    response = self.api_skyportal(
+                        "GET", "/api/instrument", {"name": "ZTF"}
+                    )
                 if (
                     response.json()["status"] == "success"
                     and len(response.json()["data"]) > 0
@@ -861,15 +835,14 @@ class AlertWorker:
             self.filter_templates = []
             for active_filter in active_filters:
                 # collect additional info from SkyPortal
-                tic = time.time()
-                response = self.api_skyportal(
-                    "GET", f"/api/groups/{active_filter['group_id']}"
-                )
-                toc = time.time()
-                if self.verbose > 1:
-                    log(
-                        f"Getting info on group id={active_filter['group_id']} from SkyPortal took {toc - tic} s"
+                with timer(
+                    f"Getting info on group id={active_filter['group_id']} from SkyPortal",
+                    self.verbose > 1,
+                ):
+                    response = self.api_skyportal(
+                        "GET", f"/api/groups/{active_filter['group_id']}"
                     )
+                if self.verbose > 1:
                     log(response.json())
                 if response.json()["status"] == "success":
                     group_name = (
@@ -1009,11 +982,11 @@ class AlertWorker:
         if self.verbose > 1:
             log(alert_thin)
 
-        tic = time.time()
-        response = self.api_skyportal("POST", "/api/candidates", alert_thin)
-        toc = time.time()
-        if self.verbose > 1:
-            log(f"Posting metadata to SkyPortal took {toc - tic} s")
+        with timer(
+            f"Posting metadata of {alert['objectId']} {alert['candid']} to SkyPortal",
+            self.verbose > 1,
+        ):
+            response = self.api_skyportal("POST", "/api/candidates", alert_thin)
         if response.json()["status"] == "success":
             log(f"Posted {alert['objectId']} {alert['candid']} metadata to SkyPortal")
         else:
@@ -1030,13 +1003,11 @@ class AlertWorker:
                 "data": passed_filter.get("data", dict()).get("annotations", dict()),
                 "group_ids": [passed_filter.get("group_id")],
             }
-            tic = time.time()
-            response = self.api_skyportal("POST", "/api/annotation", annotations)
-            toc = time.time()
-            if self.verbose > 1:
-                log(
-                    f"Posting annotation for {alert['objectId']} to skyportal took {toc - tic} s"
-                )
+            with timer(
+                f"Posting annotation for {alert['objectId']} {alert['candid']} to SkyPortal",
+                self.verbose > 1,
+            ):
+                response = self.api_skyportal("POST", "/api/annotation", annotations)
             if response.json()["status"] == "success":
                 log(f"Posted {alert['objectId']} annotation to SkyPortal")
             else:
@@ -1049,17 +1020,17 @@ class AlertWorker:
             ("ref", "Template"),
             ("sub", "Difference"),
         ]:
-            tic = time.time()
-            thumb = make_thumbnail(alert, ttype, ztftype)
-            toc = time.time()
-            if self.verbose > 1:
-                log(f"Making {ztftype} thumbnail took {toc - tic} s")
+            with timer(
+                f"Making {ztftype} thumbnail for {alert['objectId']} {alert['candid']}",
+                self.verbose > 1,
+            ):
+                thumb = make_thumbnail(alert, ttype, ztftype)
 
-            tic = time.time()
-            response = self.api_skyportal("POST", "/api/thumbnail", thumb)
-            toc = time.time()
-            if self.verbose > 1:
-                log(f"Posting {ztftype} thumbnail to SkyPortal took {toc - tic} s")
+            with timer(
+                f"Posting {ztftype} thumbnail for {alert['objectId']} {alert['candid']} to SkyPortal",
+                self.verbose > 1,
+            ):
+                response = self.api_skyportal("POST", "/api/thumbnail", thumb)
 
             if response.json()["status"] == "success":
                 log(
@@ -1079,11 +1050,11 @@ class AlertWorker:
                        [{"group_id": <group_id>, "permissions": <list of program ids the group has access to>}]
         :return:
         """
-        tic = time.time()
-        df_photometry = make_photometry(alert)
-        toc = time.time()
-        if self.verbose > 1:
-            log(f"Making alert photometry took {toc - tic} s")
+        with timer(
+            f"Making alert photometry of {alert['objectId']} {alert['candid']}",
+            self.verbose > 1,
+        ):
+            df_photometry = make_photometry(alert)
 
         # post data from different program_id's
         for pid in set(df_photometry.programid.unique()):
@@ -1109,13 +1080,13 @@ class AlertWorker:
                 }
 
                 if len(photometry.get("mag", ())) > 0:
-                    tic = time.time()
-                    response = self.api_skyportal("PUT", "/api/photometry", photometry)
-                    toc = time.time()
-                    if self.verbose > 1:
-                        log(
-                            f"Posting photometry of {alert['objectId']} {alert['candid']}, "
-                            f"program_id={pid} to SkyPortal took {toc - tic} s"
+                    with timer(
+                        f"Posting photometry of {alert['objectId']} {alert['candid']}, "
+                        f"program_id={pid} to SkyPortal",
+                        self.verbose > 1,
+                    ):
+                        response = self.api_skyportal(
+                            "PUT", "/api/photometry", photometry
                         )
                     if response.json()["status"] == "success":
                         log(
@@ -1153,21 +1124,24 @@ class AlertWorker:
         :return:
         """
         # check if candidate/source exist in SP:
-        tic = time.time()
-        response = self.api_skyportal("HEAD", f"/api/candidates/{alert['objectId']}")
-        toc = time.time()
+        with timer(
+            f"Checking if {alert['objectId']} is Candidate in SkyPortal",
+            self.verbose > 1,
+        ):
+            response = self.api_skyportal(
+                "HEAD", f"/api/candidates/{alert['objectId']}"
+            )
         is_candidate = response.status_code == 200
         if self.verbose > 1:
-            log(f"Checking if object is Candidate took {toc - tic} s")
             log(
                 f"{alert['objectId']} {'is' if is_candidate else 'is not'} Candidate in SkyPortal"
             )
-        tic = time.time()
-        response = self.api_skyportal("HEAD", f"/api/sources/{alert['objectId']}")
-        toc = time.time()
+        with timer(
+            f"Checking if {alert['objectId']} is Source in SkyPortal", self.verbose > 1
+        ):
+            response = self.api_skyportal("HEAD", f"/api/sources/{alert['objectId']}")
         is_source = response.status_code == 200
         if self.verbose > 1:
-            log(f"Checking if object is Source took {toc - tic} s")
             log(
                 f"{alert['objectId']} {'is' if is_source else 'is not'} Source in SkyPortal"
             )
@@ -1224,27 +1198,26 @@ class AlertWorker:
             # already saved as a source?
             if is_source:
                 # get info on the corresponding groups:
-                tic = time.time()
-                response = self.api_skyportal(
-                    "GET", f"/api/sources/{alert['objectId']}"
-                )
-                toc = time.time()
-                if self.verbose > 1:
-                    log(
-                        f"Getting source info on {alert['objectId']} took {toc - tic} s"
+                with timer(
+                    f"Getting source info on  {alert['objectId']} from SkyPortal",
+                    self.verbose > 1,
+                ):
+                    response = self.api_skyportal(
+                        "GET", f"/api/sources/{alert['objectId']}"
                     )
                 if response.json()["status"] == "success":
                     existing_group_ids = [
                         g["id"] for g in response.json()["data"]["groups"]
                     ]
                     for group_id in set(existing_group_ids) - set(group_ids):
-                        tic = time.time()
-                        response = self.api_skyportal("GET", f"/api/groups/{group_id}")
-                        toc = time.time()
-                        if self.verbose > 1:
-                            log(
-                                f"Getting info on group id={group_id} from SkyPortal took {toc - tic} s"
+                        with timer(
+                            f"Getting info on group id={group_id} from SkyPortal",
+                            self.verbose > 1,
+                        ):
+                            response = self.api_skyportal(
+                                "GET", f"/api/groups/{group_id}"
                             )
+                        if self.verbose > 1:
                             log(response.json())
                         if response.json()["status"] == "success":
                             selector = {1}
