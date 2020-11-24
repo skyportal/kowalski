@@ -14,6 +14,9 @@ if __name__ == "__main__":
         threads_per_worker=config["dask"]["threads_per_worker"],
         n_workers=config["dask"]["n_workers"],
         scheduler_port=config["dask"]["scheduler_port"],
+        lifetime=config["dask"]["lifetime"],  # "1 hour"
+        lifetime_stagger=config["dask"]["lifetime_stagger"],  # "15 minutes"
+        lifetime_restart=config["dask"]["lifetime_restart"],  # True
     )
     log(cluster)
 
