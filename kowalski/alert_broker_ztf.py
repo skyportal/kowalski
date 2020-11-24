@@ -752,12 +752,13 @@ class AlertWorker:
 
         # create indexes
         if self.config["database"]["build_indexes"]:
-            for index_name, index in self.config["database"]["indexes"][
-                self.collection_alerts
-            ].items():
-                ind = [tuple(ii) for ii in index]
+            for index in self.config["database"]["indexes"][self.collection_alerts]:
+                ind = [tuple(ii) for ii in index["fields"]]
                 self.mongo.db[self.collection_alerts].create_index(
-                    keys=ind, name=index_name, background=True
+                    keys=ind,
+                    name=index["name"],
+                    background=True,
+                    unique=index["unique"],
                 )
 
         # fixme: ML models:
