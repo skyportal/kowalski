@@ -690,7 +690,7 @@ class AlertConsumer:
 
                 for record in msg_decoded:
                     future = self.dask_client.submit(
-                        process_alert, deepcopy(record), self.topic, pure=True
+                        process_alert, record, self.topic, pure=True
                     )
                     dask.distributed.fire_and_forget(future)
                     future.release()
