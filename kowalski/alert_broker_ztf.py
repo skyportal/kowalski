@@ -698,15 +698,15 @@ class AlertConsumer:
                     msg_decoded = self.decode_message(msg)
 
                 for record in msg_decoded:
-                    # f = self.dask_client.submit(
-                    #     process_alert, deepcopy(record), self.topic, pure=True
-                    # )
-                    # dask.distributed.fire_and_forget(f)
-                    self.futures.append(
-                        self.dask_client.submit(
-                            process_alert, deepcopy(record), self.topic, pure=True
-                        )
+                    f = self.dask_client.submit(
+                        process_alert, deepcopy(record), self.topic, pure=True
                     )
+                    dask.distributed.fire_and_forget(f)
+                    # self.futures.append(
+                    #     self.dask_client.submit(
+                    #         process_alert, deepcopy(record), self.topic, pure=True
+                    #     )
+                    # )
 
             except Exception as e:
                 log(e)
