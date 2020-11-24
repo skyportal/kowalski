@@ -413,21 +413,21 @@ def alert_filter__xmatch_clu(
 
         for galaxy in galaxies + [M31, M33]:
             alpha1, delta01 = galaxy["ra"], galaxy["dec"]
-            d0, axis_ratio, PA0 = galaxy["a"], galaxy["b2a"], galaxy["pa"]
 
-            # no shape info for galaxy? replace with median values
-            if d0 < -990:
-                d0 = 0.0265889
-            if axis_ratio < -990:
-                axis_ratio = 0.61
-            if PA0 < -990:
-                PA0 = 86.0
+            redshift = galaxy["z"]
+            # By default, set the cross-match radius to 100 kpc at the redshift of the host galaxy
+            cm_radius = 100.0 * (0.05 / redshift) / 3600
+            if redshift < 0.01:
+                # for nearby galaxies and galaxies with negative redshifts, do a 10 arc-minute cross-match
+                # (cross-match radius would otherwise get un-physically large for nearby galaxies)
+                cm_radius = 600.0 / 3600
 
-            in_galaxy = in_ellipse(
-                ra, dec, alpha1, delta01, size_margin * d0, axis_ratio, PA0
-            )
+            in_galaxy = in_ellipse(ra, dec, alpha1, delta01, cm_radius, 1, 0)
 
-            if in_galaxy:
+            # Now only select sources within 150 Mpc
+            in_volume = redshift < 0.036
+
+            if in_galaxy and in_volume:
                 match = galaxy
                 distance_arcsec = round(
                     great_circle_distance(ra, dec, alpha1, delta01) * 3600, 2
