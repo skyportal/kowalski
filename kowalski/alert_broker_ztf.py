@@ -26,6 +26,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 import subprocess
 import sys
+import tensorflow as tf
 from tensorflow.keras.models import load_model
 import time
 import traceback
@@ -41,7 +42,11 @@ from utils import (
     radec2lb,
     time_stamp,
     timer,
+    ZTFAlert,
 )
+
+
+tf.config.optimizer.set_jit(True)
 
 
 """ load config and secrets """
@@ -247,7 +252,6 @@ def make_triplet(alert, to_tpu: bool = False):
 
 def alert_filter__ml(alert, ml_models: dict = None) -> dict:
     """Execute ML models on ZTF alerts
-
     :param alert:
     :param ml_models:
     :return:
@@ -255,15 +259,33 @@ def alert_filter__ml(alert, ml_models: dict = None) -> dict:
 
     scores = dict()
 
-    try:
-        """ braai """
-        triplet = make_triplet(alert)
-        triplets = np.expand_dims(triplet, axis=0)
-        braai = ml_models["braai"]["model"].predict(x=triplets)[0]
-        scores["braai"] = float(braai)
-        scores["braai_version"] = ml_models["braai"]["version"]
-    except Exception as e:
-        print(time_stamp(), str(e))
+    if ml_models is not None and len(ml_models) > 0:
+        try:
+            with timer("ZTFAlert(alert)"):
+                ztf_alert = ZTFAlert(alert)
+            with timer("Prepping features"):
+                features = np.expand_dims(ztf_alert.data["features"], axis=[0, -1])
+                triplet = np.expand_dims(ztf_alert.data["triplet"], axis=[0])
+
+            # braai
+            if "braai" in ml_models.keys():
+                with timer("braai"):
+                    braai = ml_models["braai"]["model"].predict(x=triplet)[0]
+                    scores["braai"] = float(braai)
+                    scores["braai_version"] = ml_models["braai"]["version"]
+            # acai
+            for model_name in ("acai_h", "acai_v", "acai_o", "acai_n", "acai_b"):
+                if model_name in ml_models.keys():
+                    with timer(model_name):
+                        score = ml_models[model_name]["model"].predict(
+                            [features, triplet]
+                        )[0]
+                        scores[model_name] = float(score)
+                        scores[f"{model_name}_version"] = ml_models[model_name][
+                            "version"
+                        ]
+        except Exception as e:
+            log(str(e))
 
     return scores
 
@@ -315,7 +337,7 @@ def alert_filter__xmatch(database, alert) -> dict:
             xmatches[catalog] = list(s)
 
     except Exception as e:
-        print(time_stamp(), str(e))
+        log(str(e))
 
     return xmatches
 
@@ -438,7 +460,7 @@ def alert_filter__xmatch_clu(
         xmatches[clu_version] = matches
 
     except Exception as e:
-        print(time_stamp(), str(e))
+        log(str(e))
 
     return xmatches
 
@@ -490,8 +512,8 @@ def alert_filter__user_defined(
                 )
 
         except Exception as e:
-            print(
-                f'{time_stamp()}: filter {filter_template["fid"]} execution failed on alert {alert["candid"]}: {e}'
+            log(
+                f'Filter {filter_template["fid"]} execution failed on alert {alert["candid"]}: {e}'
             )
             continue
 
@@ -745,7 +767,7 @@ class AlertWorker:
                 model_version = config["ml_models"][model]["version"]
                 # todo: allow other formats such as SavedModel
                 model_filepath = os.path.join(
-                    config["path"]["ml_models"], f"{model}_{model_version}.h5"
+                    config["path"]["ml_models"], f"{model}.{model_version}.h5"
                 )
                 self.ml_models[model] = {
                     "model": load_model(model_filepath),

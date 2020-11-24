@@ -1,13 +1,19 @@
-import bcrypt
+from astropy.io import fits
 import base64
+import bcrypt
+import bson.json_util as bju
 from contextlib import contextmanager
+from copy import deepcopy
 import datetime
+import gzip
 import hashlib
+import io
 import math
 from motor.motor_asyncio import AsyncIOMotorClient
 from numba import jit
 import numpy as np
 import os
+import pandas as pd
 import pymongo
 from pymongo.errors import BulkWriteError
 import secrets
@@ -710,3 +716,239 @@ def desi_dr8_url(ra, dec):
         f"http://legacysurvey.org/viewer/jpeg-cutout?ra={ra}"
         f"&dec={dec}&size=200&layer=dr8&pixscale=0.262&bands=grz"
     )
+
+
+# dmdt v. 20200318: maximum baseline limited at 240 days
+dm_intervals = [
+    -8,
+    -4.5,
+    -3,
+    -2.5,
+    -2,
+    -1.5,
+    -1.25,
+    -0.75,
+    -0.5,
+    -0.3,
+    -0.2,
+    -0.1,
+    -0.05,
+    0,
+    0.05,
+    0.1,
+    0.2,
+    0.3,
+    0.5,
+    0.75,
+    1.25,
+    1.5,
+    2,
+    2.5,
+    3,
+    4.5,
+    8,
+]
+dt_intervals = [
+    0.0,
+    4.0 / 145,
+    1.0 / 25,
+    2.0 / 25,
+    3.0 / 25,
+    0.3,
+    0.5,
+    0.75,
+    1,
+    1.5,
+    2.5,
+    3.5,
+    4.5,
+    5.5,
+    7,
+    10,
+    20,
+    30,
+    45,
+    60,
+    75,
+    90,
+    120,
+    150,
+    180,
+    210,
+    240,
+]
+
+
+@jit
+def pwd_for(a):
+    """
+    Compute pairwise differences with for loops
+    """
+    return np.array([a[j] - a[i] for i in range(len(a)) for j in range(i + 1, len(a))])
+
+
+def compute_dmdt(jd, mag):
+    jd_diff = pwd_for(jd)
+    mag_diff = pwd_for(mag)
+
+    hh, ex, ey = np.histogram2d(jd_diff, mag_diff, bins=[dm_intervals, dt_intervals])
+    # extent = [ex[0], ex[-1], ey[0], ey[-1]]
+    dmdt = hh
+    dmdt = np.transpose(dmdt)
+    # dmdt = (maxval * dmdt / dmdt.shape[0])
+    dmdt /= np.linalg.norm(dmdt)
+
+    return dmdt
+
+
+class ZTFAlert:
+    def __init__(self, alert, label=None, **kwargs):
+        self.kwargs = kwargs
+
+        self.label = label
+
+        self.alert = deepcopy(alert)
+
+        triplet_normalize = kwargs.get("triplet_normalize", True)
+        to_tpu = kwargs.get("to_tpu", False)
+        feature_names = kwargs.get(
+            "feature_names",
+            (
+                "drb",
+                "diffmaglim",
+                "ra",
+                "dec",
+                "magpsf",
+                "sigmapsf",
+                "chipsf",
+                "fwhm",
+                "sky",
+                "chinr",
+                "sharpnr",
+                "sgscore1",
+                "distpsnr1",
+                "sgscore2",
+                "distpsnr2",
+                "sgscore3",
+                "distpsnr3",
+                "ndethist",
+                "ncovhist",
+                "scorr",
+                "nmtchps",
+                "clrcoeff",
+                "clrcounc",
+                "neargaia",
+                "neargaiabright",
+            ),
+        )
+        feature_norms = kwargs.get("feature_norms", None)
+        # dmdt_up_to_candidate_jd = kwargs.get("dmdt_up_to_candidate_jd", True)
+
+        triplet = self.make_triplet(normalize=triplet_normalize, to_tpu=to_tpu)
+        features = self.make_features(feature_names=feature_names, norms=feature_norms)
+        # dmdt = self.make_dmdt(up_to_candidate_jd=dmdt_up_to_candidate_jd)
+
+        self.data = {
+            "triplet": triplet,
+            "features": features,
+            # "dmdt": dmdt
+        }
+
+    def make_triplet(self, normalize: bool = True, to_tpu: bool = False):
+        """
+        Feed in alert packet
+        """
+        cutout_dict = dict()
+
+        for cutout in ("science", "template", "difference"):
+            cutout_data = bju.loads(
+                bju.dumps([self.alert[f"cutout{cutout.capitalize()}"]["stampData"]])
+            )[0]
+
+            # unzip
+            with gzip.open(io.BytesIO(cutout_data), "rb") as f:
+                with fits.open(io.BytesIO(f.read())) as hdu:
+                    data = hdu[0].data
+                    # replace nans with zeros
+                    cutout_dict[cutout] = np.nan_to_num(data)
+                    # normalize
+                    if normalize:
+                        cutout_dict[cutout] /= np.linalg.norm(cutout_dict[cutout])
+
+            # pad to 63x63 if smaller
+            shape = cutout_dict[cutout].shape
+            if shape != (63, 63):
+                cutout_dict[cutout] = np.pad(
+                    cutout_dict[cutout],
+                    [(0, 63 - shape[0]), (0, 63 - shape[1])],
+                    mode="constant",
+                    constant_values=1e-9,
+                )
+
+        triplet = np.zeros((63, 63, 3))
+        triplet[:, :, 0] = cutout_dict["science"]
+        triplet[:, :, 1] = cutout_dict["template"]
+        triplet[:, :, 2] = cutout_dict["difference"]
+
+        if to_tpu:
+            # Edge TPUs require additional processing
+            triplet = np.rint(triplet * 128 + 128).astype(np.uint8).flatten()
+
+        return triplet
+
+    def make_features(self, feature_names=None, norms=None):
+        features = []
+        if feature_names is None:
+            feature_names = list(self.alert["candidate"].keys())
+        for feature_name in feature_names:
+            feature = self.alert["candidate"].get(feature_name)
+            if feature is None and feature_name == "drb":
+                feature = self.alert["candidate"].get("rb")
+            if norms is not None:
+                feature /= norms.get(feature, 1)
+            features.append(feature)
+
+        features = np.array(features)
+        return features
+
+    def make_dmdt(self, up_to_candidate_jd=True, min_points=4):
+        df_candidate = pd.DataFrame(self.alert["candidate"], index=[0])
+
+        df_prv_candidates = pd.DataFrame(self.alert["prv_candidates"])
+        df_light_curve = pd.concat(
+            [df_candidate, df_prv_candidates], ignore_index=True, sort=False
+        )
+
+        ztf_filters = {1: "ztfg", 2: "ztfr", 3: "ztfi"}
+        df_light_curve["ztf_filter"] = df_light_curve["fid"].apply(
+            lambda x: ztf_filters[x]
+        )
+        df_light_curve["magsys"] = "ab"
+        df_light_curve["mjd"] = df_light_curve["jd"] - 2400000.5
+
+        df_light_curve["mjd"] = df_light_curve["mjd"].apply(lambda x: np.float64(x))
+        df_light_curve["magpsf"] = df_light_curve["magpsf"].apply(
+            lambda x: np.float32(x)
+        )
+        df_light_curve["sigmapsf"] = df_light_curve["sigmapsf"].apply(
+            lambda x: np.float32(x)
+        )
+
+        df_light_curve = (
+            df_light_curve.drop_duplicates(subset=["mjd", "magpsf"])
+            .reset_index(drop=True)
+            .sort_values(by=["mjd"])
+        )
+
+        dmdt = np.zeros((26, 26, 3))
+        for i, fid in enumerate([1, 2, 3]):
+            mask_fid = df_light_curve.fid == fid
+            if sum(mask_fid) >= min_points:
+                dmdt[:, :, i] = compute_dmdt(
+                    df_light_curve.loc[mask_fid, "jd"],
+                    df_light_curve.loc[mask_fid, "mag"],
+                )
+            else:
+                dmdt[:, :, i] = np.zeros((26, 26))
+
+        return dmdt
