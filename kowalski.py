@@ -1,18 +1,20 @@
 #!/usr/bin/env python
 import argparse
+from deepdiff import DeepDiff
 import pathlib
+from pprint import pprint
 import questionary
-import sys
 import subprocess
+import sys
 import yaml
 
 
 def check_configs(cfgs=("config.*yaml", "docker-compose.*yaml")):
     path = pathlib.Path(__file__).parent.absolute()
 
-    # use config defaults if configs do not exist?
     for cfg in cfgs:
         c = cfg.replace("*", "")
+        # use config defaults if configs do not exist?
         if not (path / c).exists():
             answer = questionary.select(
                 f"{c} does not exist, do you want to use one of the following"
@@ -20,6 +22,23 @@ def check_configs(cfgs=("config.*yaml", "docker-compose.*yaml")):
                 choices=[p.name for p in path.glob(cfg)],
             ).ask()
             subprocess.run(["cp", f"{path / answer}", f"{path / c}"])
+
+        # check contents of config.yaml WRT config.defaults.yaml
+        if c == "config.yaml":
+            with open(path / c.replace(".yaml", ".defaults.yaml")) as cyaml:
+                config_defaults = yaml.load(cyaml, Loader=yaml.FullLoader)
+            with open(path / c) as cyaml:
+                config = yaml.load(cyaml, Loader=yaml.FullLoader)
+            deep_diff = DeepDiff(config, config_defaults, ignore_order=True)
+            difference = {
+                k: v
+                for k, v in deep_diff.items()
+                if k in ("dictionary_item_added", "dictionary_item_removed")
+            }
+            if len(difference) > 0:
+                print("config.yaml structure differs from config.defaults.yaml")
+                pprint(difference)
+                raise KeyError("Fix config.yaml before proceeding")
 
 
 def up(arguments):
