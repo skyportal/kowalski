@@ -337,7 +337,7 @@ def alert_filter__xmatch(database, alert) -> dict:
             xmatches[catalog] = list(s)
 
     except Exception as e:
-        print(time_stamp(), str(e))
+        log(str(e))
 
     return xmatches
 
@@ -460,7 +460,7 @@ def alert_filter__xmatch_clu(
         xmatches[clu_version] = matches
 
     except Exception as e:
-        print(time_stamp(), str(e))
+        log(str(e))
 
     return xmatches
 
