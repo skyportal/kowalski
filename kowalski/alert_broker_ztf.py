@@ -285,7 +285,7 @@ def alert_filter__ml(alert, ml_models: dict = None) -> dict:
                             "version"
                         ]
         except Exception as e:
-            print(time_stamp(), str(e))
+            log(str(e))
 
     return scores
 
