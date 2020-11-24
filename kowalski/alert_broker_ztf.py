@@ -591,6 +591,9 @@ def process_alert(record, topic):
         # post to SkyPortal
         alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
 
+    # clean up after thyself
+    del record, alert, prv_candidates
+
 
 class AlertConsumer:
     """
@@ -638,37 +641,6 @@ class AlertConsumer:
 
         self.consumer.subscribe([topic], on_assign=on_assign)
 
-    def poll(self):
-        """
-        Polls Kafka broker to consume a topic.
-
-        :return:
-        """
-        msg = self.consumer.poll()
-
-        if msg is None:
-            log("Caught error: msg is None")
-
-        if msg.error():
-            log(f"Caught error: {msg.error()}")
-            raise EopError(msg)
-
-        elif msg is not None:
-            try:
-                # decode avro packet
-                with timer("Decoding alert", self.verbose > 1):
-                    msg_decoded = self.decode_message(msg)
-
-                for record in msg_decoded:
-                    self.dask_client.submit(
-                        process_alert, record, self.topic, pure=False
-                    )
-
-            except Exception as e:
-                log(e)
-                _err = traceback.format_exc()
-                log(_err)
-
     @staticmethod
     def decode_message(msg):
         """Decode Avro message according to a schema.
@@ -694,6 +666,40 @@ class AlertConsumer:
             decoded_msg = message
         finally:
             return decoded_msg
+
+    def poll(self):
+        """
+        Polls Kafka broker to consume a topic.
+
+        :return:
+        """
+        msg = self.consumer.poll()
+
+        if msg is None:
+            log("Caught error: msg is None")
+
+        if msg.error():
+            log(f"Caught error: {msg.error()}")
+            raise EopError(msg)
+
+        elif msg is not None:
+            try:
+                # decode avro packet
+                with timer("Decoding alert", self.verbose > 1):
+                    msg_decoded = self.decode_message(msg)
+
+                for record in msg_decoded:
+                    future = self.dask_client.submit(
+                        process_alert, record, self.topic, pure=True
+                    )
+                    dask.distributed.fire_and_forget(future)
+                    future.release()
+                    del future
+
+            except Exception as e:
+                log(e)
+                _err = traceback.format_exc()
+                log(_err)
 
 
 class AlertWorker:
@@ -1289,8 +1295,10 @@ def topic_listener(
     else:
         conf["group.id"] = os.environ.get("HOSTNAME", "kowalski")
 
-    # fixme? make it unique:
-    # conf['group.id'] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
+    # make it unique:
+    conf[
+        "group.id"
+    ] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
 
     # Start alert stream consumer
     stream_reader = AlertConsumer(topic, dask_client, **conf)

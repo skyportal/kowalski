@@ -291,6 +291,9 @@ kowalski:
     scheduler_port: 8786
     n_workers: 4
     threads_per_worker: 1
+    lifetime: 3 hours
+    lifetime_stagger: 30 minutes
+    lifetime_restart: true
 
   misc:
     # fixme: set to False if running stand-alone
