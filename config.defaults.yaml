@@ -62,62 +62,90 @@ kowalski:
 
     indexes:
       ZTF_alerts:
-        radec_candid:
-          - ["coordinates.radec_geojson", "2dsphere"]
-          - ["candid", -1]
-        radec_objectId:
-          - ["coordinates.radec_geojson", "2dsphere"]
-          - ["objectId", -1]
-        jd_radec_candid:
-          - ["candidate.jd", 1]
-          - ["coordinates.radec_geojson", "2dsphere"]
-          - ["candid", -1]
-        jd_radec_objectId:
-          - ["candidate.jd", 1]
-          - ["coordinates.radec_geojson", "2dsphere"]
-          - ["objectId", -1]
-        objectId:
-          - ["objectId", -1]
-        candid:
-          - ["candid", -1]
-        pid:
-          - ["candidate.pid", 1]
-        objectId_pid:
-          - ["objectId", -1]
-          - ["candidate.pid", 1]
-        pdiffimfilename:
-          - ["candidate.pdiffimfilename", 1]
-        jd_programid_programpi:
-          - ["candidate.jd", 1]
-          - ["candidate.programid", 1]
-          - ["candidate.programpi", 1]
-        jd_braai_candid:
-          - ["candidate.jd", -1]
-          - ["classifications.braai", -1]
-          - ["candid", -1]
-        jd_drb_candid:
-          - ["candidate.jd", -1]
-          - ["candidate.drb", -1]
-          - ["candid", -1]
-        jd_braai_magpsf_isdiffpos_ndethist:
-          - ["candidate.jd", 1]
-          - ["classifications.braai", 1]
-          - ["candidate.magpsf", 1]
-          - ["candidate.isdiffpos", 1]
-          - ["candidate.ndethist", 1]
-        jd_field_drb_ndethhist_magpsf_isdiffpos_objectId:
-          - ["candidate.jd", 1]
-          - ["candidate.field", 1]
-          - ["candidate.rb", 1]
-          - ["candidate.drb", 1]
-          - ["candidate.ndethist", 1]
-          - ["candidate.magpsf", 1]
-          - ["candidate.isdiffpos", 1]
-          - ["objectId", -1]
+        - name: radec_candid
+          fields:
+            - [ "coordinates.radec_geojson", "2dsphere" ]
+            - [ "candid", -1 ]
+          unique: false
+        - name: radec_objectId
+          fields:
+            - [ "coordinates.radec_geojson", "2dsphere" ]
+            - [ "objectId", -1 ]
+          unique: false
+        - name: jd_radec_candid
+          fields:
+            - [ "candidate.jd", 1 ]
+            - [ "coordinates.radec_geojson", "2dsphere" ]
+            - [ "candid", -1 ]
+          unique: false
+        - name: jd_radec_objectId
+          fields:
+            - [ "candidate.jd", 1 ]
+            - [ "coordinates.radec_geojson", "2dsphere" ]
+            - [ "objectId", -1 ]
+          unique: false
+        - name: objectId
+          fields:
+            - [ "objectId", -1 ]
+          unique: false
+        - name: candid
+          fields:
+            - [ "candid", -1 ]
+          unique: true
+        - name: pid
+          fields:
+            - [ "candidate.pid", 1 ]
+          unique: false
+        - name: objectId_pid
+          fields:
+            - [ "objectId", -1 ]
+            - [ "candidate.pid", 1 ]
+          unique: false
+        - name: pdiffimfilename
+          fields:
+            - [ "candidate.pdiffimfilename", 1 ]
+          unique: false
+        - name: jd_programid_programpi
+          fields:
+            - [ "candidate.jd", 1 ]
+            - [ "candidate.programid", 1 ]
+            - [ "candidate.programpi", 1 ]
+          unique: false
+        - name: jd_braai_candid
+          fields:
+            - [ "candidate.jd", -1 ]
+            - [ "classifications.braai", -1 ]
+            - [ "candid", -1 ]
+          unique: false
+        - name: jd_drb_candid
+          fields:
+            - [ "candidate.jd", -1 ]
+            - [ "candidate.drb", -1 ]
+            - [ "candid", -1 ]
+          unique: false
+        - name: jd_braai_magpsf_isdiffpos_ndethist
+          fields:
+            - [ "candidate.jd", 1 ]
+            - [ "classifications.braai", 1 ]
+            - [ "candidate.magpsf", 1 ]
+            - [ "candidate.isdiffpos", 1 ]
+            - [ "candidate.ndethist", 1 ]
+          unique: false
+        - name: jd_field_drb_ndethhist_magpsf_isdiffpos_objectId
+          fields:
+            - [ "candidate.jd", 1 ]
+            - [ "candidate.field", 1 ]
+            - [ "candidate.rb", 1 ]
+            - [ "candidate.drb", 1 ]
+            - [ "candidate.ndethist", 1 ]
+            - [ "candidate.magpsf", 1 ]
+            - [ "candidate.isdiffpos", 1 ]
+            - [ "objectId", -1 ]
+          unique: false
 
     filters:
       ZTF_alerts:
-        # fixme: default upstream aggregation pipeline stages for filtering ZTF alerts:
+        # default upstream aggregation pipeline stages for filtering ZTF alerts:
         - {"$match": {"candid": null, "candidate.programid": {"$in": null}}}
         - {"$project": {"cutoutScience": 0, "cutoutTemplate": 0, "cutoutDifference": 0}}
         - {"$lookup": {"from": "ZTF_alerts_aux", "localField": "objectId", "foreignField": "_id", "as": "aux"}}
