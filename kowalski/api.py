@@ -3106,9 +3106,11 @@ async def ztf_alert_get_cutout(request):
             ax.set_axis_off()
             fig.add_axes(ax)
 
-            # remove nans:
+            # replace nans with median:
             img = np.array(data_flipped_y)
-            img = np.nan_to_num(img)
+            if np.isnan(img).any():
+                median = float(np.nanmean(img.flatten()))
+                img = np.nan_to_num(img, nan=median)
 
             norm = ImageNormalize(img, stretch=stretcher)
             img_norm = norm(img)
@@ -3295,9 +3297,11 @@ async def zuds_alert_get_cutout(request):
             ax.set_axis_off()
             fig.add_axes(ax)
 
-            # remove nans:
+            # replace nans with median:
             img = np.array(data_flipped_y)
-            img = np.nan_to_num(img)
+            if np.isnan(img).any():
+                median = float(np.nanmean(img.flatten()))
+                img = np.nan_to_num(img, nan=median)
 
             if scaling == "log":
                 img[img <= 0] = np.median(img)
