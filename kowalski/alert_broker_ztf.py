@@ -29,7 +29,6 @@ import sys
 from tensorflow.keras.models import load_model
 import time
 import traceback
-import threading
 
 from utils import (
     deg2dms,
@@ -594,8 +593,6 @@ def process_alert(record, topic):
 
     # clean up after thyself
     del record, alert, prv_candidates
-    # keys = list(worker.data.keys())
-    # worker.delete_data(keys=keys)
 
 
 class AlertConsumer:
@@ -643,12 +640,6 @@ class AlertConsumer:
                 log(consumer.get_watermark_offsets(part))
 
         self.consumer.subscribe([topic], on_assign=on_assign)
-
-        # start dask processing result harvester in a separate thread
-        # self.futures = queue.Queue()
-        self.futures = []
-        self.harvester = threading.Thread(target=self.harvest)
-        self.harvester.start()
 
     @staticmethod
     def decode_message(msg):
@@ -698,46 +689,17 @@ class AlertConsumer:
                     msg_decoded = self.decode_message(msg)
 
                 for record in msg_decoded:
-                    f = self.dask_client.submit(
+                    future = self.dask_client.submit(
                         process_alert, deepcopy(record), self.topic, pure=True
                     )
-                    dask.distributed.fire_and_forget(f)
-                    # self.futures.append(
-                    #     self.dask_client.submit(
-                    #         process_alert, deepcopy(record), self.topic, pure=True
-                    #     )
-                    # )
+                    dask.distributed.fire_and_forget(future)
+                    future.release()
+                    del future
 
             except Exception as e:
                 log(e)
                 _err = traceback.format_exc()
                 log(_err)
-
-    def harvest(self):
-        """Harvest dask processing results and release resources
-
-        :return:
-        """
-        while True:
-            to_be_removed = []
-            for fi, future in enumerate(self.futures):
-                try:
-                    if future.status == "finished":
-                        result = future.result()
-                        # todo: store status in db
-                        result
-                        del result
-                        future.release()
-                        to_be_removed.append(fi)
-
-                except Exception as e:
-                    log(e)
-                    _err = traceback.format_exc()
-                    log(_err)
-            for fi in sorted(to_be_removed)[::-1]:
-                del self.futures[fi]
-            # no need to check too often
-            time.sleep(5)
 
 
 class AlertWorker:
