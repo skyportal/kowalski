@@ -267,6 +267,14 @@ kowalski:
   ml_models:
     braai:
       version:  "d6_m9"
+    acai_h:
+      version: "d1_dnn_20201107"
+    acai_v:
+      version: "d1_dnn_20201109"
+    acai_o:
+      version: "d1_dnn_20201110"
+    acai_n:
+      version: "d1_dnn_20201110"
 
   skyportal:
     protocol: "http"

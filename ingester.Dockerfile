@@ -20,8 +20,13 @@ RUN apt-get update && apt-get install -y default-jdk && \
 # Kafka test-server properties:
 COPY kowalski/server.properties /kafka_$kafka_version/config/
 
-# ML models:
-ADD https://github.com/dmitryduev/braai/raw/master/models/braai_d6_m9.h5 /app/models/
+# ML models <model_name>.<tag>.<extensions>:
+ADD https://github.com/dmitryduev/braai/raw/master/models/braai_d6_m9.h5 /app/models/braai.d6_m9.h5
+ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_h.d1_dnn_20201107.h5 /app/models/
+ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_v.d1_dnn_20201109.h5 /app/models/
+ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_o.d1_dnn_20201110.h5 /app/models/
+ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_n.d1_dnn_20201110.h5 /app/models/
+ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_b.d1_dnn_20201110.h5 /app/models/
 
 # copy over the test alerts
 COPY data/ztf_alerts/ /app/data/ztf_alerts/

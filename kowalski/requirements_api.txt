@@ -10,6 +10,7 @@ motor>=2.2.0
 multidict>=4.7.6
 numba>=0.51.1
 numpy>=1.19.1
+pandas>=1.1.1
 pyjwt>=1.7.1
 pymongo>=3.11.0
 pytest>=6.0.1
