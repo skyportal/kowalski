@@ -424,10 +424,7 @@ def alert_filter__xmatch_clu(
 
             in_galaxy = in_ellipse(ra, dec, alpha1, delta01, cm_radius, 1, 0)
 
-            # Now only select sources within 150 Mpc
-            in_volume = redshift < 0.036
-
-            if in_galaxy and in_volume:
+            if in_galaxy:
                 match = galaxy
                 distance_arcsec = round(
                     great_circle_distance(ra, dec, alpha1, delta01) * 3600, 2
