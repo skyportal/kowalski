@@ -185,6 +185,7 @@ def develop(arguments=None):
     """
     Install developer tools.
     """
+    subprocess.run(["pip", "install", "-U", "pre-commit"])
     subprocess.run(["pre-commit", "install"])
 
 
