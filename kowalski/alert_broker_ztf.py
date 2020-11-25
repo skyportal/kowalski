@@ -178,9 +178,11 @@ def make_thumbnail(alert, ttype: str, ztftype: str):
     ax.set_axis_off()
     fig.add_axes(ax)
 
-    # remove nans:
+    # replace nans with median:
     img = np.array(data_flipped_y)
-    img = np.nan_to_num(img)
+    if np.isnan(img).any():
+        median = float(np.nanmean(img.flatten()))
+        img = np.nan_to_num(img, nan=median)
 
     norm = ImageNormalize(
         img, stretch=LinearStretch() if ztftype == "Difference" else LogStretch()
@@ -753,13 +755,16 @@ class AlertWorker:
         # create indexes
         if self.config["database"]["build_indexes"]:
             for index in self.config["database"]["indexes"][self.collection_alerts]:
-                ind = [tuple(ii) for ii in index["fields"]]
-                self.mongo.db[self.collection_alerts].create_index(
-                    keys=ind,
-                    name=index["name"],
-                    background=True,
-                    unique=index["unique"],
-                )
+                try:
+                    ind = [tuple(ii) for ii in index["fields"]]
+                    self.mongo.db[self.collection_alerts].create_index(
+                        keys=ind,
+                        name=index["name"],
+                        background=True,
+                        unique=index["unique"],
+                    )
+                except Exception as e:
+                    log(e)
 
         # fixme: ML models:
         self.ml_models = dict()
