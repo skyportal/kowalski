@@ -662,6 +662,32 @@ class AlertConsumer:
 
         self.consumer.subscribe([topic], on_assign=on_assign)
 
+        # set up own mongo client
+        self.collection_alerts = config["database"]["collections"]["alerts_ztf"]
+
+        self.mongo = Mongo(
+            host=config["database"]["host"],
+            port=config["database"]["port"],
+            username=config["database"]["username"],
+            password=config["database"]["password"],
+            db=config["database"]["db"],
+            verbose=self.verbose,
+        )
+
+        # create indexes
+        if config["database"]["build_indexes"]:
+            for index in config["database"]["indexes"][self.collection_alerts]:
+                try:
+                    ind = [tuple(ii) for ii in index["fields"]]
+                    self.mongo.db[self.collection_alerts].create_index(
+                        keys=ind,
+                        name=index["name"],
+                        background=True,
+                        unique=index["unique"],
+                    )
+                except Exception as e:
+                    log(e)
+
     @staticmethod
     def decode_message(msg):
         """Decode Avro message according to a schema.
@@ -710,12 +736,23 @@ class AlertConsumer:
                     msg_decoded = self.decode_message(msg)
 
                 for record in msg_decoded:
-                    future = self.dask_client.submit(
-                        process_alert, record, self.topic, pure=True
-                    )
-                    dask.distributed.fire_and_forget(future)
-                    future.release()
-                    del future
+                    # submit only unprocessed alerts:
+                    if (
+                        self.mongo.db[self.collection_alerts].count_documents(
+                            {"candid": record["candid"]}, limit=1
+                        )
+                        == 0
+                    ):
+                        with timer(
+                            f"Submitted alert {record['objectId']} {record['candid']} for processing",
+                            self.verbose > 1,
+                        ):
+                            future = self.dask_client.submit(
+                                process_alert, record, self.topic, pure=True
+                            )
+                            dask.distributed.fire_and_forget(future)
+                            future.release()
+                            del future
 
             except Exception as e:
                 log(e)
@@ -748,20 +785,6 @@ class AlertWorker:
             db=config["database"]["db"],
             verbose=self.verbose,
         )
-
-        # create indexes
-        if self.config["database"]["build_indexes"]:
-            for index in self.config["database"]["indexes"][self.collection_alerts]:
-                try:
-                    ind = [tuple(ii) for ii in index["fields"]]
-                    self.mongo.db[self.collection_alerts].create_index(
-                        keys=ind,
-                        name=index["name"],
-                        background=True,
-                        unique=index["unique"],
-                    )
-                except Exception as e:
-                    log(e)
 
         # fixme: ML models:
         self.ml_models = dict()
