@@ -744,7 +744,7 @@ class AlertConsumer:
                         == 0
                     ):
                         with timer(
-                            f"Submitted alert {record['objectId']} {record['candid']} for processing",
+                            f"Submitting alert {record['objectId']} {record['candid']} for processing",
                             self.verbose > 1,
                         ):
                             future = self.dask_client.submit(
