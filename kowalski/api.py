@@ -3108,6 +3108,10 @@ async def ztf_alert_get_cutout(request):
 
             # replace nans with median:
             img = np.array(data_flipped_y)
+            # replace dubiously large values
+            xl = np.greater(np.abs(img), 1e20, where=~np.isnan(img))
+            if img[xl].any():
+                img[xl] = np.nan
             if np.isnan(img).any():
                 median = float(np.nanmean(img.flatten()))
                 img = np.nan_to_num(img, nan=median)
@@ -3299,6 +3303,10 @@ async def zuds_alert_get_cutout(request):
 
             # replace nans with median:
             img = np.array(data_flipped_y)
+            # replace dubiously large values
+            xl = np.greater(np.abs(img), 1e20, where=~np.isnan(img))
+            if img[xl].any():
+                img[xl] = np.nan
             if np.isnan(img).any():
                 median = float(np.nanmean(img.flatten()))
                 img = np.nan_to_num(img, nan=median)
