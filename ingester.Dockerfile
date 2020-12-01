@@ -1,7 +1,12 @@
 FROM python:3.7
-#FROM python:3.7-slim
 
 ARG kafka_version=2.13-2.5.0
+ARG braai_version=d6_m9
+ARG acai_h_version=d1_dnn_20201130
+ARG acai_v_version=d1_dnn_20201130
+ARG acai_o_version=d1_dnn_20201130
+ARG acai_n_version=d1_dnn_20201130
+ARG acai_b_version=d1_dnn_20201130
 
 # Install vim, git, cron, and jdk
 #RUN apt-get update && apt-get -y install apt-file && apt-file update && apt-get -y install vim && \
@@ -21,12 +26,12 @@ RUN apt-get update && apt-get install -y default-jdk && \
 COPY kowalski/server.properties /kafka_$kafka_version/config/
 
 # ML models <model_name>.<tag>.<extensions>:
-ADD https://github.com/dmitryduev/braai/raw/master/models/braai_d6_m9.h5 /app/models/braai.d6_m9.h5
-ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_h.d1_dnn_20201107.h5 /app/models/
-ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_v.d1_dnn_20201109.h5 /app/models/
-ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_o.d1_dnn_20201110.h5 /app/models/
-ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_n.d1_dnn_20201110.h5 /app/models/
-ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_b.d1_dnn_20201110.h5 /app/models/
+ADD https://github.com/dmitryduev/braai/raw/master/models/braai_$braai_version.h5 /app/models/braai.$braai_version.h5
+ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_h.$acai_h_version.h5 /app/models/
+ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_v.$acai_v_version.h5 /app/models/
+ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_o.$acai_o_version.h5 /app/models/
+ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_n.$acai_n_version.h5 /app/models/
+ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_b.$acai_b_version.h5 /app/models/
 
 # copy over the test alerts
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
