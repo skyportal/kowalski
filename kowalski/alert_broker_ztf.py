@@ -72,17 +72,11 @@ class TimeoutHTTPAdapter(HTTPAdapter):
 
 
 def read_schema_data(bytes_io):
-    """Read data that already has an Avro schema.
+    """
+    Read data that already has an Avro schema.
 
-    Parameters
-    ----------
-    bytes_io : `_io.BytesIO`
-        Data to be decoded.
-
-    Returns
-    -------
-    `dict`
-        Decoded data.
+    :param bytes_io: `_io.BytesIO` Data to be decoded.
+    :return: `dict` Decoded data.
     """
     bytes_io.seek(0)
     message = fastavro.reader(bytes_io)
@@ -91,15 +85,13 @@ def read_schema_data(bytes_io):
 
 class EopError(Exception):
     """
-        Exception raised when reaching end of partition.
-
-    Parameters
-    ----------
-    msg : Kafka message
-        The Kafka message result from consumer.poll().
+    Exception raised when reaching end of partition.
     """
 
     def __init__(self, msg):
+        """
+        :param msg: The Kafka message result from consumer.poll()
+        """
         message = (
             f"{time_stamp()}: topic:{msg.topic()}, partition:{msg.partition()}, "
             f"status:end, offset:{msg.offset()}, key:{str(msg.key())}\n"
@@ -790,7 +782,7 @@ class AlertWorker:
             verbose=self.verbose,
         )
 
-        # fixme: ML models:
+        # ML models
         self.ml_models = dict()
         for model in config["ml_models"]:
             try:
@@ -810,143 +802,143 @@ class AlertWorker:
                 continue
 
         # talking to SkyPortal?
-        if config["misc"]["broker"]:
-            # session to talk to SkyPortal
-            self.session = requests.Session()
-            self.session_headers = {
-                "Authorization": f"token {config['skyportal']['token']}"
+        if not config["misc"]["broker"]:
+            return
+
+        # session to talk to SkyPortal
+        self.session = requests.Session()
+        self.session_headers = {
+            "Authorization": f"token {config['skyportal']['token']}"
+        }
+
+        retries = Retry(
+            total=5,
+            backoff_factor=2,
+            status_forcelist=[405, 429, 500, 502, 503, 504],
+            method_whitelist=["HEAD", "GET", "PUT", "POST", "PATCH"],
+        )
+        adapter = TimeoutHTTPAdapter(timeout=5, max_retries=retries)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
+
+        # get ZTF instrument id
+        self.instrument_id = 1
+        try:
+            with timer("Getting ZTF instrument_id from SkyPortal", self.verbose > 1):
+                response = self.api_skyportal("GET", "/api/instrument", {"name": "ZTF"})
+            if (
+                response.json()["status"] == "success"
+                and len(response.json()["data"]) > 0
+            ):
+                self.instrument_id = response.json()["data"][0]["id"]
+                log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
+            else:
+                log("Failed to get ZTF instrument_id from SkyPortal")
+                raise ValueError("Failed to get ZTF instrument_id from SkyPortal")
+        except Exception as e:
+            log(e)
+            # config['misc']['broker'] = False
+
+        # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
+        # including archival photometry and cross-matches:
+        self.filter_pipeline_upstream = config["database"]["filters"][
+            self.collection_alerts
+        ]
+        log("Upstream filtering pipeline:")
+        log(self.filter_pipeline_upstream)
+
+        # todo: fetch user-defined filters, set up watchdog for near-live updates
+
+        # load *active* user-defined alert filter templates
+        active_filters = list(
+            self.mongo.db[config["database"]["collections"]["filters"]].aggregate(
+                [
+                    {"$match": {"catalog": "ZTF_alerts", "active": True}},
+                    {
+                        "$project": {
+                            "group_id": 1,
+                            "filter_id": 1,
+                            "permissions": 1,
+                            "fv": {
+                                "$arrayElemAt": [
+                                    {
+                                        "$filter": {
+                                            "input": "$fv",
+                                            "as": "fvv",
+                                            "cond": {
+                                                "$eq": ["$$fvv.fid", "$active_fid"]
+                                            },
+                                        }
+                                    },
+                                    0,
+                                ]
+                            },
+                        }
+                    },
+                ]
+            )
+        )
+
+        # todo: query SP to make sure the filters still exist there and we're not out of sync;
+        #       clean up if necessary
+
+        self.filter_templates = []
+        for active_filter in active_filters:
+            # collect additional info from SkyPortal
+            with timer(
+                f"Getting info on group id={active_filter['group_id']} from SkyPortal",
+                self.verbose > 1,
+            ):
+                response = self.api_skyportal(
+                    "GET", f"/api/groups/{active_filter['group_id']}"
+                )
+            if self.verbose > 1:
+                log(response.json())
+            if response.json()["status"] == "success":
+                group_name = (
+                    response.json()["data"]["nickname"]
+                    if response.json()["data"]["nickname"] is not None
+                    else response.json()["data"]["name"]
+                )
+                filter_name = [
+                    f["name"]
+                    for f in response.json()["data"]["filters"]
+                    if f["id"] == active_filter["filter_id"]
+                ][0]
+            else:
+                log(
+                    f"Failed to get info on group id={active_filter['group_id']} from SkyPortal"
+                )
+                group_name, filter_name = None, None
+                # raise ValueError(f"Failed to get info on group id={active_filter['group_id']} from SkyPortal")
+            log(f"Group name: {group_name}, filter name: {filter_name}")
+
+            # prepend upstream aggregation stages:
+            pipeline = deepcopy(self.filter_pipeline_upstream) + loads(
+                active_filter["fv"]["pipeline"]
+            )
+            # match permissions
+            pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter[
+                "permissions"
+            ]
+            pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0][
+                "$in"
+            ][1] = active_filter["permissions"]
+
+            filter_template = {
+                "group_id": active_filter["group_id"],
+                "filter_id": active_filter["filter_id"],
+                "group_name": group_name,
+                "filter_name": filter_name,
+                "fid": active_filter["fv"]["fid"],
+                "permissions": active_filter["permissions"],
+                "pipeline": deepcopy(pipeline),
             }
 
-            retries = Retry(
-                total=5,
-                backoff_factor=2,
-                status_forcelist=[405, 429, 500, 502, 503, 504],
-                method_whitelist=["HEAD", "GET", "PUT", "POST", "PATCH"],
-            )
-            adapter = TimeoutHTTPAdapter(timeout=5, max_retries=retries)
-            self.session.mount("https://", adapter)
-            self.session.mount("http://", adapter)
+            self.filter_templates.append(filter_template)
 
-            # get ZTF instrument id
-            self.instrument_id = 1
-            try:
-                with timer(
-                    "Getting ZTF instrument_id from SkyPortal", self.verbose > 1
-                ):
-                    response = self.api_skyportal(
-                        "GET", "/api/instrument", {"name": "ZTF"}
-                    )
-                if (
-                    response.json()["status"] == "success"
-                    and len(response.json()["data"]) > 0
-                ):
-                    self.instrument_id = response.json()["data"][0]["id"]
-                    log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
-                else:
-                    log("Failed to get ZTF instrument_id from SkyPortal")
-                    raise ValueError("Failed to get ZTF instrument_id from SkyPortal")
-            except Exception as e:
-                log(e)
-                # config['misc']['broker'] = False
-
-            # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
-            # including archival photometry and cross-matches:
-            self.filter_pipeline_upstream = config["database"]["filters"][
-                self.collection_alerts
-            ]
-            log("Upstream filtering pipeline:")
-            log(self.filter_pipeline_upstream)
-
-            # load *active* user-defined alert filter templates
-            active_filters = list(
-                self.mongo.db[config["database"]["collections"]["filters"]].aggregate(
-                    [
-                        {"$match": {"catalog": "ZTF_alerts", "active": True}},
-                        {
-                            "$project": {
-                                "group_id": 1,
-                                "filter_id": 1,
-                                "permissions": 1,
-                                "fv": {
-                                    "$arrayElemAt": [
-                                        {
-                                            "$filter": {
-                                                "input": "$fv",
-                                                "as": "fvv",
-                                                "cond": {
-                                                    "$eq": ["$$fvv.fid", "$active_fid"]
-                                                },
-                                            }
-                                        },
-                                        0,
-                                    ]
-                                },
-                            }
-                        },
-                    ]
-                )
-            )
-
-            # todo: query SP to make sure the filters still exist there and we're not out of sync;
-            #       clean up if necessary
-
-            self.filter_templates = []
-            for active_filter in active_filters:
-                # collect additional info from SkyPortal
-                with timer(
-                    f"Getting info on group id={active_filter['group_id']} from SkyPortal",
-                    self.verbose > 1,
-                ):
-                    response = self.api_skyportal(
-                        "GET", f"/api/groups/{active_filter['group_id']}"
-                    )
-                if self.verbose > 1:
-                    log(response.json())
-                if response.json()["status"] == "success":
-                    group_name = (
-                        response.json()["data"]["nickname"]
-                        if response.json()["data"]["nickname"] is not None
-                        else response.json()["data"]["name"]
-                    )
-                    filter_name = [
-                        f["name"]
-                        for f in response.json()["data"]["filters"]
-                        if f["id"] == active_filter["filter_id"]
-                    ][0]
-                else:
-                    log(
-                        f"Failed to get info on group id={active_filter['group_id']} from SkyPortal"
-                    )
-                    group_name, filter_name = None, None
-                    # raise ValueError(f"Failed to get info on group id={active_filter['group_id']} from SkyPortal")
-                log(f"Group name: {group_name}, filter name: {filter_name}")
-
-                # prepend upstream aggregation stages:
-                pipeline = deepcopy(self.filter_pipeline_upstream) + loads(
-                    active_filter["fv"]["pipeline"]
-                )
-                # match permissions
-                pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter[
-                    "permissions"
-                ]
-                pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0][
-                    "$in"
-                ][1] = active_filter["permissions"]
-
-                filter_template = {
-                    "group_id": active_filter["group_id"],
-                    "filter_id": active_filter["filter_id"],
-                    "group_name": group_name,
-                    "filter_name": filter_name,
-                    "fid": active_filter["fv"]["fid"],
-                    "permissions": active_filter["permissions"],
-                    "pipeline": deepcopy(pipeline),
-                }
-
-                self.filter_templates.append(filter_template)
-
-            log("Science filters:")
-            log(self.filter_templates)
+        log("Science filters:")
+        log(self.filter_templates)
 
     def api_skyportal(self, method: str, endpoint: str, data=None):
         """Make an API call to a SkyPortal instance
