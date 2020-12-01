@@ -296,13 +296,15 @@ kowalski:
     braai:
       version:  "d6_m9"
     acai_h:
-      version: "d1_dnn_20201107"
+      version: "d1_dnn_20201130"
     acai_v:
-      version: "d1_dnn_20201109"
+      version: "d1_dnn_20201130"
     acai_o:
-      version: "d1_dnn_20201110"
+      version: "d1_dnn_20201130"
     acai_n:
-      version: "d1_dnn_20201110"
+      version: "d1_dnn_20201130"
+    acai_b:
+      version: "d1_dnn_20201130"
 
   skyportal:
     protocol: "http"
