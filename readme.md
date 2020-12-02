@@ -1,8 +1,9 @@
-# Kowalski
+# Kowalski: enhancing time-domain astronomy
 
-Enhancing time-domain astronomy with the [Zwicky Transient Facility](https://ztf.caltech.edu).
+Kowalski is an API-driven multi-survey data archive and alert broker.
+Its main focus is the [Zwicky Transient Facility](https://ztf.caltech.edu).
 
-## Ineract with a `Kowalski` instance
+## Interact with a `Kowalski` instance
 
 `Kowalski` is an API-first system. The full OpenAPI specs can be found [here](https://kowalski.caltech.edu/docs/api/). Most users will only need the [queries section](https://kowalski.caltech.edu/docs/api/#tag/queries) of the specs.
 
