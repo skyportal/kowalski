@@ -1008,9 +1008,6 @@ class AlertWorker:
             active_filters = self.get_active_filters()
             self.filter_templates = self.make_filter_templates(active_filters)
 
-            # log("Re-loaded user-defined filters:")
-            # log(self.filter_templates)
-
     @staticmethod
     def alert_mongify(alert):
 
