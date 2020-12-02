@@ -28,6 +28,7 @@ import subprocess
 import sys
 import tensorflow as tf
 from tensorflow.keras.models import load_model
+import threading
 import time
 import traceback
 
@@ -847,97 +848,15 @@ class AlertWorker:
         log("Upstream filtering pipeline:")
         log(self.filter_pipeline_upstream)
 
-        # todo: fetch user-defined filters, set up watchdog for near-live updates
+        # load *active* user-defined alert filter templates and pre-populate them
+        active_filters = self.get_active_filters()
+        self.filter_templates = self.make_filter_templates(active_filters)
 
-        # load *active* user-defined alert filter templates
-        active_filters = list(
-            self.mongo.db[config["database"]["collections"]["filters"]].aggregate(
-                [
-                    {"$match": {"catalog": "ZTF_alerts", "active": True}},
-                    {
-                        "$project": {
-                            "group_id": 1,
-                            "filter_id": 1,
-                            "permissions": 1,
-                            "fv": {
-                                "$arrayElemAt": [
-                                    {
-                                        "$filter": {
-                                            "input": "$fv",
-                                            "as": "fvv",
-                                            "cond": {
-                                                "$eq": ["$$fvv.fid", "$active_fid"]
-                                            },
-                                        }
-                                    },
-                                    0,
-                                ]
-                            },
-                        }
-                    },
-                ]
-            )
-        )
+        # set up watchdog for periodic refresh of the filter templates, in case those change
+        self.filter_monitor = threading.Thread(target=self.reload_filters)
+        self.filter_monitor.start()
 
-        # todo: query SP to make sure the filters still exist there and we're not out of sync;
-        #       clean up if necessary
-
-        self.filter_templates = []
-        for active_filter in active_filters:
-            # collect additional info from SkyPortal
-            with timer(
-                f"Getting info on group id={active_filter['group_id']} from SkyPortal",
-                self.verbose > 1,
-            ):
-                response = self.api_skyportal(
-                    "GET", f"/api/groups/{active_filter['group_id']}"
-                )
-            if self.verbose > 1:
-                log(response.json())
-            if response.json()["status"] == "success":
-                group_name = (
-                    response.json()["data"]["nickname"]
-                    if response.json()["data"]["nickname"] is not None
-                    else response.json()["data"]["name"]
-                )
-                filter_name = [
-                    f["name"]
-                    for f in response.json()["data"]["filters"]
-                    if f["id"] == active_filter["filter_id"]
-                ][0]
-            else:
-                log(
-                    f"Failed to get info on group id={active_filter['group_id']} from SkyPortal"
-                )
-                group_name, filter_name = None, None
-                # raise ValueError(f"Failed to get info on group id={active_filter['group_id']} from SkyPortal")
-            log(f"Group name: {group_name}, filter name: {filter_name}")
-
-            # prepend upstream aggregation stages:
-            pipeline = deepcopy(self.filter_pipeline_upstream) + loads(
-                active_filter["fv"]["pipeline"]
-            )
-            # match permissions
-            pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter[
-                "permissions"
-            ]
-            pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0][
-                "$in"
-            ][1] = active_filter["permissions"]
-
-            filter_template = {
-                "group_id": active_filter["group_id"],
-                "filter_id": active_filter["filter_id"],
-                "group_name": group_name,
-                "filter_name": filter_name,
-                "fid": active_filter["fv"]["fid"],
-                "permissions": active_filter["permissions"],
-                "pipeline": deepcopy(pipeline),
-            }
-
-            self.filter_templates.append(filter_template)
-
-        log("Science filters:")
+        log("Loaded user-defined filters:")
         log(self.filter_templates)
 
     def api_skyportal(self, method: str, endpoint: str, data=None):
@@ -972,7 +891,7 @@ class AlertWorker:
                 headers=self.session_headers,
             )
         else:
-            response = methods[method.lower()](
+            response = methods[method](
                 f"{config['skyportal']['protocol']}://"
                 f"{config['skyportal']['host']}:{config['skyportal']['port']}"
                 f"{endpoint}",
@@ -981,6 +900,113 @@ class AlertWorker:
             )
 
         return response
+
+    def get_active_filters(self):
+        # todo: query SP to make sure the filters still exist there and we're not out of sync;
+        #       clean up if necessary
+        return list(
+            self.mongo.db[config["database"]["collections"]["filters"]].aggregate(
+                [
+                    {
+                        "$match": {
+                            "catalog": config["database"]["collections"]["alerts_ztf"],
+                            "active": True,
+                        }
+                    },
+                    {
+                        "$project": {
+                            "group_id": 1,
+                            "filter_id": 1,
+                            "permissions": 1,
+                            "fv": {
+                                "$arrayElemAt": [
+                                    {
+                                        "$filter": {
+                                            "input": "$fv",
+                                            "as": "fvv",
+                                            "cond": {
+                                                "$eq": ["$$fvv.fid", "$active_fid"]
+                                            },
+                                        }
+                                    },
+                                    0,
+                                ]
+                            },
+                        }
+                    },
+                ]
+            )
+        )
+
+    def make_filter_templates(self, active_filters):
+        """
+        Make filter templates by adding metadata, prepending upstream aggregation stages and setting permissions
+
+        :param active_filters:
+        :return:
+        """
+        filter_templates = []
+        for active_filter in active_filters:
+            # collect additional info from SkyPortal
+            with timer(
+                f"Getting info on group id={active_filter['group_id']} from SkyPortal",
+                self.verbose > 1,
+            ):
+                response = self.api_skyportal(
+                    "GET", f"/api/groups/{active_filter['group_id']}"
+                )
+            if self.verbose > 1:
+                log(response.json())
+            if response.json()["status"] == "success":
+                group_name = (
+                    response.json()["data"]["nickname"]
+                    if response.json()["data"]["nickname"] is not None
+                    else response.json()["data"]["name"]
+                )
+                filter_name = [
+                    filtr["name"]
+                    for filtr in response.json()["data"]["filters"]
+                    if filtr["id"] == active_filter["filter_id"]
+                ][0]
+            else:
+                log(
+                    f"Failed to get info on group id={active_filter['group_id']} from SkyPortal"
+                )
+                group_name, filter_name = None, None
+                # raise ValueError(f"Failed to get info on group id={active_filter['group_id']} from SkyPortal")
+            log(f"Group name: {group_name}, filter name: {filter_name}")
+
+            # prepend upstream aggregation stages:
+            pipeline = deepcopy(self.filter_pipeline_upstream) + loads(
+                active_filter["fv"]["pipeline"]
+            )
+            # set permissions
+            pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter[
+                "permissions"
+            ]
+            pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0][
+                "$in"
+            ][1] = active_filter["permissions"]
+
+            filter_template = {
+                "group_id": active_filter["group_id"],
+                "filter_id": active_filter["filter_id"],
+                "group_name": group_name,
+                "filter_name": filter_name,
+                "fid": active_filter["fv"]["fid"],
+                "permissions": active_filter["permissions"],
+                "pipeline": deepcopy(pipeline),
+            }
+
+            filter_templates.append(filter_template)
+        return filter_templates
+
+    def reload_filters(self):
+        while True:
+            time.sleep(60 * 5)
+
+            active_filters = self.get_active_filters()
+            self.filter_templates = self.make_filter_templates(active_filters)
 
     @staticmethod
     def alert_mongify(alert):
