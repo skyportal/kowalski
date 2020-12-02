@@ -892,7 +892,7 @@ class AlertWorker:
                 headers=self.session_headers,
             )
         else:
-            response = methods[method.lower()](
+            response = methods[method](
                 f"{config['skyportal']['protocol']}://"
                 f"{config['skyportal']['host']}:{config['skyportal']['port']}"
                 f"{endpoint}",
