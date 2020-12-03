@@ -104,6 +104,7 @@ def get_ops():
     df = pd.read_fwf(
         os.path.join(config["path"]["tmp"], "allexp.tbl"),
         comment="|",
+        widths=[22, 4, 6, 4, 5, 8, 4, 9, 9, 7, 8, 29, 11, 25],
         header=None,
         names=[
             "utc_start",
