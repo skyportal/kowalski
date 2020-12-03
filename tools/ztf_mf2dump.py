@@ -13,7 +13,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--bs", type=int, default=2048, help="batch size for ingestion")
     parser.add_argument(
-        "--tag", type=str, default="20200401", help="mf release time tag"
+        "--tag", type=str, default="20201201", help="mf release time tag"
     )
     parser.add_argument(
         "--path",
