@@ -26,7 +26,8 @@ config = load_config(config_file="config.yaml")["kowalski"]
 def process_file(args):
     file, collection, batch_size, rm, verbose = args
     # connect to MongoDB:
-    log("Connecting to DB")
+    if verbose:
+        log("Connecting to DB")
     mongo = Mongo(
         host=config["database"]["host"],
         port=config["database"]["port"],
@@ -35,7 +36,8 @@ def process_file(args):
         db=config["database"]["db"],
         verbose=0,
     )
-    log("Successfully connected")
+    if verbose:
+        log("Successfully connected")
 
     collection = "Gaia_EDR3"
 
