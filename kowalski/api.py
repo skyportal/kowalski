@@ -805,9 +805,7 @@ def parse_query(task, save: bool = False):
                 else:
                     radec = f"[({ra}, {dec})]"
 
-            # log(task['object_coordinates']['radec'])
             objects = literal_eval(radec)
-            # print(type(objects), isinstance(objects, dict), isinstance(objects, list))
         elif (
             isinstance(task["query"]["object_coordinates"]["radec"], list)
             or isinstance(task["query"]["object_coordinates"]["radec"], tuple)
@@ -829,8 +827,6 @@ def parse_query(task, save: bool = False):
             object_names = [on.replace(".", "_") for on in object_names]
         else:
             raise ValueError("Unsupported object coordinates specs")
-
-        # print(object_names, object_coordinates)
 
         for catalog in task["query"]["catalogs"]:
             task_reduced["query"][catalog] = dict()
@@ -1005,8 +1001,6 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
 
         # convenience general search subtypes:
         elif _query["query_type"] == "find":
-            # print(query)
-
             known_kwargs = ("skip", "hint", "limit", "sort")
             kwargs = {
                 kk: vv for kk, vv in _query["kwargs"].items() if kk in known_kwargs
@@ -1042,8 +1036,6 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
                 query_result = await _select.to_list(length=None)
 
         elif _query["query_type"] == "find_one":
-            # print(query)
-
             known_kwargs = ("skip", "hint", "limit", "sort")
             kwargs = {
                 kk: vv for kk, vv in _query["kwargs"].items() if kk in known_kwargs
@@ -1057,7 +1049,6 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
             query_result = await _select
 
         elif _query["query_type"] == "count_documents":
-
             known_kwargs = ("skip", "hint", "limit")
             kwargs = {
                 kk: vv for kk, vv in _query["kwargs"].items() if kk in known_kwargs
@@ -1071,7 +1062,6 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
             query_result = await _select
 
         elif _query["query_type"] == "estimated_document_count":
-
             known_kwargs = ("maxTimeMS",)
             kwargs = {
                 kk: vv for kk, vv in _query["kwargs"].items() if kk in known_kwargs
@@ -1085,7 +1075,6 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
             query_result = await _select
 
         elif _query["query_type"] == "aggregate":
-
             known_kwargs = ("allowDiskUse", "maxTimeMS", "batchSize")
             kwargs = {
                 kk: vv for kk, vv in _query["kwargs"].items() if kk in known_kwargs
@@ -1100,7 +1089,6 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
 
         elif _query["query_type"] == "info":
             # collection/catalog info
-
             if _query["query"]["command"] == "catalog_names":
 
                 # get available catalog names
@@ -1117,7 +1105,6 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
                 ]
 
             elif _query["query"]["command"] == "catalog_info":
-
                 catalog = _query["query"]["catalog"]
 
                 stats = await db.command("collstats", catalog)
@@ -1125,7 +1112,6 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
                 query_result = stats
 
             elif _query["query"]["command"] == "index_info":
-
                 catalog = _query["query"]["catalog"]
 
                 stats = await db[catalog].index_information()
@@ -1133,7 +1119,6 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
                 query_result = stats
 
             elif _query["query"]["command"] == "db_info":
-
                 stats = await db.command("dbstats")
                 query_result = stats
 
@@ -1148,7 +1133,6 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
         else:
             # save task result:
             user_tmp_path = os.path.join(config["path"]["queries"], _query["user"])
-            # print(user_tmp_path)
             # mkdir if necessary
             if not os.path.exists(user_tmp_path):
                 os.makedirs(user_tmp_path)
@@ -1160,8 +1144,6 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
             async with aiofiles.open(task_result_file, "w") as f_task_result_file:
                 task_result = dumps(query_result)
                 await f_task_result_file.write(task_result)
-
-        # print(task_hash, result)
 
         # db book-keeping:
         if save:
@@ -1177,7 +1159,6 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
                 },
             )
 
-        # return task_hash, dumps(result)
         return task_hash, result
 
     except Exception as e:
@@ -1189,14 +1170,12 @@ async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = F
         if save:
             # save task result with error message:
             user_tmp_path = os.path.join(config["path"]["queries"], _query["user"])
-            # print(user_tmp_path)
             # mkdir if necessary
             if not os.path.exists(user_tmp_path):
                 os.makedirs(user_tmp_path)
             task_result_file = os.path.join(user_tmp_path, f"{task_hash}.result.json")
 
             # save location in db:
-            # result['user'] = query['user']
             result["status"] = "error"
             result["message"] = _err
 

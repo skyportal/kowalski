@@ -6,30 +6,31 @@ from pprint import pprint
 import questionary
 import subprocess
 import sys
+import time
 import yaml
 
 
-def check_configs(cfgs=("config.*yaml", "docker-compose.*yaml")):
+def check_configs(config_wildcards=("config.*yaml", "docker-compose.*yaml")):
     path = pathlib.Path(__file__).parent.absolute()
 
-    for cfg in cfgs:
-        c = cfg.replace("*", "")
+    for config_wildcard in config_wildcards:
+        config = config_wildcard.replace("*", "")
         # use config defaults if configs do not exist?
-        if not (path / c).exists():
+        if not (path / config).exists():
             answer = questionary.select(
-                f"{c} does not exist, do you want to use one of the following"
+                f"{config} does not exist, do you want to use one of the following"
                 " (not recommended without inspection)?",
-                choices=[p.name for p in path.glob(cfg)],
+                choices=[p.name for p in path.glob(config_wildcard)],
             ).ask()
-            subprocess.run(["cp", f"{path / answer}", f"{path / c}"])
+            subprocess.run(["cp", f"{path / answer}", f"{path / config}"])
 
         # check contents of config.yaml WRT config.defaults.yaml
-        if c == "config.yaml":
-            with open(path / c.replace(".yaml", ".defaults.yaml")) as cyaml:
-                config_defaults = yaml.load(cyaml, Loader=yaml.FullLoader)
-            with open(path / c) as cyaml:
-                config = yaml.load(cyaml, Loader=yaml.FullLoader)
-            deep_diff = DeepDiff(config, config_defaults, ignore_order=True)
+        if config == "config.yaml":
+            with open(path / config.replace(".yaml", ".defaults.yaml")) as config_yaml:
+                config_defaults = yaml.load(config_yaml, Loader=yaml.FullLoader)
+            with open(path / config) as config_yaml:
+                config_wildcard = yaml.load(config_yaml, Loader=yaml.FullLoader)
+            deep_diff = DeepDiff(config_wildcard, config_defaults, ignore_order=True)
             difference = {
                 k: v
                 for k, v in deep_diff.items()
@@ -50,7 +51,7 @@ def up(arguments):
     """
     print("Spinning up Kowalski 🚀")
 
-    cfgs = ["config.*yaml", "docker-compose.*yaml"]
+    config_wildcards = ["config.*yaml", "docker-compose.*yaml"]
 
     command = ["docker-compose", "-f", "docker-compose.yaml", "up", "-d"]
 
@@ -59,7 +60,7 @@ def up(arguments):
 
     # check configuration
     print("Checking configuration")
-    check_configs(cfgs=cfgs)
+    check_configs(config_wildcards=config_wildcards)
 
     # start up Kowalski
     print("Starting up")
@@ -86,14 +87,14 @@ def build(arguments):
     """
     print("Building Kowalski")
 
-    cfgs = ["config.*yaml", "docker-compose.*yaml"]
+    config_wildcards = ["config.*yaml", "docker-compose.*yaml"]
 
     # always use docker-compose.yaml
     command = ["docker-compose", "-f", "docker-compose.yaml", "build"]
 
     # check configuration
     print("Checking configuration")
-    check_configs(cfgs=cfgs)
+    check_configs(config_wildcards=config_wildcards)
 
     subprocess.run(command)
 
@@ -106,10 +107,10 @@ def seed(arguments):
 
     # check configuration
     print("Checking configuration")
-    check_configs(cfgs=["config.*yaml"])
+    check_configs(config_wildcards=["config.*yaml"])
 
-    with open(pathlib.Path(__file__).parent.absolute() / "config.yaml") as cyaml:
-        config = yaml.load(cyaml, Loader=yaml.FullLoader)["kowalski"]
+    with open(pathlib.Path(__file__).parent.absolute() / "config.yaml") as config_yaml:
+        config = yaml.load(config_yaml, Loader=yaml.FullLoader)["kowalski"]
 
     if arguments.local:
         path = pathlib.Path(arguments.local).absolute()
@@ -152,11 +153,56 @@ def seed(arguments):
 def test(arguments):
     print("Running the test suite")
 
+    # make sure the containers are up and running
+    num_retries = 10
+    for i in range(num_retries):
+        if i == num_retries - 1:
+            raise RuntimeError("Kowalski's containers failed to spin up")
+
+        command = ["docker", "ps", "-a"]
+        container_list = (
+            subprocess.check_output(command, universal_newlines=True)
+            .strip()
+            .split("\n")
+        )
+        if len(container_list) == 1:
+            print("No containers are running, waiting...")
+            time.sleep(2)
+            continue
+
+        ingester_is_up = (
+            len(
+                [
+                    container
+                    for container in container_list
+                    if "kowalski_ingester_1" in container and " Up " in container
+                ]
+            )
+            > 0
+        )
+        api_is_up = (
+            len(
+                [
+                    container
+                    for container in container_list
+                    if "kowalski_api_1" in container and " Up " in container
+                ]
+            )
+            > 0
+        )
+        if (not ingester_is_up) or (not api_is_up):
+            print("Kowalski's containers are not up, waiting...")
+            time.sleep(2)
+            continue
+
+        break
+
     print("Testing ZTF alert ingestion")
+
     command = [
         "docker",
         "exec",
-        "-it",
+        "-i",
         "kowalski_ingester_1",
         "python",
         "-m",
@@ -164,13 +210,16 @@ def test(arguments):
         "-s",
         "test_ingester.py",
     ]
-    subprocess.run(command)
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
 
     print("Testing API")
     command = [
         "docker",
         "exec",
-        "-it",
+        "-i",
         "kowalski_api_1",
         "python",
         "-m",
@@ -178,15 +227,18 @@ def test(arguments):
         "-s",
         "test_api.py",
     ]
-    subprocess.run(command)
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
 
 
 def develop(arguments=None):
     """
     Install developer tools.
     """
-    subprocess.run(["pip", "install", "-U", "pre-commit"])
-    subprocess.run(["pre-commit", "install"])
+    subprocess.run(["pip", "install", "-U", "pre-commit"], check=True)
+    subprocess.run(["pre-commit", "install"], check=True)
 
 
 def lint(arguments):
