@@ -113,7 +113,7 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers(title="commands", dest="command")
 
     parser.add_argument(
-        "--tag", type=str, default="20200401", help="matchfile release time tag"
+        "--tag", type=str, default="20201201", help="matchfile release time tag"
     )
     parser.add_argument(
         "--config", type=str, default="../config.yaml", help="config and secrets"
