@@ -27,7 +27,9 @@ def mongify(_dict):
     _tmp = dict(_dict)
 
     doc = {
-        _key.lower().replace(".", "_").replace(" ", "_"): _tmp[_key]
+        _key.lower().replace(".", "_").replace(" ", "_"): _tmp[_key].strip()
+        if isinstance(_tmp[_key], str)
+        else _tmp[_key]
         for _key in _tmp
         if not pd.isnull(_tmp[_key])
     }
