@@ -275,8 +275,16 @@ class TestIngester(object):
         if not path_logs.exists():
             path_logs.mkdir(parents=True, exist_ok=True)
 
-        log("Setting up test program in Fritz")
-        program = Program(group_name="FRITZ_TEST", group_nickname="Fritz")
+        if config["misc"]["broker"]:
+            log("Setting up test program in Fritz")
+            program = Program(group_name="FRITZ_TEST", group_nickname="Fritz")
+
+            log("Creating a test filter")
+            Filter(
+                collection="ZTF_alerts",
+                group_id=program.group_id,
+                filter_id=program.filter_id,
+            )
 
         # clean up old Kafka logs
         log("Cleaning up Kafka logs")
@@ -436,13 +444,6 @@ class TestIngester(object):
                 # callbacks to be triggered.
         producer.flush()
 
-        log("Creating a test filter")
-        test_filter = Filter(
-            collection="ZTF_alerts",
-            group_id=program.group_id,
-            filter_id=program.filter_id,
-        )
-
         log("Starting up Ingester")
 
         # digest and ingest
@@ -451,9 +452,6 @@ class TestIngester(object):
 
         # shut down Kafka server and ZooKeeper
         time.sleep(10)
-
-        log("Removing the test filter")
-        test_filter.remove()
 
         log("Shutting down Kafka Server at localhost:9092")
         # start the Kafka server:
