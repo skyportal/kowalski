@@ -112,48 +112,6 @@ class TestAPIs(object):
         resp = await client.delete(f"/api/users/{test_user_edited}", headers=headers)
         assert resp.status == 200
 
-    async def test_query_save(self, aiohttp_client):
-        """
-            Test query with db registering and saving results to disk: /api/queries
-        :param aiohttp_client:
-        :return:
-        """
-        client = await aiohttp_client(await app_factory())
-
-        # authorize
-        credentials = await self.auth_admin(aiohttp_client)
-        access_token = credentials["token"]
-
-        headers = {"Authorization": access_token}
-
-        collection = "ZTF_alerts"
-
-        # test query with book-keeping
-        qu = {
-            "query_type": "find_one",
-            "query": {
-                "catalog": collection,
-                "filter": {},
-            },
-            "kwargs": {"save": True, "_id": uid(32)},
-        }
-        # print(qu)
-        resp = await client.post("/api/queries", json=qu, headers=headers, timeout=5)
-        assert resp.status == 200
-        result = await resp.json()
-        # print(result)
-        assert result["status"] == "success"
-
-        # todo: test getting 'task' and 'result'
-
-        # remove enqueued query
-        resp = await client.delete(
-            f'/api/queries/{result["query_id"]}', headers=headers, timeout=5
-        )
-        assert resp.status == 200
-        result = await resp.json()
-        assert result["status"] == "success"
-
     # test filters api
 
     async def test_filters(self, aiohttp_client):

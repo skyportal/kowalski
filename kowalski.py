@@ -6,6 +6,7 @@ from pprint import pprint
 import questionary
 import subprocess
 import sys
+import time
 import yaml
 
 
@@ -152,21 +153,67 @@ def seed(arguments):
 def test(arguments):
     print("Running the test suite")
 
+    # make sure the containers are up and running
+    num_retries = 10
+    for i in range(num_retries):
+        if i == num_retries - 1:
+            raise RuntimeError("Kowalski's containers failed to spin up")
+
+        command = ["docker", "ps", "-a"]
+        container_list = (
+            subprocess.check_output(command, universal_newlines=True)
+            .strip()
+            .split("\n")
+        )
+        if len(container_list) == 1:
+            print("No containers are running, waiting...")
+            time.sleep(2)
+            continue
+
+        ingester_is_up = (
+            len(
+                [
+                    container
+                    for container in container_list
+                    if "kowalski_ingester_1" in container and " Up " in container
+                ]
+            )
+            > 0
+        )
+        api_is_up = (
+            len(
+                [
+                    container
+                    for container in container_list
+                    if "kowalski_api_1" in container and " Up " in container
+                ]
+            )
+            > 0
+        )
+        if (not ingester_is_up) or (not api_is_up):
+            print("Kowalski's containers are not up, waiting...")
+            time.sleep(2)
+            continue
+
+        break
+
     print("Testing ZTF alert ingestion")
-    command = ["docker", "ps", "-a"]
-    # command = [
-    #     "docker",
-    #     "exec",
-    #     "-i",
-    #     "kowalski_ingester_1",
-    #     "python",
-    #     "-m",
-    #     "pytest",
-    #     "-s",
-    #     "test_ingester.py",
-    # ]
-    s = subprocess.run(command)
-    print(s)
+
+    command = [
+        "docker",
+        "exec",
+        "-i",
+        "kowalski_ingester_1",
+        "python",
+        "-m",
+        "pytest",
+        "-s",
+        "test_ingester.py",
+    ]
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
 
     print("Testing API")
     command = [
@@ -180,15 +227,18 @@ def test(arguments):
         "-s",
         "test_api.py",
     ]
-    subprocess.check_output(command)
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
 
 
 def develop(arguments=None):
     """
     Install developer tools.
     """
-    subprocess.run(["pip", "install", "-U", "pre-commit"])
-    subprocess.run(["pre-commit", "install"])
+    subprocess.run(["pip", "install", "-U", "pre-commit"], check=True)
+    subprocess.run(["pre-commit", "install"], check=True)
 
 
 def lint(arguments):
