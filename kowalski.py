@@ -156,7 +156,6 @@ def test(arguments):
     command = [
         "docker",
         "exec",
-        "-it",
         "kowalski_ingester_1",
         "python",
         "-m",
@@ -164,13 +163,12 @@ def test(arguments):
         "-s",
         "test_ingester.py",
     ]
-    subprocess.run(command)
+    subprocess.check_output(command)
 
     print("Testing API")
     command = [
         "docker",
         "exec",
-        "-it",
         "kowalski_api_1",
         "python",
         "-m",
@@ -178,7 +176,7 @@ def test(arguments):
         "-s",
         "test_api.py",
     ]
-    subprocess.run(command)
+    subprocess.check_output(command)
 
 
 def develop(arguments=None):
