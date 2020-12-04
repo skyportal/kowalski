@@ -1,3 +1,8 @@
+"""
+A tool to digest unzipped Gaia EDR3 CSV files from http://cdn.gea.esac.esa.int/Gaia/gedr3/gaia_source
+and ingest the data into Kowalski.
+"""
+
 import argparse
 from multiprocessing.pool import Pool
 import pandas as pd
@@ -35,56 +40,58 @@ def process_file(args):
     collection = "Gaia_EDR3"
 
     if verbose:
-        log(f"processing {file}")
+        log(f"Processing {file}")
 
-    for ii, dff in enumerate(pd.read_csv(file, chunksize=batch_size)):
+    for chunk_index, dataframe_chunk in enumerate(
+        pd.read_csv(file, chunksize=batch_size)
+    ):
 
         if verbose:
-            log(f"{file}: processing batch # {ii + 1}")
+            log(f"{file}: processing batch # {chunk_index + 1}")
 
-        dff["_id"] = dff["source_id"].apply(lambda x: str(x))
+        dataframe_chunk["_id"] = dataframe_chunk["source_id"].apply(lambda x: str(x))
 
-        batch = dff.fillna("DROPMEPLEASE").to_dict(orient="records")
+        batch = dataframe_chunk.fillna("DROPMEPLEASE").to_dict(orient="records")
 
         # pop nulls - save space
         batch = [
             {
-                kk: vv
-                for kk, vv in bb.items()
-                if vv not in ("DROPMEPLEASE", "NOT_AVAILABLE")
+                key: value
+                for key, value in document.items()
+                if value not in ("DROPMEPLEASE", "NOT_AVAILABLE")
             }
-            for bb in batch
+            for document in batch
         ]
 
-        bad_doc_ind = []
+        bad_document_indexes = []
 
-        for ie, doc in enumerate(batch):
+        for document_index, document in enumerate(batch):
             try:
                 # GeoJSON for 2D indexing
-                doc["coordinates"] = dict()
+                document["coordinates"] = dict()
                 # string format: H:M:S, D:M:S
-                doc["coordinates"]["radec_str"] = [
-                    deg2hms(doc["ra"]),
-                    deg2dms(doc["dec"]),
+                document["coordinates"]["radec_str"] = [
+                    deg2hms(document["ra"]),
+                    deg2dms(document["dec"]),
                 ]
                 # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
-                _radec_geojson = [doc["ra"] - 180.0, doc["dec"]]
-                doc["coordinates"]["radec_geojson"] = {
+                _radec_geojson = [document["ra"] - 180.0, document["dec"]]
+                document["coordinates"]["radec_geojson"] = {
                     "type": "Point",
                     "coordinates": _radec_geojson,
                 }
             except Exception as e:
                 if verbose:
                     log(str(e))
-                bad_doc_ind.append(ie)
+                bad_document_indexes.append(document_index)
 
-        if len(bad_doc_ind) > 0:
+        if len(bad_document_indexes) > 0:
             if verbose:
                 log("Removing bad docs")
-            for index in sorted(bad_doc_ind, reverse=True):
+            for index in sorted(bad_document_indexes, reverse=True):
                 del batch[index]
 
-        # ingest
+        # ingest batch
         mongo.insert_many(collection=collection, documents=batch)
 
     # disconnect from db:
@@ -102,21 +109,27 @@ def process_file(args):
 
 
 if __name__ == "__main__":
+    # Note: fetch CSV files from http://cdn.gea.esac.esa.int/Gaia/gedr3/gaia_source
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--path",
         type=str,
         default=str(pathlib.Path(__file__).parent),
-        help="local path to unzipped Gaia EDR3 csv files",
+        help="Local path to unzipped Gaia EDR3 csv files",
     )
     parser.add_argument("-v", action="store_true", help="verbose?")
     parser.add_argument(
-        "--rm", action="store_true", help="remove csv files after ingestion?"
+        "--rm", action="store_true", help="Remove CSV files after ingestion?"
     )
     parser.add_argument(
-        "--np", type=int, default=12, help="number of processes for parallel ingestion"
+        "--n_processes",
+        type=int,
+        default=12,
+        help="Number of processes for parallel ingestion",
     )
-    parser.add_argument("--bs", type=int, default=2048, help="batch size for ingestion")
+    parser.add_argument(
+        "--batch_size", type=int, default=2048, help="batch size for ingestion"
+    )
 
     args = parser.parse_args()
 
@@ -137,8 +150,9 @@ if __name__ == "__main__":
     )
     log("Successfully connected")
 
-    # create indexes:
+    # Create indexes in the database:
     log("Creating indexes")
+    # 2D position on the sphere, ID:
     m.db[catalog_name].create_index(
         [("coordinates.radec_geojson", "2dsphere"), ("_id", 1)], background=True
     )
@@ -152,11 +166,12 @@ if __name__ == "__main__":
             ("radial_velocity", 1),
             ("radial_velocity_error", 1),
         ],
-        name="coughlin01",
+        name="parallax__g_mag__rv__rv_error",
         background=True,
     )
 
-    params = [(f, catalog_name, args.bs, args.rm, args.v) for f in files]
+    params = [(f, catalog_name, args.batch_size, args.rm, args.v) for f in files]
 
-    with Pool(processes=args.np) as pool:
+    with Pool(processes=args.n_processes) as pool:
+        # list+pool.imap is a trick to make tqdm work here
         list(tqdm(pool.imap(process_file, params), total=len(files)))
