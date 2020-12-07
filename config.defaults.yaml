@@ -216,6 +216,17 @@ kowalski:
             phot_bp_mean_mag: 1
             phot_rp_mean_mag: 1
 
+        Gaia_EDR3:
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            parallax: 1
+            parallax_error: 1
+            phot_g_mean_mag: 1
+            phot_bp_mean_mag: 1
+            phot_rp_mean_mag: 1
+
         Gaia_DR2_WD:
           filter: {}
           projection:
