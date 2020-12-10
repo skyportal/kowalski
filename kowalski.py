@@ -170,27 +170,19 @@ def test(arguments):
             time.sleep(2)
             continue
 
-        ingester_is_up = (
+        containers_up = (
             len(
                 [
                     container
                     for container in container_list
-                    if "kowalski_ingester_1" in container and " Up " in container
+                    if container_name in container and " Up " in container
                 ]
             )
             > 0
+            for container_name in ("kowalski_ingester_1", "kowalski_api_1")
         )
-        api_is_up = (
-            len(
-                [
-                    container
-                    for container in container_list
-                    if "kowalski_api_1" in container and " Up " in container
-                ]
-            )
-            > 0
-        )
-        if (not ingester_is_up) or (not api_is_up):
+
+        if not all(containers_up):
             print("Kowalski's containers are not up, waiting...")
             time.sleep(2)
             continue
