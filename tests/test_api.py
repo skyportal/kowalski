@@ -116,7 +116,7 @@ class TestAPIs(object):
 
     async def test_filters(self, aiohttp_client):
         """
-            Test saving, testing, retrieving, and removing a user-defined filter: /api/filters
+            Test saving, testing, retrieving, modifying, and removing a user-defined filter: /api/filters
         :param aiohttp_client:
         :return:
         """
@@ -196,6 +196,8 @@ class TestAPIs(object):
         assert "data" in result
         assert "active_fid" in result["data"]
         assert result["data"]["active_fid"] == fid1
+        assert "autosave" in result["data"]
+        assert not result["data"]["autosave"]
 
         # post new version:
         resp = await client.post(
@@ -238,6 +240,20 @@ class TestAPIs(object):
         assert "data" in result
         assert "active_fid" in result["data"]
         assert result["data"]["active_fid"] == fid1
+
+        # turn autosave on
+        resp = await client.put(
+            "/api/filters",
+            json={"group_id": group_id, "filter_id": filter_id, "autosave": True},
+            headers=headers,
+            timeout=5,
+        )
+        assert resp.status == 200
+        result = await resp.json()
+        assert result["status"] == "success"
+        assert "data" in result
+        assert "autosave" in result["data"]
+        assert result["data"]["autosave"]
 
         # deactivate
         resp = await client.put(

@@ -1692,6 +1692,7 @@ async def filters_get_group_id(request):
                 "filter_id": 1,
                 "catalog": "ZTF_alerts",
                 "permissions": [1, 2],
+                "autosave": false,
                 "active": true,
                 "active_fid": "nnsun9",
                 "fv": [
@@ -1816,6 +1817,7 @@ async def filters_get_group_id_filter_id(request):
                 "filter_id": 1,
                 "catalog": "ZTF_alerts",
                 "permissions": [1, 2],
+                "autosave": false,
                 "active": true,
                 "active_fid": "nnsun9",
                 "fv": [
@@ -1930,6 +1932,10 @@ async def filters_post(request):
                   type: integer
                 description: "permissions to access streams"
                 minItems: 1
+              autosave:
+                type: boolean
+                description: "automatically save passing alerts to group <group_id>"
+                default: false
               pipeline:
                 type: array
                 items:
@@ -1975,6 +1981,7 @@ async def filters_post(request):
                 "filter_id": 1
                 "catalog": ZTF_alerts
                 "permissions": [1, 2, 3]
+                "autosave": true
                 "pipeline": [
                 {
                   "$match": {
@@ -2072,6 +2079,7 @@ async def filters_post(request):
         filter_id = filter_spec.get("filter_id", None)
         catalog = filter_spec.get("catalog", None)
         permissions = filter_spec.get("permissions", None)
+        autosave = filter_spec.get("autosave", False)
         pipeline = filter_spec.get("pipeline", None)
         if group_id is None:
             return web.json_response(
@@ -2093,6 +2101,8 @@ async def filters_post(request):
             return web.json_response(
                 {"status": "error", "message": "pipeline must be set"}, status=400
             )
+
+        autosave = True if autosave in ("t", "True", "true", "1", True) else False
 
         group_id = int(group_id)
         filter_id = int(filter_id)
@@ -2177,6 +2187,7 @@ async def filters_post(request):
                 "filter_id": filter_id,
                 "catalog": catalog,
                 "permissions": permissions,
+                "autosave": autosave,
                 "active": True,
                 "active_fid": fid,
                 "fv": [],
@@ -2260,6 +2271,10 @@ async def filters_test_post(request):
                   type: integer
                 description: "permissions to access streams"
                 minItems: 1
+              autosave:
+                type: boolean
+                description: "automatically save passing alerts to group <group_id>"
+                default: false
               pipeline:
                 type: array
                 items:
@@ -2305,6 +2320,7 @@ async def filters_test_post(request):
                 "filter_id": 1
                 "catalog": ZTF_alerts
                 "permissions": [1, 2]
+                "autosave": true
                 "pipeline": [
                     {
                         "$match": {
@@ -2404,6 +2420,7 @@ async def filters_test_post(request):
         filter_id = filter_spec.get("filter_id", None)
         catalog = filter_spec.get("catalog", None)
         permissions = filter_spec.get("permissions", None)
+        autosave = filter_spec.get("autosave", False)
         pipeline = filter_spec.get("pipeline", None)
         if group_id is None:
             return web.json_response(
@@ -2425,6 +2442,8 @@ async def filters_test_post(request):
             return web.json_response(
                 {"status": "error", "message": "pipeline must be set"}, status=400
             )
+
+        autosave = True if autosave in ("t", "True", "true", "1") else False
 
         if not isinstance(pipeline, str):
             pipeline = dumps(pipeline)
@@ -2560,6 +2579,23 @@ async def filters_put(request):
                     type: string
                     minLength: 6
                     maxLength: 6
+              - type: object
+                required:
+                  - group_id
+                  - filter_id
+                  - autosave
+                properties:
+                  group_id:
+                    type: integer
+                    description: "[fritz] user group (science program) id"
+                    minimum: 1
+                  filter_id:
+                    type: integer
+                    description: "[fritz] science program filter id for this user group id"
+                    minimum: 1
+                  autosave:
+                    type: boolean
+                    description: "autosave candidates that pass filter to corresponding group?"
 
           examples:
             filter_1:
@@ -2572,6 +2608,11 @@ async def filters_put(request):
                 "group_id": 2
                 "filter_id": 5
                 "active_fid": "r7qiti"
+            filter_3:
+              value:
+                "group_id": 1
+                "filter_id": 1
+                "autosave": true
 
     responses:
       '200':
@@ -2647,6 +2688,7 @@ async def filters_put(request):
         filter_id = filter_spec.get("filter_id", None)
         active = filter_spec.get("active", None)
         active_fid = filter_spec.get("active_fid", None)
+        autosave = filter_spec.get("autosave", None)
         if group_id is None:
             return web.json_response(
                 {"status": "error", "message": "group_id must be set"}, status=400
@@ -2655,11 +2697,11 @@ async def filters_put(request):
             return web.json_response(
                 {"status": "error", "message": "filter_id must be set"}, status=400
             )
-        if (active, active_fid).count(None) != 1:
+        if (active, active_fid, autosave).count(None) != 2:
             return web.json_response(
                 {
                     "status": "error",
-                    "message": "one of (active, active_fid) must be set",
+                    "message": "one of (active, active_fid, autosave) must be set",
                 },
                 status=400,
             )
@@ -2686,22 +2728,9 @@ async def filters_put(request):
                 {"_id": doc_saved["_id"]}, {"$set": {"active": active}}
             )
 
-            if r.modified_count == 0:
-                return web.json_response(
-                    {"status": "error", "message": "failed to update filter"},
-                    status=400,
-                )
+            return_data = {"active": active}
 
-            return web.json_response(
-                {
-                    "status": "success",
-                    "message": f"updated filter for group_id={group_id}, filter_id={filter_id}",
-                    "data": {"active": active},
-                },
-                status=200,
-            )
-
-        if active_fid is not None:
+        elif active_fid is not None:
             # check that fid exists:
             fids = {ff["fid"] for ff in doc_saved["fv"]}
 
@@ -2715,21 +2744,32 @@ async def filters_put(request):
                 {"_id": doc_saved["_id"]}, {"$set": {"active_fid": active_fid}}
             )
 
-            if r.modified_count == 0:
-                # note: this would fire up if, e.g. trying to change from True to True
-                return web.json_response(
-                    {"status": "error", "message": "failed to update filter"},
-                    status=400,
-                )
+            return_data = {"active_fid": active_fid}
 
-            return web.json_response(
-                {
-                    "status": "success",
-                    "message": f"updated filter for group_id={group_id}, filter_id={filter_id}",
-                    "data": {"active_fid": active_fid},
-                },
-                status=200,
+        elif autosave is not None:
+            # be forgiving:
+            autosave = True if autosave in ("t", "True", "true", "1", True) else False
+
+            r = await request.app["mongo"].filters.update_one(
+                {"_id": doc_saved["_id"]}, {"$set": {"autosave": autosave}}
             )
+
+            return_data = {"autosave": autosave}
+
+        if r.modified_count == 0:
+            return web.json_response(
+                {"status": "error", "message": "failed to update filter"},
+                status=400,
+            )
+
+        return web.json_response(
+            {
+                "status": "success",
+                "message": f"updated filter for group_id={group_id}, filter_id={filter_id}",
+                "data": return_data,
+            },
+            status=200,
+        )
 
     except Exception as _e:
         log(f"Got error: {str(_e)}")
