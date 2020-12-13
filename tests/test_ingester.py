@@ -7,7 +7,7 @@ import subprocess
 import time
 
 from alert_broker_ztf import watchdog
-from utils import load_config, log, time_stamp
+from utils import load_config, log, Mongo, time_stamp
 
 
 """ load config and secrets """
@@ -160,7 +160,15 @@ class Program:
 
 
 class Filter(object):
-    def __init__(self, collection: str = "ZTF_alerts", group_id=None, filter_id=None):
+    def __init__(
+        self,
+        collection: str = "ZTF_alerts",
+        group_id=None,
+        filter_id=None,
+        permissions=None,
+        autosave: bool = False,
+        pipeline=None,
+    ):
         assert group_id is not None
         assert filter_id is not None
 
@@ -169,6 +177,26 @@ class Filter(object):
         self.collection = collection
         self.group_id = int(group_id)
         self.filter_id = int(filter_id)
+        self.autosave = autosave
+        self.permissions = permissions if permissions is not None else [1, 2]
+
+        self.pipeline = pipeline
+        if self.pipeline is None:
+            self.pipeline = [
+                {
+                    "$match": {
+                        "candidate.drb": {"$gt": 0.9},
+                    }
+                },
+                {
+                    "$addFields": {
+                        "annotations.author": "dd",
+                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
+                    }
+                },
+                {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
+            ]
+
         self.fid = self.create()
 
     @staticmethod
@@ -191,21 +219,9 @@ class Filter(object):
             "group_id": self.group_id,
             "filter_id": self.filter_id,
             "catalog": self.collection,
-            "permissions": [1, 2],
-            "pipeline": [
-                {
-                    "$match": {
-                        "candidate.drb": {"$gt": 0.9},
-                    }
-                },
-                {
-                    "$addFields": {
-                        "annotations.author": "dd",
-                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
-                    }
-                },
-                {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
-            ],
+            "permissions": self.permissions,
+            "autosave": self.autosave,
+            "pipeline": self.pipeline,
         }
 
         # save:
@@ -276,14 +292,21 @@ class TestIngester(object):
             path_logs.mkdir(parents=True, exist_ok=True)
 
         if config["misc"]["broker"]:
-            log("Setting up test program in Fritz")
-            program = Program(group_name="FRITZ_TEST", group_nickname="Fritz")
-
-            log("Creating a test filter")
+            log("Setting up test groups and filters in Fritz")
+            program = Program(group_name="FRITZ_TEST", group_nickname="test")
             Filter(
                 collection="ZTF_alerts",
                 group_id=program.group_id,
                 filter_id=program.filter_id,
+            )
+
+            program2 = Program(group_name="FRITZ_TEST_AUTOSAVE", group_nickname="test2")
+            Filter(
+                collection="ZTF_alerts",
+                group_id=program2.group_id,
+                filter_id=program2.filter_id,
+                autosave=True,
+                pipeline=[{"$match": {"objectId": "ZTF20aaelulu"}}],
             )
 
         # clean up old Kafka logs
@@ -471,8 +494,6 @@ class TestIngester(object):
             )
 
         log("Shutting down ZooKeeper at localhost:2181")
-
-        # start ZooKeeper in the background (using Popen and not run with shell=True for safety)
         cmd_zookeeper_stop = [
             os.path.join(config["path"]["kafka"], "bin", "zookeeper-server-stop.sh"),
             os.path.join(config["path"]["kafka"], "config", "zookeeper.properties"),
@@ -485,3 +506,52 @@ class TestIngester(object):
             subprocess.run(
                 cmd_zookeeper_stop, stdout=stdout_zookeeper, stderr=subprocess.STDOUT
             )
+
+        log("Checking the ZTF alerts collections state")
+        mongo = Mongo(
+            host=config["database"]["host"],
+            port=config["database"]["port"],
+            username=config["database"]["username"],
+            password=config["database"]["password"],
+            db=config["database"]["db"],
+            verbose=True,
+        )
+        collection_alerts = config["database"]["collections"]["alerts_ztf"]
+        collection_alerts_aux = config["database"]["collections"]["alerts_ztf_aux"]
+        n_alerts = mongo.db[collection_alerts].count_documents({})
+        assert n_alerts == 313
+        n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
+        assert n_alerts_aux == 145
+
+        if config["misc"]["broker"]:
+            log("Checking that posting to SkyPortal succeeded")
+
+            # check number of candidates that passed the first filter
+            resp = requests.get(
+                program.base_url + f"/api/candidates?groupIDs={program.group_id}",
+                headers=program.headers,
+                timeout=3,
+            )
+
+            assert resp.status_code == requests.codes.ok
+            result = resp.json()
+            assert result["status"] == "success"
+            assert "data" in result
+            assert "totalMatches" in result["data"]
+            assert result["data"]["totalMatches"] == 88
+
+            # check that the only candidate that passed the second filter (ZTF20aaelulu) got saved as Source
+            resp = requests.get(
+                program2.base_url + f"/api/sources?group_ids={program2.group_id}",
+                headers=program2.headers,
+                timeout=3,
+            )
+
+            assert resp.status_code == requests.codes.ok
+            result = resp.json()
+            assert result["status"] == "success"
+            assert "data" in result
+            assert "totalMatches" in result["data"]
+            assert result["data"]["totalMatches"] == 1
+            assert "sources" in result["data"]
+            assert result["data"]["sources"][0]["id"] == "ZTF20aaelulu"
