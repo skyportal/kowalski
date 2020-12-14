@@ -903,7 +903,7 @@ class AlertWorker:
 
         return response
 
-    @lru_cache(maxsize=16)
+    @lru_cache(maxsize=64)
     def api_skyportal_get_group(self, group_id):
         return self.api_skyportal("GET", f"/api/groups/{group_id}")
 

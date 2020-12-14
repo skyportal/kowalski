@@ -33,6 +33,7 @@ from utils import (
     add_admin,
     check_password_hash,
     compute_hash,
+    forgiving_true,
     generate_password_hash,
     init_db,
     load_config,
@@ -2747,8 +2748,7 @@ async def filters_put(request):
             return_data = {"active_fid": active_fid}
 
         elif autosave is not None:
-            # be forgiving:
-            autosave = True if autosave in ("t", "True", "true", "1", True) else False
+            autosave = forgiving_true(autosave)
 
             r = await request.app["mongo"].filters.update_one(
                 {"_id": doc_saved["_id"]}, {"$set": {"autosave": autosave}}

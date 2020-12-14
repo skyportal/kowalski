@@ -48,6 +48,10 @@ def log(message):
     print(f"{time_stamp()}: {message}")
 
 
+def forgiving_true(expression):
+    return True if expression in ("t", "True", "true", "1", 1, True) else False
+
+
 @contextmanager
 def timer(description, verbose: bool = True):
     tic = time.time()
