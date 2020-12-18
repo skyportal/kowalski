@@ -14,7 +14,8 @@ from copy import deepcopy
 import dask.distributed
 import datetime
 import fastavro
-from functools import lru_cache
+
+# from functools import lru_cache
 import gzip
 import io
 import matplotlib.pyplot as plt
@@ -40,6 +41,7 @@ from utils import (
     in_ellipse,
     load_config,
     log,
+    memoize,
     Mongo,
     radec2lb,
     time_stamp,
@@ -903,7 +905,8 @@ class AlertWorker:
 
         return response
 
-    @lru_cache(maxsize=64)
+    # @lru_cache(maxsize=64)
+    @memoize
     def api_skyportal_get_group(self, group_id):
         return self.api_skyportal("GET", f"/api/groups/{group_id}")
 
