@@ -29,6 +29,10 @@ import pathlib
 from pydantic import root_validator
 import traceback
 from typing import List, Mapping, Optional, Sequence, Union
+import requests
+import shutil
+import traceback
+import urllib
 from utils import (
     add_admin,
     check_password_hash,
@@ -289,6 +293,63 @@ async def ping(request: web.Request) -> web.Response:
 
 
 """ users """
+# @routes.post('/api/triggers/ztf.POST')
+@admin_required
+async def trigger_ztf(request: web.Request) -> web.Response:
+
+    try:
+
+        ZTF_URL = 'http://host.docker.internal:9999'
+        """URL for the P48 scheduler."""
+
+        _data = await request.json()
+
+        r = requests.put(
+            urllib.parse.urljoin(ZTF_URL, 'queues'),
+            json=_data
+        )
+
+        return web.json_response(
+            dict(r.headers), status=r.status_code
+        )
+
+    except Exception as _e:
+        log(f"Got error: {str(_e)}")
+        _err = traceback.format_exc()
+        log(_err)
+        return web.json_response(
+            {"status": "error", "message": f"failure: {_err}"}, status=400
+        )
+
+# @routes.post('/api/triggers/ztf.DELETE')
+@admin_required
+async def delete_ztf(request: web.Request) -> web.Response:
+
+    try:
+
+        ZTF_URL = 'http://host.docker.internal:9999'
+        """URL for the P48 scheduler."""
+
+        _data = await request.json()
+
+        r = requests.delete(
+            urllib.parse.urljoin(ZTF_URL, 'queues'),
+            json=_data
+        )
+
+        return web.json_response(
+            dict(r.headers), status=r.status_code
+        )
+
+    except Exception as _e:
+        log(f"Got error: {str(_e)}")
+        _err = traceback.format_exc()
+        log(_err)
+        return web.json_response(
+            {"status": "error", "message": f"failure: {_err}"}, status=400
+        )
+
+""" users api """
 
 
 # @routes.post('/api/users')
@@ -2584,6 +2645,9 @@ async def app_factory():
             web.post("/api/filters", filter_handler.post),
             web.patch("/api/filters", filter_handler.patch),
             web.delete("/api/filters/{filter_id:[0-9]+}", filter_handler.delete),
+            # triggers
+            web.post("/api/triggers/ztf.POST", trigger_ztf),
+            web.delete("/api/triggers/ztf.DELETE", delete_ztf),
             # lab:
             web.get(
                 "/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}",
