@@ -299,19 +299,14 @@ async def trigger_ztf(request: web.Request) -> web.Response:
 
     try:
 
-        ZTF_URL = 'http://host.docker.internal:9999'
+        ZTF_URL = "http://host.docker.internal:9999"
         """URL for the P48 scheduler."""
 
         _data = await request.json()
 
-        r = requests.put(
-            urllib.parse.urljoin(ZTF_URL, 'queues'),
-            json=_data
-        )
+        r = requests.put(urllib.parse.urljoin(ZTF_URL, "queues"), json=_data)
 
-        return web.json_response(
-            dict(r.headers), status=r.status_code
-        )
+        return web.json_response(dict(r.headers), status=r.status_code)
 
     except Exception as _e:
         log(f"Got error: {str(_e)}")
@@ -320,6 +315,7 @@ async def trigger_ztf(request: web.Request) -> web.Response:
         return web.json_response(
             {"status": "error", "message": f"failure: {_err}"}, status=400
         )
+
 
 # @routes.post('/api/triggers/ztf.DELETE')
 @admin_required
@@ -327,19 +323,14 @@ async def delete_ztf(request: web.Request) -> web.Response:
 
     try:
 
-        ZTF_URL = 'http://host.docker.internal:9999'
+        ZTF_URL = "http://host.docker.internal:9999"
         """URL for the P48 scheduler."""
 
         _data = await request.json()
 
-        r = requests.delete(
-            urllib.parse.urljoin(ZTF_URL, 'queues'),
-            json=_data
-        )
+        r = requests.delete(urllib.parse.urljoin(ZTF_URL, "queues"), json=_data)
 
-        return web.json_response(
-            dict(r.headers), status=r.status_code
-        )
+        return web.json_response(dict(r.headers), status=r.status_code)
 
     except Exception as _e:
         log(f"Got error: {str(_e)}")
@@ -348,6 +339,7 @@ async def delete_ztf(request: web.Request) -> web.Response:
         return web.json_response(
             {"status": "error", "message": f"failure: {_err}"}, status=400
         )
+
 
 """ users api """
 
