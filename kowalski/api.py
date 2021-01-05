@@ -209,9 +209,7 @@ async def auth_post(request: web.Request) -> web.Response:
                     request.app["JWT"]["JWT_ALGORITHM"],
                 )
 
-                return web.json_response(
-                    {"status": "success", "token": jwt_token.decode("utf-8")}
-                )
+                return web.json_response({"status": "success", "token": jwt_token})
 
             else:
                 return web.json_response(
