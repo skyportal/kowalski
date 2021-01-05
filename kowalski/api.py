@@ -3402,8 +3402,8 @@ async def app_factory():
     # set up JWT for user authentication/authorization
     app["JWT"] = {
         "JWT_SECRET": config["server"]["JWT_SECRET_KEY"],
-        "JWT_ALGORITHM": "HS256",
-        "JWT_EXP_DELTA_SECONDS": 30 * 86400 * 3,
+        "JWT_ALGORITHM": config["server"]["JWT_ALGORITHM"],
+        "JWT_EXP_DELTA_SECONDS": int(config["server"]["JWT_EXP_DELTA_SECONDS"]),
     }
 
     # OpenAPI docs:
