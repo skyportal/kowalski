@@ -127,7 +127,7 @@ def get_tns(grab_all: bool = False, num_pages: int = 10, entries_per_page: int =
 
         # 20210114: wis-tns.org has issues with their certificate
         csv_data = requests.get(url, verify=False).content
-        data = pd.read_csv(csv_data.decode("utc-8"))
+        data = pd.read_csv(csv_data.decode("utf-8"))
 
         for index, row in data.iterrows():
             try:
