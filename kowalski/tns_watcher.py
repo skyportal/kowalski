@@ -93,7 +93,7 @@ def get_tns(grab_all: bool = False, num_pages: int = 10, entries_per_page: int =
     )
     log("Successfully connected")
 
-    collection = config["database"]["collections"]["TNS"]
+    collection = config["database"]["collections"]["tns"]
 
     if config["database"]["build_indexes"]:
         log("Checking indexes")

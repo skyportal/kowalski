@@ -23,7 +23,7 @@ class TestTNSWatcher:
         )
         log("Successfully connected")
 
-        collection = config["database"]["collections"]["TNS"]
+        collection = config["database"]["collections"]["tns"]
 
         log(
             "Grabbing 1 page with 5 entries from the TNS and ingesting that into the database"
