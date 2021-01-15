@@ -186,7 +186,7 @@ async def add_admin(_mongo, config):
             print(_err)
 
 
-class Mongo(object):
+class Mongo:
     def __init__(
         self,
         host: str = "127.0.0.1",

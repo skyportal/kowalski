@@ -7,7 +7,7 @@ import subprocess
 import time
 
 from alert_broker_ztf import watchdog
-from utils import load_config, log, Mongo, time_stamp
+from utils import load_config, log, Mongo
 
 
 """ load config and secrets """
@@ -159,7 +159,7 @@ class Program:
         self.group_id, self.filter_id = None, None
 
 
-class Filter(object):
+class Filter:
     def __init__(
         self,
         collection: str = "ZTF_alerts",
@@ -268,7 +268,7 @@ def delivery_report(err, msg):
         log(f"Message delivered to {msg.topic()} [{msg.partition()}]")
 
 
-class TestIngester(object):
+class TestIngester:
     """
     End-to-end ingester test:
         - Create test program in Fritz
@@ -425,15 +425,13 @@ class TestIngester(object):
         path_alerts = pathlib.Path("/app/data/ztf_alerts/20200202/")
         # grab some more alerts from gs://ztf-fritz/sample-public-alerts
         try:
-            print(
-                f"{time_stamp()}: Grabbing more alerts from gs://ztf-fritz/sample-public-alerts"
-            )
+            log("Grabbing more alerts from gs://ztf-fritz/sample-public-alerts")
             r = requests.get("https://www.googleapis.com/storage/v1/b/ztf-fritz/o")
             aa = r.json()["items"]
             ids = [pathlib.Path(a["id"]).parent for a in aa if "avro" in a["id"]]
         except Exception as e:
-            print(
-                f"{time_stamp()}: Grabbing alerts from gs://ztf-fritz/sample-public-alerts failed, but it is ok"
+            log(
+                "Grabbing alerts from gs://ztf-fritz/sample-public-alerts failed, but it is ok"
             )
             log(f"{e}")
             ids = []
@@ -447,9 +445,7 @@ class TestIngester(object):
                 "/app/data/ztf_alerts/20200202/",
             ]
         )
-        print(
-            f"{time_stamp()}: Fetched {len(ids)} alerts from gs://ztf-fritz/sample-public-alerts"
-        )
+        log(f"Fetched {len(ids)} alerts from gs://ztf-fritz/sample-public-alerts")
         # push!
         for p in path_alerts.glob("*.avro"):
             with open(str(p), "rb") as data:

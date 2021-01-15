@@ -61,6 +61,7 @@ kowalski:
       alerts_ztf_filter: "ZTF_alerts_filter"
       alerts_zuds: "ZUDS_alerts"
       alerts_zuds_aux: "ZUDS_alerts_aux"
+      tns: "TNS"
 
     indexes:
       ZTF_alerts:
@@ -143,6 +144,17 @@ kowalski:
             - [ "candidate.magpsf", 1 ]
             - [ "candidate.isdiffpos", 1 ]
             - [ "objectId", -1 ]
+          unique: false
+
+      TNS:
+        - name: radec__id
+          fields:
+            - [ "coordinates.radec_geojson", "2dsphere" ]
+            - [ "_id", -1 ]
+          unique: false
+        - name: discovery_date
+          fields:
+            - [ "discovery_date", -1 ]
           unique: false
 
     filters:
@@ -336,6 +348,9 @@ kowalski:
     url: "http://site/allexp.tbl"
     username: "username"
     password: "password"
+
+  tns:
+    url: https://wis-tns.org
 
   dask:
     host: 127.0.0.1
