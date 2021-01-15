@@ -2,6 +2,7 @@ import argparse
 import datetime
 import pandas as pd
 import pytz
+import requests
 import os
 import sys
 import time
@@ -124,7 +125,9 @@ def get_tns(grab_all: bool = False, num_pages: int = 10, entries_per_page: int =
             f"search?format=csv&num_page={entries_per_page}&page={num_page}",
         )
 
-        data = pd.read_csv(url)
+        # 20210114: wis-tns.org has issues with their certificate
+        csv_data = requests.get(url, verify=False).content
+        data = pd.read_csv(csv_data.decode("utc-8"))
 
         for index, row in data.iterrows():
             try:
