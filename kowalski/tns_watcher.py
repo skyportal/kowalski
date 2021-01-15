@@ -2,6 +2,7 @@ import argparse
 import datetime
 import pandas as pd
 import pytz
+import os
 import sys
 import time
 import traceback
@@ -70,10 +71,14 @@ def mongify(_dict):
     return doc
 
 
-def get_tns(grab_all=False):
+def get_tns(grab_all: bool = False, num_pages: int = 10, entries_per_page: int = 100):
     """
-    Queries the TNS and obtains the targets reported to it.
+    Queries the TNS and obtains the sources reported to it.
 
+    :param grab_all: grab the complete database from TNS? takes a while!
+    :param num_pages: grab the last <num_pages> pages
+    :param entries_per_page: number of entries per page to grab
+    :return:
     """
 
     # connect to MongoDB:
@@ -88,29 +93,36 @@ def get_tns(grab_all=False):
     )
     log("Successfully connected")
 
-    collection = "TNS"
+    collection = config["database"]["collections"]["TNS"]
 
-    log("Checking indexes")
-    mongo.db[collection].create_index(
-        [("coordinates.radec_geojson", "2dsphere"), ("_id", 1)], background=True
-    )
-    mongo.db[collection].create_index([("discovery_date", -1)], background=True)
+    if config["database"]["build_indexes"]:
+        log("Checking indexes")
+        for index in config["database"]["indexes"][collection]:
+            try:
+                ind = [tuple(ii) for ii in index["fields"]]
+                mongo.db[collection].create_index(
+                    keys=ind,
+                    name=index["name"],
+                    background=True,
+                    unique=index["unique"],
+                )
+            except Exception as e:
+                log(e)
 
     log("Fetching data...")
-    entries_per_page = 100
 
     if grab_all:
         # grab the latest data (5 is the minimum):
-        url = "https://wis-tns.weizmann.ac.il/search?format=csv&num_page=5&page=0"
+        url = os.path.join(config["tns"]["url"], "search?format=csv&num_page=5&page=0")
         data = pd.read_csv(url)
         num_pages = data["ID"].max() // entries_per_page
-    else:
-        # grab the last 10 pages (with <entries_per_page> entries each) by default
-        num_pages = 10
 
     for num_page in range(num_pages):
         log(f"Digesting page #{num_page+1} of {num_pages}...")
-        url = f"https://wis-tns.weizmann.ac.il/search?format=csv&num_page={entries_per_page}&page={num_page}"
+        url = os.path.join(
+            config["tns"]["url"],
+            f"search?format=csv&num_page={entries_per_page}&page={num_page}",
+        )
 
         data = pd.read_csv(url)
 

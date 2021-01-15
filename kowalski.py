@@ -224,6 +224,23 @@ def test(arguments):
     except subprocess.CalledProcessError:
         sys.exit(1)
 
+    print("Testing TNS monitoring")
+    command = [
+        "docker",
+        "exec",
+        "-i",
+        "kowalski_ingester_1",
+        "python",
+        "-m",
+        "pytest",
+        "-s",
+        "test_tns_watcher.py",
+    ]
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
+
 
 def develop(arguments=None):
     """
