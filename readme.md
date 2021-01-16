@@ -1,4 +1,4 @@
-# Kowalski: enhancing time-domain astronomy
+# Kowalski: a multi-survey data archive and alert broker for time-domain astronomy
 
 Kowalski is an API-driven multi-survey data archive and alert broker.
 Its main focus is the [Zwicky Transient Facility](https://ztf.caltech.edu).
