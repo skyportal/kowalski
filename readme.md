@@ -1,9 +1,33 @@
-# Kowalski: enhancing time-domain astronomy
+# Kowalski: a multi-survey data archive and alert broker for time-domain astronomy
 
 Kowalski is an API-driven multi-survey data archive and alert broker.
 Its main focus is the [Zwicky Transient Facility](https://ztf.caltech.edu).
 
-## Interact with a `Kowalski` instance
+## Technical details
+
+A schematic overview of the functional aspects of `Kowalski` and how they interact is shown below:
+
+![data/img/kowalski.jpg](data/img/kowalski.jpg)
+
+- A non-relational (NoSQL) database `MongoDB` powers the data archive, the alert stream sink,
+and the alert handling service.
+- An API layer provides an interface for the interaction with the backend:
+it is built using a `python` asynchronous web framework, `aiohttp`, and the standard `python` async event loop
+serves as a simple, fast, and robust job queue.
+Multiple instances of the API service are maintained using the `Gunicorn` WSGI HTTP Server.
+- A [programmatic `python` client](https://github.com/dmitryduev/penquins) is also available
+to interact with Kowalski's API.
+- Incoming and outgoing traffic can be routed through `traefik`,
+which acts as a simple and performant reverse proxy/load balancer.
+- An alert brokering layer listens to `Kafka` alert streams and uses a `dask.distributed` cluster for
+distributed alert packet processing, which includes data preprocessing, execution of machine learning models,
+catalog cross-matching, and ingestion into `MongoDB`.
+It also executes user-defined filters based on the augmented alert data and posts the filtering results
+to a [`SkyPortal`](https://skyportal.io/) instance.
+- Kowalski is containerized using `Docker` software and orchestrated with `docker-compose`
+allowing for simple and efficient deployment in the cloud and/or on-premise.
+
+## Interacting with a `Kowalski` instance
 
 `Kowalski` is an API-first system. The full OpenAPI specs can be found [here](https://kowalski.caltech.edu/docs/api/). Most users will only need the [queries section](https://kowalski.caltech.edu/docs/api/#tag/queries) of the specs.
 
@@ -60,7 +84,7 @@ Use `docker-compose.defaults.yaml` as a template for `docker-compose.yaml`.
 Note that the environment variables for the `mongo` service must match
 `admin_*` under `kowalski.database` in `config.yaml`.
 
-#### Bare-bones + broker for [`SkyPortal`](https://skyportal.io/) / [`Fritz`](https://fritz-marshal.org/)
+#### Bare-bones + broker for [`SkyPortal`](https://skyportal.io/) / [`Fritz`](https://github.com/fritz-marshal/fritz)
 
 Use `docker-compose.fritz.defaults.yaml` as a template for `docker-compose.yaml`.
 If you want the alert ingester to post (filtered) alerts to `SkyPortal`, make sure
