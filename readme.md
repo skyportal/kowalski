@@ -180,7 +180,17 @@ Each commit message should consist of a summary line and a longer description, e
 To incorporate changes recommended by the reviewers, commit edits to your branch, and push to the branch again
 (there is no need to re-create the pull request, it will automatically track modifications to your branch).
 
-5. Once the pull request has been reviewed and approved by at least two team members, it will be merged into Kowalski.
+5. Sometimes, while you were working on your feature, the `master` branch is updated with new commits, potentially
+resulting in conflicts with your feature branch. The are two ways to resolve this situation - merging and rebasing,
+please look [here](https://www.atlassian.com/git/tutorials/merging-vs-rebasing) for a detailed discussion.
+While both ways are acceptable, since we are squashing commits from a PR before merging, we prefer the first option:
+
+    ```shell script
+    git merge rewrite-contributor-guide upstream/main
+    ```
+Developers may merge `master` into their branch as many times as they want to.
+
+6. Once the pull request has been reviewed and approved by at least two team members, it will be merged into Kowalski.
 
 ### Pre-commit hook
 
