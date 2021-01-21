@@ -451,10 +451,13 @@ def alert_filter__xmatch_clu(
                 distance_arcsec = round(
                     great_circle_distance(ra, dec, alpha1, delta01) * 3600, 2
                 )
-                #also add a physical distance parameter for redshifts in the Hubble flow
+                # also add a physical distance parameter for redshifts in the Hubble flow
                 if redshift > 0.005:
                     distance_kpc = round(
-                        great_circle_distance(ra, dec, alpha1, delta01) * 3600 * (redshift/0.05), 2
+                        great_circle_distance(ra, dec, alpha1, delta01)
+                        * 3600
+                        * (redshift / 0.05),
+                        2,
                     )
                 else:
                     distance_kpc = -1
