@@ -120,7 +120,67 @@ In `docker-compose.yaml`:
 
 OpenAPI specs are to be found under `/docs/api` once `Kowalski` is up and running.
 
-## Developer notes
+## Developer guidelines
+
+### How to contribute
+
+Contributions to Kowalski are made through
+[GitHub Pull Requests](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests),
+a set of proposed commits (or patches).
+
+To prepare, you should:
+
+- Create your own fork the [kowalski repository](https://github.com/dmitryduev/kowalski) by clicking the "fork" button.
+
+- [Set up SSH authentication with GitHub](https://help.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh).
+
+- Clone (download) your copy of the repository, and set up a remote called `upstream` that points to the main Kowalski repository.
+
+  ```sh
+  git clone git@github.com:<yourname>/kowalski
+  git remote add upstream git@github.com:dmitryduev/kowalski
+  ```
+
+Then, for each feature you wish to contribute, create a pull request:
+
+1. Download the latest version of Kowalski, and create a new branch for your work.
+
+   Here, let's say we want to contribute some documentation fixes; we'll call our branch `rewrite-contributor-guide`.
+
+   ```sh
+   git checkout master
+   git pull upstream master
+   git checkout -b rewrite-contributor-guide
+   ```
+
+2. Make modifications to Kowalski and commit your changes using `git add` and `git commit`.
+Each commit message should consist of a summary line and a longer description, e.g.:
+
+   ```text
+   Rewrite the contributor guide
+
+   While reading through the contributor guide, I noticed several places
+   in which instructions were out of order. I therefore reorganized all
+   sections to follow logically, and fixed several grammar mistakes along
+   the way.
+   ```
+
+3. When ready, push your branch to GitHub:
+
+   ```sh
+   git push origin rewrite-contributor-guide
+   ```
+
+   Once the branch is uploaded, GitHub should print a URL for turning your branch into a pull request.
+   Open that URL in your browser, write an informative title and description for your pull request, and submit it.
+   There, you can also request a review from a team member and link your PR with an existing issue.
+
+4. The team will now review your contribution, and suggest changes.
+*To simplify review, please limit pull requests to one logical set of changes.*
+To incorporate changes recommended by the reviewers, commit edits to your branch, and push to the branch again
+(there is no need to re-create the pull request, it will automatically track modifications to your branch).
+
+5. Once the pull request has been reviewed and approved by at least two team members, it will be merged into Kowalski.
 
 ### Pre-commit hook
 
@@ -132,5 +192,5 @@ pre-commit install
 ```
 
 This will check your changes before each commit to ensure that they
-conform with our code style standards. We use black to reformat Python
-code.
+conform with our code style standards. We use `black` to reformat `Python`
+code and `flake8` to verify that code complies with [PEP8](https://www.python.org/dev/peps/pep-0008/).
