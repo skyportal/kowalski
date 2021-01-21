@@ -14,6 +14,7 @@ __all__ = [
     "great_circle_distance",
     "in_ellipse",
     "init_db",
+    "init_db_sync",
     "jd_to_date",
     "jd_to_datetime",
     "load_config",
@@ -158,13 +159,8 @@ async def init_db(config, verbose=True):
     async for _u in _client.admin.system.users.find({}, {"_id": 1}):
         user_ids.append(_u["_id"])
 
-    # print(user_ids)
-
     db_name = config["database"]["db"]
     username = config["database"]["username"]
-
-    # print(f'{db_name}.{username}')
-    # print(user_ids)
 
     _mongo = _client[db_name]
 
@@ -177,6 +173,39 @@ async def init_db(config, verbose=True):
         )
         if verbose:
             print("Successfully initialized db")
+
+    _mongo.client.close()
+
+
+def init_db_sync(config, verbose=False):
+    """
+    Initialize db if necessary: create the sole non-admin user
+    """
+    client = pymongo.MongoClient(
+        host=config["sentinel"]["database"]["host"],
+        port=config["sentinel"]["database"]["port"],
+        username=config["sentinel"]["database"]["admin_username"],
+        password=config["sentinel"]["database"]["admin_password"],
+    )
+
+    user_ids = []
+    for _u in client.admin.system.users.find({}, {"_id": 1}):
+        user_ids.append(_u["_id"])
+
+    db_name = config["sentinel"]["database"]["db"]
+    username = config["sentinel"]["database"]["username"]
+
+    _mongo = client[db_name]
+
+    if f"{db_name}.{username}" not in user_ids:
+        _mongo.command(
+            "createUser",
+            config["sentinel"]["database"]["username"],
+            pwd=config["sentinel"]["database"]["password"],
+            roles=["readWrite"],
+        )
+        if verbose:
+            log("Successfully initialized db")
 
     _mongo.client.close()
 

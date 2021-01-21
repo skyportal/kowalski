@@ -37,6 +37,7 @@ from utils import (
     deg2hms,
     great_circle_distance,
     in_ellipse,
+    init_db_sync,
     load_config,
     log,
     memoize,
@@ -1558,6 +1559,8 @@ def watchdog(obs_date: str = None, test: bool = False):
     :param test: test mode
     :return:
     """
+
+    init_db_sync(config=config, verbose=True)
 
     topics_on_watch = dict()
 
