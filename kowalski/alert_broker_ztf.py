@@ -437,12 +437,12 @@ def alert_filter__xmatch_clu(
             alpha1, delta01 = galaxy["ra"], galaxy["dec"]
 
             redshift = galaxy["z"]
-            # By default, set the cross-match radius to 100 kpc at the redshift of the host galaxy
-            cm_radius = 100.0 * (0.05 / redshift) / 3600
+            # By default, set the cross-match radius to 50 kpc at the redshift of the host galaxy
+            cm_radius = 50.0 * (0.05 / redshift) / 3600
             if redshift < 0.01:
-                # for nearby galaxies and galaxies with negative redshifts, do a 10 arc-minute cross-match
+                # for nearby galaxies and galaxies with negative redshifts, do a 5 arc-minute cross-match
                 # (cross-match radius would otherwise get un-physically large for nearby galaxies)
-                cm_radius = 600.0 / 3600
+                cm_radius = 300.0 / 3600
 
             in_galaxy = in_ellipse(ra, dec, alpha1, delta01, cm_radius, 1, 0)
 
@@ -451,7 +451,19 @@ def alert_filter__xmatch_clu(
                 distance_arcsec = round(
                     great_circle_distance(ra, dec, alpha1, delta01) * 3600, 2
                 )
+                # also add a physical distance parameter for redshifts in the Hubble flow
+                if redshift > 0.005:
+                    distance_kpc = round(
+                        great_circle_distance(ra, dec, alpha1, delta01)
+                        * 3600
+                        * (redshift / 0.05),
+                        2,
+                    )
+                else:
+                    distance_kpc = -1
+
                 match["coordinates"]["distance_arcsec"] = distance_arcsec
+                match["coordinates"]["distance_kpc"] = distance_kpc
                 matches.append(match)
 
         xmatches[clu_version] = matches
