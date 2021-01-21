@@ -181,12 +181,10 @@ To incorporate changes recommended by the reviewers, commit edits to your branch
 (there is no need to re-create the pull request, it will automatically track modifications to your branch).
 
 5. Sometimes, while you were working on your feature, the `master` branch is updated with new commits, potentially
-resulting in conflicts with your feature branch. The are two ways to resolve this situation - merging and rebasing,
-please look [here](https://www.atlassian.com/git/tutorials/merging-vs-rebasing) for a detailed discussion.
-While both ways are acceptable, since we are squashing commits from a PR before merging, we prefer the first option:
+resulting in conflicts with your feature branch. To fix this, please merge in the latest `upstream/master` branch:
 
     ```shell script
-    git merge rewrite-contributor-guide upstream/main
+    git merge rewrite-contributor-guide upstream/master
     ```
 Developers may merge `master` into their branch as many times as they want to.
 
