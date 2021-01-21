@@ -37,7 +37,7 @@ def process_file(args):
     if verbose:
         log("Successfully connected")
 
-    collection = "PS1_STRM" # PS1_STRM
+    collection = "PS1_STRM"
 
     if verbose:
         log(f"Processing {file}")
@@ -133,7 +133,7 @@ if __name__ == "__main__":
 
     path = pathlib.Path(args.path)
 
-    files = list(path.glob("hlsp*.csv")) # all PS1 files
+    files = list(path.glob("hlsp*.csv")) # all PS1_STRM files start with hlsp_...
 
     catalog_name = "PS1_STRM"
 
@@ -160,10 +160,10 @@ if __name__ == "__main__":
     m.db[catalog_name].create_index(
         [
             ("class", 1), # the class assigned to the source, using a fiducial decision boundary (i.e GALAXY, STAR, QSO, UNSURE)
-            ("prob_Galaxy", 1),
-            ("prob_QSO", 1),
-            ("z_phot", 1),
-            ("z_photErr", 1)
+            ("prob_Galaxy", 1), #the probability-like neural network output for the galaxy class
+            ("prob_Star", 1), # the probability-like neural network output for the star class
+            ("z_phot", 1), # the Monte-Carlo photometric redshift estimate
+            ("z_photErr", 1) # the calibrated redshift error estimate
         ],
         name="class__prob_Galaxy__prob_QSO__z_phot__z_photErr",
         background=True,
