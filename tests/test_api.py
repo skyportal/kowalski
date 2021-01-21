@@ -255,6 +255,24 @@ class TestAPIs(object):
         assert "autosave" in result["data"]
         assert result["data"]["autosave"]
 
+        # turn update_annotations on
+        resp = await client.put(
+            "/api/filters",
+            json={
+                "group_id": group_id,
+                "filter_id": filter_id,
+                "update_annotations": True,
+            },
+            headers=headers,
+            timeout=5,
+        )
+        assert resp.status == 200
+        result = await resp.json()
+        assert result["status"] == "success"
+        assert "data" in result
+        assert "update_annotations" in result["data"]
+        assert result["data"]["update_annotations"]
+
         # deactivate
         resp = await client.put(
             "/api/filters",

@@ -22,7 +22,6 @@ import numpy as np
 import os
 import pandas as pd
 import requests
-from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 import subprocess
 import sys
@@ -31,6 +30,7 @@ from tensorflow.keras.models import load_model
 import threading
 import time
 import traceback
+from typing import Mapping, Optional, Sequence
 
 from utils import (
     deg2dms,
@@ -44,6 +44,7 @@ from utils import (
     radec2lb,
     time_stamp,
     timer,
+    TimeoutHTTPAdapter,
     ZTFAlert,
 )
 
@@ -53,24 +54,6 @@ tf.config.optimizer.set_jit(True)
 
 """ load config and secrets """
 config = load_config(config_file="config.yaml")["kowalski"]
-
-
-DEFAULT_TIMEOUT = 5  # seconds
-
-
-class TimeoutHTTPAdapter(HTTPAdapter):
-    def __init__(self, *args, **kwargs):
-        self.timeout = DEFAULT_TIMEOUT
-        if "timeout" in kwargs:
-            self.timeout = kwargs["timeout"]
-            del kwargs["timeout"]
-        super().__init__(*args, **kwargs)
-
-    def send(self, request, **kwargs):
-        timeout = kwargs.get("timeout")
-        if timeout is None:
-            kwargs["timeout"] = self.timeout
-        return super().send(request, **kwargs)
 
 
 def read_schema_data(bytes_io):
@@ -87,7 +70,7 @@ def read_schema_data(bytes_io):
 
 class EopError(Exception):
     """
-    Exception raised when reaching end of partition.
+    Exception raised when reaching end of a Kafka topic partition.
     """
 
     def __init__(self, msg):
@@ -105,7 +88,8 @@ class EopError(Exception):
 
 
 def make_photometry(alert: dict, jd_start: float = None):
-    """Make a de-duplicated pandas.DataFrame with photometry of alert['objectId']
+    """
+    Make a de-duplicated pandas.DataFrame with photometry of alert['objectId']
 
     :param alert: ZTF alert packet/dict
     :param jd_start:
@@ -149,7 +133,8 @@ def make_photometry(alert: dict, jd_start: float = None):
 
 
 def make_thumbnail(alert, ttype: str, ztftype: str):
-    """Convert lossless FITS cutouts from ZTF alerts into PNGs
+    """
+    Convert lossless FITS cutouts from ZTF alerts into PNGs
 
     :param alert: ZTF alert packet/dict
     :param ttype: <new|ref|sub>
@@ -207,7 +192,8 @@ def make_thumbnail(alert, ttype: str, ztftype: str):
 
 
 def make_triplet(alert, to_tpu: bool = False):
-    """Make an L2-normalized cutout triplet out of a ZTF alert
+    """
+    Make an L2-normalized cutout triplet out of a ZTF alert
 
     :param alert:
     :param to_tpu:
@@ -251,7 +237,8 @@ def make_triplet(alert, to_tpu: bool = False):
 
 
 def alert_filter__ml(alert, ml_models: dict = None) -> dict:
-    """Execute ML models on ZTF alerts
+    """Execute ML models on a ZTF alert
+
     :param alert:
     :param ml_models:
     :return:
@@ -352,7 +339,7 @@ def alert_filter__xmatch_clu(
     database, alert, size_margin=3, clu_version="CLU_20190625"
 ) -> dict:
     """
-        Filter to apply to each alert: cross-match with the CLU catalog
+    Run cross-match with the CLU catalog
 
     :param database:
     :param alert:
@@ -470,7 +457,8 @@ def alert_filter__user_defined(
     max_time_ms: int = 500,
 ) -> list:
     """
-        Evaluate user-defined filters
+    Evaluate user-defined filters
+
     :param database:
     :param filter_templates:
     :param alert:
@@ -505,6 +493,7 @@ def alert_filter__user_defined(
                         "fid": _filter["fid"],
                         "permissions": _filter["permissions"],
                         "autosave": _filter["autosave"],
+                        "update_annotations": _filter["update_annotations"],
                         "data": filtered_data[0],
                     }
                 )
@@ -519,7 +508,7 @@ def alert_filter__user_defined(
 
 
 def process_alert(record, topic):
-    """Brokering task run by dask workers
+    """Alert brokering task run by dask.distributed workers
 
     :param record: decoded alert from IPAC's Kafka stream
     :param topic: Kafka stream topic name for bookkeeping
@@ -689,7 +678,8 @@ class AlertConsumer:
 
     @staticmethod
     def decode_message(msg):
-        """Decode Avro message according to a schema.
+        """
+        Decode Avro message according to a schema.
 
         :param msg: The Kafka message result from consumer.poll()
         :return:
@@ -861,7 +851,7 @@ class AlertWorker:
         log("Loaded user-defined filters:")
         log(self.filter_templates)
 
-    def api_skyportal(self, method: str, endpoint: str, data=None):
+    def api_skyportal(self, method: str, endpoint: str, data: Optional[Mapping] = None):
         """Make an API call to a SkyPortal instance
 
         :param method:
@@ -908,6 +898,11 @@ class AlertWorker:
         return self.api_skyportal("GET", f"/api/groups/{group_id}")
 
     def get_active_filters(self):
+        """
+        Fetch user-defined filters from own db marked as active
+
+        :return:
+        """
         # todo: query SP to make sure the filters still exist there and we're not out of sync;
         #       clean up if necessary
         return list(
@@ -925,6 +920,7 @@ class AlertWorker:
                             "filter_id": 1,
                             "permissions": 1,
                             "autosave": 1,
+                            "update_annotations": 1,
                             "fv": {
                                 "$arrayElemAt": [
                                     {
@@ -945,7 +941,7 @@ class AlertWorker:
             )
         )
 
-    def make_filter_templates(self, active_filters):
+    def make_filter_templates(self, active_filters: Sequence):
         """
         Make filter templates by adding metadata, prepending upstream aggregation stages and setting permissions
 
@@ -1003,6 +999,7 @@ class AlertWorker:
                 "fid": active_filter["fv"]["fid"],
                 "permissions": active_filter["permissions"],
                 "autosave": active_filter["autosave"],
+                "update_annotations": active_filter["update_annotations"],
                 "pipeline": deepcopy(pipeline),
             }
 
@@ -1010,6 +1007,11 @@ class AlertWorker:
         return filter_templates
 
     def reload_filters(self):
+        """
+        Helper function to periodically reload filters from SkyPortal
+
+        :return:
+        """
         while True:
             time.sleep(60 * 5)
 
@@ -1017,7 +1019,16 @@ class AlertWorker:
             self.filter_templates = self.make_filter_templates(active_filters)
 
     @staticmethod
-    def alert_mongify(alert):
+    def alert_mongify(alert: Mapping):
+        """
+        Prepare a raw ZTF alert for ingestion into MongoDB:
+          - add a placeholder for ML-based classifications
+          - add coordinates for 2D spherical indexing and compute Galactic coordinates
+          - cut off the prv_candidates section
+
+        :param alert:
+        :return:
+        """
 
         doc = dict(alert)
 
@@ -1052,7 +1063,13 @@ class AlertWorker:
 
         return doc, prv_candidates
 
-    def alert_post_candidate(self, alert, filter_ids):
+    def alert_post_candidate(self, alert: Mapping, filter_ids: Sequence):
+        """
+        Post a ZTF alert as a candidate for filters on SkyPortal
+        :param alert:
+        :param filter_ids:
+        :return:
+        """
         # post metadata with all filter_ids in single call to /api/candidates
         alert_thin = {
             "id": alert["objectId"],
@@ -1080,7 +1097,14 @@ class AlertWorker:
             )
             log(response.json())
 
-    def alert_post_source(self, alert, group_ids):
+    def alert_post_source(self, alert: Mapping, group_ids: Sequence):
+        """
+        Save a ZTF alert as a source to groups on SkyPortal
+
+        :param alert:
+        :param group_ids:
+        :return:
+        """
         # save source
         alert_thin = {
             "id": alert["objectId"],
@@ -1103,7 +1127,14 @@ class AlertWorker:
             )
             log(response.json())
 
-    def alert_post_annotations(self, alert, passed_filters):
+    def alert_post_annotations(self, alert: Mapping, passed_filters: Sequence):
+        """
+        Post annotations to SkyPortal for an alert that passed user-defined filters
+
+        :param alert:
+        :param passed_filters:
+        :return:
+        """
         for passed_filter in passed_filters:
             annotations = {
                 "obj_id": alert["objectId"],
@@ -1111,18 +1142,92 @@ class AlertWorker:
                 "data": passed_filter.get("data", dict()).get("annotations", dict()),
                 "group_ids": [passed_filter.get("group_id")],
             }
-            with timer(
-                f"Posting annotation for {alert['objectId']} {alert['candid']} to SkyPortal",
-                self.verbose > 1,
-            ):
-                response = self.api_skyportal("POST", "/api/annotation", annotations)
-            if response.json()["status"] == "success":
-                log(f"Posted {alert['objectId']} annotation to SkyPortal")
-            else:
-                log(f"Failed to post {alert['objectId']} annotation to SkyPortal")
-                log(response.json())
+            if len(annotations["data"]) > 0:
+                with timer(
+                    f"Posting annotation for {alert['objectId']} {alert['candid']} to SkyPortal",
+                    self.verbose > 1,
+                ):
+                    response = self.api_skyportal(
+                        "POST", "/api/annotation", annotations
+                    )
+                if response.json()["status"] == "success":
+                    log(f"Posted {alert['objectId']} annotation to SkyPortal")
+                else:
+                    log(f"Failed to post {alert['objectId']} annotation to SkyPortal")
+                    log(response.json())
 
-    def alert_post_thumbnails(self, alert):
+    def alert_put_annotations(self, alert: Mapping, passed_filters: Sequence):
+        """
+        Update annotations on SkyPortal for an alert that passed user-defined filters
+
+        :param alert:
+        :param passed_filters:
+        :return:
+        """
+        # first need to learn existing annotation id's and corresponding author id's to use with the PUT call
+        with timer(
+            f"Getting annotations for {alert['objectId']} from SkyPortal",
+            self.verbose > 1,
+        ):
+            response = self.api_skyportal(
+                "GET", f"/api/sources/{alert['objectId']}/annotations"
+            )
+        if response.json()["status"] == "success":
+            log(f"Got {alert['objectId']} annotations from SkyPortal")
+        else:
+            log(f"Failed to get {alert['objectId']} annotations from SkyPortal")
+            log(response.json())
+            return False
+        existing_annotations = {
+            annotation["origin"]: {
+                "annotation_id": annotation["id"],
+                "author_id": annotation["author"]["id"],
+            }
+            for annotation in response.json()["data"]
+        }
+
+        for passed_filter in passed_filters:
+            origin = (
+                f"{passed_filter.get('group_name')}:{passed_filter.get('filter_name')}"
+            )
+
+            # no annotation exists on SkyPortal for this object? just post then
+            if origin not in existing_annotations:
+                self.alert_post_annotations(alert, [passed_filter])
+                continue
+
+            annotations = {
+                "author_id": existing_annotations["origin"]["author_id"],
+                "obj_id": alert["objectId"],
+                "origin": origin,
+                "data": passed_filter.get("data", dict()).get("annotations", dict()),
+                "group_ids": [passed_filter.get("group_id")],
+            }
+            if len(annotations["data"]) > 0 and passed_filter.get(
+                "update_annotation", False
+            ):
+                with timer(
+                    f"Putting annotation for {alert['objectId']} {alert['candid']} to SkyPortal",
+                    self.verbose > 1,
+                ):
+                    response = self.api_skyportal(
+                        "PUT",
+                        f"/api/annotation/{existing_annotations['origin']['annotation_id']}",
+                        annotations,
+                    )
+                if response.json()["status"] == "success":
+                    log(f"Posted {alert['objectId']} annotation to SkyPortal")
+                else:
+                    log(f"Failed to post {alert['objectId']} annotation to SkyPortal")
+                    log(response.json())
+
+    def alert_post_thumbnails(self, alert: Mapping):
+        """
+        Post ZTF alert thumbnails to SkyPortal
+
+        :param alert:
+        :return:
+        """
         for ttype, ztftype in [
             ("new", "Science"),
             ("ref", "Template"),
@@ -1294,8 +1399,8 @@ class AlertWorker:
                 # post candidate with new filter ids
                 self.alert_post_candidate(alert, filter_ids)
 
-                # fixme: put annotations
-                self.alert_post_annotations(alert, passed_filters)
+                # put annotations
+                self.alert_put_annotations(alert, passed_filters)
 
             groups = deepcopy(passed_filters)
             group_ids = [f.get("group_id") for f in groups]

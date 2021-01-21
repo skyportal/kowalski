@@ -1692,6 +1692,7 @@ async def filters_get_group_id(request):
                 "catalog": "ZTF_alerts",
                 "permissions": [1, 2],
                 "autosave": false,
+                "update_annotations": false,
                 "active": true,
                 "active_fid": "nnsun9",
                 "fv": [
@@ -1817,6 +1818,7 @@ async def filters_get_group_id_filter_id(request):
                 "catalog": "ZTF_alerts",
                 "permissions": [1, 2],
                 "autosave": false,
+                "update_annotations": false,
                 "active": true,
                 "active_fid": "nnsun9",
                 "fv": [
@@ -1935,6 +1937,10 @@ async def filters_post(request):
                 type: boolean
                 description: "automatically save passing alerts to group <group_id>"
                 default: false
+              update_annotations:
+                type: boolean
+                description: "update existing annotations for newly passing alerts"
+                default: false
               pipeline:
                 type: array
                 items:
@@ -1981,6 +1987,7 @@ async def filters_post(request):
                 "catalog": ZTF_alerts
                 "permissions": [1, 2, 3]
                 "autosave": true
+                "update_annotations": false
                 "pipeline": [
                 {
                   "$match": {
@@ -2079,6 +2086,7 @@ async def filters_post(request):
         catalog = filter_spec.get("catalog", None)
         permissions = filter_spec.get("permissions", None)
         autosave = filter_spec.get("autosave", False)
+        update_annotations = filter_spec.get("update_annotations", False)
         pipeline = filter_spec.get("pipeline", None)
         if group_id is None:
             return web.json_response(
@@ -2101,7 +2109,8 @@ async def filters_post(request):
                 {"status": "error", "message": "pipeline must be set"}, status=400
             )
 
-        autosave = True if autosave in ("t", "True", "true", "1", True) else False
+        autosave = forgiving_true(autosave)
+        update_annotations = forgiving_true(update_annotations)
 
         group_id = int(group_id)
         filter_id = int(filter_id)
@@ -2187,6 +2196,7 @@ async def filters_post(request):
                 "catalog": catalog,
                 "permissions": permissions,
                 "autosave": autosave,
+                "update_annotations": update_annotations,
                 "active": True,
                 "active_fid": fid,
                 "fv": [],
@@ -2274,6 +2284,10 @@ async def filters_test_post(request):
                 type: boolean
                 description: "automatically save passing alerts to group <group_id>"
                 default: false
+              update_annotations:
+                type: boolean
+                description: "update existing annotations for newly passing alerts"
+                default: false
               pipeline:
                 type: array
                 items:
@@ -2320,6 +2334,7 @@ async def filters_test_post(request):
                 "catalog": ZTF_alerts
                 "permissions": [1, 2]
                 "autosave": true
+                "update_annotations": false
                 "pipeline": [
                     {
                         "$match": {
@@ -2420,6 +2435,7 @@ async def filters_test_post(request):
         catalog = filter_spec.get("catalog", None)
         permissions = filter_spec.get("permissions", None)
         autosave = filter_spec.get("autosave", False)
+        update_annotations = filter_spec.get("update_annotations", False)
         pipeline = filter_spec.get("pipeline", None)
         if group_id is None:
             return web.json_response(
@@ -2442,7 +2458,8 @@ async def filters_test_post(request):
                 {"status": "error", "message": "pipeline must be set"}, status=400
             )
 
-        autosave = True if autosave in ("t", "True", "true", "1") else False
+        autosave = forgiving_true(autosave)
+        update_annotations = forgiving_true(update_annotations)
 
         if not isinstance(pipeline, str):
             pipeline = dumps(pipeline)
@@ -2491,11 +2508,9 @@ async def filters_test_post(request):
             filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][
                 0
             ]["$in"][1] = permissions
-            # log(filter_template)
             cursor = request.app["mongo"][catalog].aggregate(
                 filter_template, allowDiskUse=False, maxTimeMS=500
             )
-            # passed_filter = await cursor.to_list(length=None)
             await cursor.to_list(length=None)
         else:
             return web.json_response(
@@ -2595,6 +2610,23 @@ async def filters_put(request):
                   autosave:
                     type: boolean
                     description: "autosave candidates that pass filter to corresponding group?"
+              - type: object
+                required:
+                  - group_id
+                  - filter_id
+                  - update_annotations
+                properties:
+                  group_id:
+                    type: integer
+                    description: "[fritz] user group (science program) id"
+                    minimum: 1
+                  filter_id:
+                    type: integer
+                    description: "[fritz] science program filter id for this user group id"
+                    minimum: 1
+                  update_annotations:
+                    type: boolean
+                    description: "update annotations for new candidates that previously passed filter?"
 
           examples:
             filter_1:
@@ -2612,6 +2644,11 @@ async def filters_put(request):
                 "group_id": 1
                 "filter_id": 1
                 "autosave": true
+            filter_4:
+              value:
+                "group_id": 1
+                "filter_id": 1
+                "update_annotations": true
 
     responses:
       '200':
@@ -2688,6 +2725,7 @@ async def filters_put(request):
         active = filter_spec.get("active", None)
         active_fid = filter_spec.get("active_fid", None)
         autosave = filter_spec.get("autosave", None)
+        update_annotations = filter_spec.get("update_annotations", None)
         if group_id is None:
             return web.json_response(
                 {"status": "error", "message": "group_id must be set"}, status=400
@@ -2696,11 +2734,11 @@ async def filters_put(request):
             return web.json_response(
                 {"status": "error", "message": "filter_id must be set"}, status=400
             )
-        if (active, active_fid, autosave).count(None) != 2:
+        if (active, active_fid, autosave, update_annotations).count(None) != 3:
             return web.json_response(
                 {
                     "status": "error",
-                    "message": "one of (active, active_fid, autosave) must be set",
+                    "message": "exactly one of (active, active_fid, autosave, update_annotations) must be set",
                 },
                 status=400,
             )
@@ -2753,6 +2791,16 @@ async def filters_put(request):
             )
 
             return_data = {"autosave": autosave}
+
+        elif update_annotations is not None:
+            update_annotations = forgiving_true(update_annotations)
+
+            r = await request.app["mongo"].filters.update_one(
+                {"_id": doc_saved["_id"]},
+                {"$set": {"update_annotations": update_annotations}},
+            )
+
+            return_data = {"update_annotations": update_annotations}
 
         if r.modified_count == 0:
             return web.json_response(

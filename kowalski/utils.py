@@ -27,6 +27,7 @@ __all__ = [
     "sdss_url",
     "time_stamp",
     "timer",
+    "TimeoutHTTPAdapter",
     "uid",
     "ZTFAlert",
 ]
@@ -49,6 +50,7 @@ import os
 import pandas as pd
 import pymongo
 from pymongo.errors import BulkWriteError
+from requests.adapters import HTTPAdapter
 import secrets
 import string
 import time
@@ -57,6 +59,24 @@ import yaml
 
 
 pi = 3.141592653589793
+
+
+DEFAULT_TIMEOUT = 5  # seconds
+
+
+class TimeoutHTTPAdapter(HTTPAdapter):
+    def __init__(self, *args, **kwargs):
+        self.timeout = DEFAULT_TIMEOUT
+        if "timeout" in kwargs:
+            self.timeout = kwargs["timeout"]
+            del kwargs["timeout"]
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        timeout = kwargs.get("timeout")
+        if timeout is None:
+            kwargs["timeout"] = self.timeout
+        return super().send(request, **kwargs)
 
 
 def load_config(path="/app", config_file="config.yaml"):
