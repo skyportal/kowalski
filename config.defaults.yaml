@@ -397,7 +397,7 @@ kowalski:
         # fixme: adjust number of workers -w for your system (e.g. -w 40 for kowalski.caltech.edu)
         command: >
           /usr/local/bin/gunicorn
-          -w 10
+          -w 2
           --bind 0.0.0.0:4000
           --worker-tmp-dir /dev/shm
           --worker-class aiohttp.GunicornUVLoopWebWorker

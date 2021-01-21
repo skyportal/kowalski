@@ -1,16 +1,129 @@
 #!/usr/bin/env python
-import argparse
+import bz2
+from contextlib import contextmanager
 from deepdiff import DeepDiff
+from distutils.version import LooseVersion as Version
+import fire
 import pathlib
 from pprint import pprint
 import questionary
 import subprocess
 import sys
 import time
+from typing import Optional, Sequence
 import yaml
 
 
-def check_configs(config_wildcards=("config.*yaml", "docker-compose.*yaml")):
+dependencies = {
+    "python": (
+        # Command to get version
+        ["python", "--version"],
+        # Extract *only* the version number
+        lambda v: v.split()[1],
+        # It must be >= 3.7
+        "3.7",
+    ),
+    "docker": (
+        # Command to get version
+        ["docker", "--version"],
+        # Extract *only* the version number
+        lambda v: v.split()[2][:-1],
+        # It must be >= 18.06
+        "18.06",
+    ),
+    "docker-compose": (
+        # Command to get version
+        ["docker-compose", "--version"],
+        # Extract *only* the version number
+        lambda v: v.split()[2][:-1],
+        # It must be >= 1.22.0
+        "1.22.0",
+    ),
+}
+
+
+@contextmanager
+def status(message):
+    """
+    Borrowed from https://github.com/cesium-ml/baselayer/
+
+    :param message: message to print
+    :return:
+    """
+    print(f"[·] {message}", end="")
+    sys.stdout.flush()
+    try:
+        yield
+    except Exception:
+        print(f"\r[✗] {message}")
+        raise
+    else:
+        print(f"\r[✓] {message}")
+
+
+def deps_ok() -> bool:
+    """
+    Check system dependencies
+
+    Borrowed from https://github.com/cesium-ml/baselayer/
+    :return:
+    """
+    print("Checking system dependencies:")
+
+    fail = []
+
+    for dep, (cmd, get_version, min_version) in dependencies.items():
+        try:
+            query = f"{dep} >= {min_version}"
+            with status(query):
+                p = subprocess.Popen(
+                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+                )
+                out, err = p.communicate()
+                try:
+                    version = get_version(out.decode("utf-8").strip())
+                    print(f"[{version.rjust(8)}]".rjust(40 - len(query)), end="")
+                except Exception:
+                    raise ValueError("Could not parse version")
+
+                if not (Version(version) >= Version(min_version)):
+                    raise RuntimeError(f"Required {min_version}, found {version}")
+        except Exception as e:
+            fail.append((dep, e))
+
+    if fail:
+        print()
+        print("[!] Some system dependencies seem to be unsatisfied")
+        print()
+        print("    The failed checks were:")
+        print()
+        for (pkg, exc) in fail:
+            cmd, get_version, min_version = dependencies[pkg]
+            print(f'    - {pkg}: `{" ".join(cmd)}`')
+            print("     ", exc)
+        print()
+        print(
+            "    Please refer to https://github.com/dmitryduev/tails "
+            "for installation instructions."
+        )
+        print()
+        return False
+
+    print("-" * 20)
+    return True
+
+
+def check_configs(
+    config_wildcards: Sequence = ("config.*yaml", "docker-compose.*yaml")
+):
+    """
+    - Check if config files exist
+    - Offer to use the config files that match the wildcards
+    - For config.yaml, check its contents against the defaults to make sure nothing is missing/wrong
+
+    :param config_wildcards:
+    :return:
+    """
     path = pathlib.Path(__file__).parent.absolute()
 
     for config_wildcard in config_wildcards:
@@ -42,89 +155,91 @@ def check_configs(config_wildcards=("config.*yaml", "docker-compose.*yaml")):
                 raise KeyError("Fix config.yaml before proceeding")
 
 
-def up(arguments):
-    """
-    Launch Kowalski
+class Kowalski:
+    def __init__(self, yes=False):
+        """
 
-    :param arguments:
-    :return:
-    """
-    print("Spinning up Kowalski 🚀")
+        :param yes: answer yes to all possible requests?
+        """
+        self.yes = yes
 
-    config_wildcards = ["config.*yaml", "docker-compose.*yaml"]
+    @staticmethod
+    def up(build: bool = False):
+        """
+        🐧🚀 Launch Kowalski
 
-    command = ["docker-compose", "-f", "docker-compose.yaml", "up", "-d"]
+        :param build: build the containers first?
+        :return:
+        """
+        print("Spinning up Kowalski 🐧🚀")
 
-    if args.build:
-        command += ["--build"]
+        config_wildcards = ["config.*yaml", "docker-compose.*yaml"]
 
-    # check configuration
-    print("Checking configuration")
-    check_configs(config_wildcards=config_wildcards)
+        command = ["docker-compose", "-f", "docker-compose.yaml", "up", "-d"]
 
-    # start up Kowalski
-    print("Starting up")
-    subprocess.run(command)
+        if build:
+            command += ["--build"]
 
+        # check configuration
+        with status("Checking configuration"):
+            check_configs(config_wildcards=config_wildcards)
 
-def down(arguments):
-    """
-        Shut Kowalski down
-    :param arguments:
-    :return:
-    """
-    print("Shutting down Kowalski")
-    command = ["docker-compose", "-f", "docker-compose.yaml", "down"]
+        # start up Kowalski
+        print("Starting up")
+        subprocess.run(command)
 
-    subprocess.run(command)
+    @staticmethod
+    def down():
+        """
+        ✋ Shut down Kowalski
 
+        :return:
+        """
+        print("Shutting down Kowalski")
+        command = ["docker-compose", "-f", "docker-compose.yaml", "down"]
 
-def build(arguments):
-    """
+        subprocess.run(command)
+
+    @staticmethod
+    def build():
+        """
         Build Kowalski's containers
-    :param arguments:
-    :return:
-    """
-    print("Building Kowalski")
 
-    config_wildcards = ["config.*yaml", "docker-compose.*yaml"]
+        :return:
+        """
+        print("Building Kowalski")
 
-    # always use docker-compose.yaml
-    command = ["docker-compose", "-f", "docker-compose.yaml", "build"]
+        config_wildcards = ["config.*yaml", "docker-compose.*yaml"]
 
-    # check configuration
-    print("Checking configuration")
-    check_configs(config_wildcards=config_wildcards)
+        # always use docker-compose.yaml
+        command = ["docker-compose", "-f", "docker-compose.yaml", "build"]
 
-    subprocess.run(command)
+        # check configuration
+        with status("Checking configuration"):
+            check_configs(config_wildcards=config_wildcards)
 
+        subprocess.run(command)
 
-def seed(arguments):
-    print("Ingesting catalog dumps into a running Kowalski instance")
+    @staticmethod
+    def seed(source: str = "./", drop: Optional[bool] = False):
+        """
+        Ingest catalog dumps into Kowalski
 
-    if (not arguments.local) and (not arguments.gcs):
-        raise ValueError("Source not set, aborting")
+        :param source: where to look for the dumps;
+                       can be a local path or a Google Cloud Storage bucket address, e.g. gs://kowalski-catalogs
+        :param drop: drop existing collections with same names before ingesting?
+        :return:
+        """
+        print("Ingesting catalog dumps into a running Kowalski instance")
 
-    # check configuration
-    print("Checking configuration")
-    check_configs(config_wildcards=["config.*yaml"])
+        # check configuration
+        with status("Checking configuration"):
+            check_configs(config_wildcards=["config.*yaml"])
 
-    with open(pathlib.Path(__file__).parent.absolute() / "config.yaml") as config_yaml:
-        config = yaml.load(config_yaml, Loader=yaml.FullLoader)["kowalski"]
-
-    if arguments.local:
-        path = pathlib.Path(arguments.local).absolute()
-
-        dumps = [p.name for p in path.glob("*.dump")]
-
-        if len(dumps) == 0:
-            print(f"No dumps found under {path}")
-            return False
-
-        answer = questionary.checkbox(
-            "Found the following collection dumps. Which ones would you like to ingest?",
-            choices=dumps,
-        ).ask()
+        with open(
+            pathlib.Path(__file__).parent.absolute() / "config.yaml"
+        ) as config_yaml:
+            config = yaml.load(config_yaml, Loader=yaml.FullLoader)["kowalski"]
 
         command = [
             "docker",
@@ -138,172 +253,202 @@ def seed(arguments):
             "--archive",
         ]
 
-        if arguments.drop:
+        if drop:
             command.append("--drop")
 
-        for dump in answer:
-            with open(f"{path / dump}") as f:
-                subprocess.call(command, stdin=f)
+        if "gs://" not in source:
+            # ingesting from a local path
+            path = pathlib.Path(source).absolute()
 
-    if arguments.gcs:
-        # print("Make sure gsutil is properly configured")
-        raise NotImplementedError()
+            dumps = [p.name for p in path.glob("*.dump")]
 
+            if len(dumps) == 0:
+                print(f"No catalog dumps found under {path}")
+                return False
 
-def test(arguments):
-    print("Running the test suite")
+            answer = questionary.checkbox(
+                "Found the following collection dumps. Which ones would you like to ingest?",
+                choices=dumps,
+            ).ask()
 
-    # make sure the containers are up and running
-    num_retries = 10
-    for i in range(num_retries):
-        if i == num_retries - 1:
-            raise RuntimeError("Kowalski's containers failed to spin up")
+            for dump in answer:
+                with open(f"{path / dump}") as f:
+                    subprocess.call(command, stdin=f)
 
-        command = ["docker", "ps", "-a"]
-        container_list = (
-            subprocess.check_output(command, universal_newlines=True)
-            .strip()
-            .split("\n")
-        )
-        if len(container_list) == 1:
-            print("No containers are running, waiting...")
-            time.sleep(2)
-            continue
+        else:
+            # ingesting from Google Cloud
+            path_tmp = pathlib.Path(__file__).parent / ".catalog_dumps"
+            if not path_tmp.exists():
+                path_tmp.mkdir(parents=True, exist_ok=True)
 
-        containers_up = (
-            len(
-                [
-                    container
-                    for container in container_list
-                    if container_name in container and " Up " in container
-                ]
+            ls_command = ["gsutil", "ls", source]
+            catalog_list = (
+                subprocess.check_output(ls_command, universal_newlines=True)
+                .strip()
+                .split("\n")
             )
-            > 0
-            for container_name in ("kowalski_ingester_1", "kowalski_api_1")
-        )
+            dumps = [dump for dump in catalog_list if "dump" in dump]
 
-        if not all(containers_up):
-            print("Kowalski's containers are not up, waiting...")
-            time.sleep(2)
-            continue
+            answer = questionary.checkbox(
+                "Found the following collection dumps. Which ones would you like to ingest?",
+                choices=dumps,
+            ).ask()
 
-        break
+            for dump in answer:
+                cp_command = [
+                    "gsutil",
+                    "-m",
+                    "cp",
+                    "-n",
+                    dump,
+                    str(path_tmp),
+                ]
+                p = subprocess.run(cp_command, check=True)
+                if p.returncode != 0:
+                    raise RuntimeError(f"Failed to fetch {dump}")
 
-    print("Testing ZTF alert ingestion")
+                path_dump = f"{path_tmp / pathlib.Path(dump).name}"
+                if dump.endswith(".bz2"):
+                    with bz2.BZ2File(path_dump) as f:
+                        subprocess.call(command, stdin=f)
+                elif dump.endswith(".gz"):
+                    with open(path_dump) as f:
+                        subprocess.call(command + ["--gzip"], stdin=f)
+                else:
+                    with open(path_dump) as f:
+                        subprocess.call(command, stdin=f)
 
-    command = [
-        "docker",
-        "exec",
-        "-i",
-        "kowalski_ingester_1",
-        "python",
-        "-m",
-        "pytest",
-        "-s",
-        "test_ingester.py",
-    ]
-    try:
-        subprocess.run(command, check=True)
-    except subprocess.CalledProcessError:
-        sys.exit(1)
+                rm_fetched = questionary.confirm(f"Remove {path_dump}?").ask()
+                if rm_fetched:
+                    pathlib.Path(path_dump).unlink()
 
-    print("Testing API")
-    command = [
-        "docker",
-        "exec",
-        "-i",
-        "kowalski_api_1",
-        "python",
-        "-m",
-        "pytest",
-        "-s",
-        "test_api.py",
-    ]
-    try:
-        subprocess.run(command, check=True)
-    except subprocess.CalledProcessError:
-        sys.exit(1)
+    @staticmethod
+    def test():
+        """
+        Run the test suite
 
-    print("Testing TNS monitoring")
-    command = [
-        "docker",
-        "exec",
-        "-i",
-        "kowalski_ingester_1",
-        "python",
-        "-m",
-        "pytest",
-        "-s",
-        "test_tns_watcher.py",
-    ]
-    try:
-        subprocess.run(command, check=True)
-    except subprocess.CalledProcessError:
-        sys.exit(1)
+        :return:
+        """
+        print("Running the test suite")
 
+        # make sure the containers are up and running
+        num_retries = 10
+        for i in range(num_retries):
+            if i == num_retries - 1:
+                raise RuntimeError("Kowalski's containers failed to spin up")
 
-def develop(arguments=None):
-    """
-    Install developer tools.
-    """
-    subprocess.run(["pip", "install", "-U", "pre-commit"], check=True)
-    subprocess.run(["pre-commit", "install"], check=True)
+            command = ["docker", "ps", "-a"]
+            container_list = (
+                subprocess.check_output(command, universal_newlines=True)
+                .strip()
+                .split("\n")
+            )
+            if len(container_list) == 1:
+                print("No containers are running, waiting...")
+                time.sleep(2)
+                continue
 
+            containers_up = (
+                len(
+                    [
+                        container
+                        for container in container_list
+                        if container_name in container and " Up " in container
+                    ]
+                )
+                > 0
+                for container_name in ("kowalski_ingester_1", "kowalski_api_1")
+            )
 
-def lint(arguments):
-    try:
-        import pre_commit  # noqa: F401
-    except ImportError:
-        develop()
+            if not all(containers_up):
+                print("Kowalski's containers are not up, waiting...")
+                time.sleep(2)
+                continue
 
-    try:
-        subprocess.run(["pre-commit", "run", "--all-files"], check=True)
-    except subprocess.CalledProcessError:
-        sys.exit(1)
+            break
+
+        print("Testing ZTF alert ingestion")
+
+        command = [
+            "docker",
+            "exec",
+            "-i",
+            "kowalski_ingester_1",
+            "python",
+            "-m",
+            "pytest",
+            "-s",
+            "test_ingester.py",
+        ]
+        try:
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError:
+            sys.exit(1)
+
+        print("Testing API")
+        command = [
+            "docker",
+            "exec",
+            "-i",
+            "kowalski_api_1",
+            "python",
+            "-m",
+            "pytest",
+            "-s",
+            "test_api.py",
+        ]
+        try:
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError:
+            sys.exit(1)
+
+        print("Testing TNS monitoring")
+        command = [
+            "docker",
+            "exec",
+            "-i",
+            "kowalski_ingester_1",
+            "python",
+            "-m",
+            "pytest",
+            "-s",
+            "test_tns_watcher.py",
+        ]
+        try:
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError:
+            sys.exit(1)
+
+    @staticmethod
+    def develop():
+        """
+        Install developer tools
+        """
+        subprocess.run(["pip", "install", "-U", "pre-commit"], check=True)
+        subprocess.run(["pre-commit", "install"], check=True)
+
+    @classmethod
+    def lint(cls):
+        """
+        Lint the full code base
+
+        :return:
+        """
+        try:
+            import pre_commit  # noqa: F401
+        except ImportError:
+            cls.develop()
+
+        try:
+            subprocess.run(["pre-commit", "run", "--all-files"], check=True)
+        except subprocess.CalledProcessError:
+            sys.exit(1)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(title="commands", dest="command")
+    # check environment
+    env_ok = deps_ok()
+    if not env_ok:
+        raise RuntimeError("Halting because of unsatisfied system dependencies")
 
-    parent_parser = argparse.ArgumentParser(add_help=False)
-    parent_parser.add_argument(
-        "--yes", action="store_true", help="Answer yes for all questions"
-    )
-
-    commands = [
-        ("up", "🐧🚀 Launch Kowalski"),
-        ("down", "✋ Shut down Kowalski"),
-        ("build", "Build Kowalski's containers"),
-        ("seed", "Ingest catalog dumps into Kowalski"),
-        ("test", "Run the test suite"),
-        ("develop", "Install tools for developing Fritz"),
-        ("lint", "Lint the full code base"),
-        ("help", "Print this message"),
-    ]
-
-    parsers = {}
-    for (cmd, desc) in commands:
-        parsers[cmd] = subparsers.add_parser(cmd, help=desc, parents=[parent_parser])
-
-    parsers["up"].add_argument(
-        "--build", action="store_true", help="Force (re)building Kowalski's containers"
-    )
-
-    parsers["seed"].add_argument(
-        "--local", type=str, help="Local path to look for stored collection dumps"
-    )
-    parsers["seed"].add_argument(
-        "--gcs",
-        type=str,
-        help="Google Cloud Storage bucket name to look for collection dumps",
-    )
-    parsers["seed"].add_argument(
-        "--drop", action="store_true", help="Drop collections before ingestion"
-    )
-
-    args = parser.parse_args()
-    if args.command is None or args.command == "help":
-        parser.print_help()
-    else:
-        getattr(sys.modules[__name__], args.command)(args)
+    fire.Fire(Kowalski)
