@@ -182,26 +182,26 @@ def init_db_sync(config, verbose=False):
     Initialize db if necessary: create the sole non-admin user
     """
     client = pymongo.MongoClient(
-        host=config["sentinel"]["database"]["host"],
-        port=config["sentinel"]["database"]["port"],
-        username=config["sentinel"]["database"]["admin_username"],
-        password=config["sentinel"]["database"]["admin_password"],
+        host=config["database"]["host"],
+        port=config["database"]["port"],
+        username=config["database"]["admin_username"],
+        password=config["database"]["admin_password"],
     )
 
     user_ids = []
     for _u in client.admin.system.users.find({}, {"_id": 1}):
         user_ids.append(_u["_id"])
 
-    db_name = config["sentinel"]["database"]["db"]
-    username = config["sentinel"]["database"]["username"]
+    db_name = config["database"]["db"]
+    username = config["database"]["username"]
 
     _mongo = client[db_name]
 
     if f"{db_name}.{username}" not in user_ids:
         _mongo.command(
             "createUser",
-            config["sentinel"]["database"]["username"],
-            pwd=config["sentinel"]["database"]["password"],
+            config["database"]["username"],
+            pwd=config["database"]["password"],
             roles=["readWrite"],
         )
         if verbose:
