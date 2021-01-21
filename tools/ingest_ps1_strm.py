@@ -21,6 +21,7 @@ from utils import (
 """ load config and secrets """
 config = load_config(config_file="config.yaml")["kowalski"]
 
+
 def process_file(args):
     file, collection, batch_size, rm, verbose = args
     # connect to MongoDB:
@@ -49,7 +50,9 @@ def process_file(args):
         if verbose:
             log(f"{file}: processing batch # {chunk_index + 1}")
 
-        dataframe_chunk["_id"] = dataframe_chunk["objID"].apply(lambda x: str(x)) #objID from PS1 table
+        dataframe_chunk["_id"] = dataframe_chunk["objID"].apply(
+            lambda x: str(x)
+        )  # objID from PS1 table
 
         batch = dataframe_chunk.fillna("DROPMEPLEASE").to_dict(orient="records")
 
@@ -106,6 +109,8 @@ def process_file(args):
         os.remove(file)
         if verbose:
             log(f"Successfully removed {file}")
+
+
 if __name__ == "__main__":
     # Note CSV data files will be taken from https://archive.stsci.edu/hlsps/ps1-strm/
     parser = argparse.ArgumentParser()
@@ -133,7 +138,7 @@ if __name__ == "__main__":
 
     path = pathlib.Path(args.path)
 
-    files = list(path.glob("hlsp*.csv")) # all PS1_STRM files start with hlsp_...
+    files = list(path.glob("hlsp*.csv"))  # all PS1_STRM files start with hlsp_...
 
     catalog_name = "PS1_STRM"
 
@@ -154,16 +159,23 @@ if __name__ == "__main__":
     m.db[catalog_name].create_index(
         [("coordinates.radec_geojson", "2dsphere"), ("_id", 1)], background=True
     )
-    m.db[catalog_name].create_index(
-        [("raMean", 1), ("decMean", 1)], background=True
-    )
+    m.db[catalog_name].create_index([("raMean", 1), ("decMean", 1)], background=True)
     m.db[catalog_name].create_index(
         [
-            ("class", 1), # the class assigned to the source, using a fiducial decision boundary (i.e GALAXY, STAR, QSO, UNSURE)
-            ("prob_Galaxy", 1), #the probability-like neural network output for the galaxy class
-            ("prob_Star", 1), # the probability-like neural network output for the star class
-            ("z_phot", 1), # the Monte-Carlo photometric redshift estimate
-            ("z_photErr", 1) # the calibrated redshift error estimate
+            (
+                "class",
+                1,
+            ),  # the class assigned to the source, using a fiducial decision boundary (i.e GALAXY, STAR, QSO, UNSURE)
+            (
+                "prob_Galaxy",
+                1,
+            ),  # the probability-like neural network output for the galaxy class
+            (
+                "prob_Star",
+                1,
+            ),  # the probability-like neural network output for the star class
+            ("z_phot", 1),  # the Monte-Carlo photometric redshift estimate
+            ("z_photErr", 1),  # the calibrated redshift error estimate
         ],
         name="class__prob_Galaxy__prob_QSO__z_phot__z_photErr",
         background=True,
