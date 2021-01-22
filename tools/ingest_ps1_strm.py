@@ -43,16 +43,28 @@ def process_file(args):
     if verbose:
         log(f"Processing {file}")
 
+    names = [
+        'objID', 'uniquePspsOBid', 'raMean', 'decMean', 'l', 'b', 'class', 'prob_Galaxy', 'prob_Star', 'prob_QSO',
+        'extrapolation_Class', 'cellDistance_Class', 'cellID_Class', 'z_phot', 'z_photErr', 'z_phot0',
+        'extrapolation_Photoz', 'cellDistance_Photoz', 'cellID_Photoz'
+    ]
+
     for chunk_index, dataframe_chunk in enumerate(
-        pd.read_csv(file, chunksize=batch_size)
+        pd.read_csv(
+            file,
+            chunksize=batch_size,
+            names=names,
+        )
     ):
 
         if verbose:
             log(f"{file}: processing batch # {chunk_index + 1}")
 
-        dataframe_chunk["_id"] = dataframe_chunk["objID"].apply(
+        dataframe_chunk = dataframe_chunk.replace(-999, "DROPMEPLEASE")
+
+        dataframe_chunk["_id"] = dataframe_chunk["uniquePspsOBid"].apply(
             lambda x: str(x)
-        )  # objID from PS1 table
+        )  # unique id uniquePspsOBid from PS1 table
 
         batch = dataframe_chunk.fillna("DROPMEPLEASE").to_dict(orient="records")
 
@@ -61,7 +73,7 @@ def process_file(args):
             {
                 key: value
                 for key, value in document.items()
-                if value not in ("DROPMEPLEASE", "NOT_AVAILABLE")
+                if (value not in ("DROPMEPLEASE", "NOT_AVAILABLE"))
             }
             for document in batch
         ]
@@ -159,7 +171,6 @@ if __name__ == "__main__":
     m.db[catalog_name].create_index(
         [("coordinates.radec_geojson", "2dsphere"), ("_id", 1)], background=True
     )
-    m.db[catalog_name].create_index([("raMean", 1), ("decMean", 1)], background=True)
     m.db[catalog_name].create_index(
         [
             (
