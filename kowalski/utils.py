@@ -14,6 +14,7 @@ __all__ = [
     "great_circle_distance",
     "in_ellipse",
     "init_db",
+    "init_db_sync",
     "jd_to_date",
     "jd_to_datetime",
     "load_config",
@@ -27,6 +28,7 @@ __all__ = [
     "sdss_url",
     "time_stamp",
     "timer",
+    "TimeoutHTTPAdapter",
     "uid",
     "ZTFAlert",
 ]
@@ -49,6 +51,7 @@ import os
 import pandas as pd
 import pymongo
 from pymongo.errors import BulkWriteError
+from requests.adapters import HTTPAdapter
 import secrets
 import string
 import time
@@ -57,6 +60,27 @@ import yaml
 
 
 pi = 3.141592653589793
+
+
+DEFAULT_TIMEOUT = 5  # seconds
+
+
+class TimeoutHTTPAdapter(HTTPAdapter):
+    def __init__(self, *args, **kwargs):
+        self.timeout = DEFAULT_TIMEOUT
+        if "timeout" in kwargs:
+            self.timeout = kwargs["timeout"]
+            del kwargs["timeout"]
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        try:
+            timeout = kwargs.get("timeout")
+            if timeout is None:
+                kwargs["timeout"] = self.timeout
+            return super().send(request, **kwargs)
+        except AttributeError:
+            kwargs["timeout"] = DEFAULT_TIMEOUT
 
 
 def load_config(path="/app", config_file="config.yaml"):
@@ -138,13 +162,8 @@ async def init_db(config, verbose=True):
     async for _u in _client.admin.system.users.find({}, {"_id": 1}):
         user_ids.append(_u["_id"])
 
-    # print(user_ids)
-
     db_name = config["database"]["db"]
     username = config["database"]["username"]
-
-    # print(f'{db_name}.{username}')
-    # print(user_ids)
 
     _mongo = _client[db_name]
 
@@ -157,6 +176,39 @@ async def init_db(config, verbose=True):
         )
         if verbose:
             print("Successfully initialized db")
+
+    _mongo.client.close()
+
+
+def init_db_sync(config, verbose=False):
+    """
+    Initialize db if necessary: create the sole non-admin user
+    """
+    client = pymongo.MongoClient(
+        host=config["database"]["host"],
+        port=config["database"]["port"],
+        username=config["database"]["admin_username"],
+        password=config["database"]["admin_password"],
+    )
+
+    user_ids = []
+    for _u in client.admin.system.users.find({}, {"_id": 1}):
+        user_ids.append(_u["_id"])
+
+    db_name = config["database"]["db"]
+    username = config["database"]["username"]
+
+    _mongo = client[db_name]
+
+    if f"{db_name}.{username}" not in user_ids:
+        _mongo.command(
+            "createUser",
+            config["database"]["username"],
+            pwd=config["database"]["password"],
+            roles=["readWrite"],
+        )
+        if verbose:
+            log("Successfully initialized db")
 
     _mongo.client.close()
 

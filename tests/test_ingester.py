@@ -167,6 +167,7 @@ class Filter:
         filter_id=None,
         permissions=None,
         autosave: bool = False,
+        update_annotations: bool = False,
         pipeline=None,
     ):
         assert group_id is not None
@@ -178,6 +179,7 @@ class Filter:
         self.group_id = int(group_id)
         self.filter_id = int(filter_id)
         self.autosave = autosave
+        self.update_annotations = update_annotations
         self.permissions = permissions if permissions is not None else [1, 2]
 
         self.pipeline = pipeline
@@ -221,6 +223,7 @@ class Filter:
             "catalog": self.collection,
             "permissions": self.permissions,
             "autosave": self.autosave,
+            "update_annotations": self.update_annotations,
             "pipeline": self.pipeline,
         }
 
@@ -307,6 +310,19 @@ class TestIngester:
                 filter_id=program2.filter_id,
                 autosave=True,
                 pipeline=[{"$match": {"objectId": "ZTF20aaelulu"}}],
+            )
+
+            program3 = Program(
+                group_name="FRITZ_TEST_UPDATE_ANNOTATIONS", group_nickname="test3"
+            )
+            Filter(
+                collection="ZTF_alerts",
+                group_id=program3.group_id,
+                filter_id=program3.filter_id,
+                update_annotations=True,
+                pipeline=[
+                    {"$match": {"objectId": "ZTF20aapcmur"}}
+                ],  # there are 3 alerts in the test set for this oid
             )
 
         # clean up old Kafka logs
@@ -503,7 +519,7 @@ class TestIngester:
                 cmd_zookeeper_stop, stdout=stdout_zookeeper, stderr=subprocess.STDOUT
             )
 
-        log("Checking the ZTF alerts collections state")
+        log("Checking the ZTF alert collection states")
         mongo = Mongo(
             host=config["database"]["host"],
             port=config["database"]["port"],
