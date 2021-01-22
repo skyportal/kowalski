@@ -44,9 +44,25 @@ def process_file(args):
         log(f"Processing {file}")
 
     names = [
-        'objID', 'uniquePspsOBid', 'raMean', 'decMean', 'l', 'b', 'class', 'prob_Galaxy', 'prob_Star', 'prob_QSO',
-        'extrapolation_Class', 'cellDistance_Class', 'cellID_Class', 'z_phot', 'z_photErr', 'z_phot0',
-        'extrapolation_Photoz', 'cellDistance_Photoz', 'cellID_Photoz'
+        "objID",
+        "uniquePspsOBid",
+        "raMean",
+        "decMean",
+        "l",
+        "b",
+        "class",
+        "prob_Galaxy",
+        "prob_Star",
+        "prob_QSO",
+        "extrapolation_Class",
+        "cellDistance_Class",
+        "cellID_Class",
+        "z_phot",
+        "z_photErr",
+        "z_phot0",
+        "extrapolation_Photoz",
+        "cellDistance_Photoz",
+        "cellID_Photoz",
     ]
 
     for chunk_index, dataframe_chunk in enumerate(
