@@ -257,6 +257,7 @@ kowalski:
           filter: {}
           projection:
             _id: 1
+            objID: 1
             coordinates.radec_str: 1
             class: 1
             prob_Galaxy: 1
