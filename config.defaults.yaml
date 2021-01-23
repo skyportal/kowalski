@@ -262,6 +262,7 @@ kowalski:
             class: 1
             prob_Galaxy: 1
             prob_Star: 1
+            prob_QSO: 1
             z_phot: 1
             z_phot_err: 1
 
