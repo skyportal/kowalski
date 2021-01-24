@@ -253,6 +253,19 @@ kowalski:
             Teff: 1
             eTeff: 1
 
+        PS1_STRM:
+          filter: {}
+          projection:
+            _id: 1
+            objID: 1
+            coordinates.radec_str: 1
+            class: 1
+            prob_Galaxy: 1
+            prob_Star: 1
+            prob_QSO: 1
+            z_phot: 1
+            z_phot_err: 1
+
         galaxy_redshifts_20200522:
           filter: {}
           projection:
