@@ -2728,14 +2728,18 @@ async def app_factory():
         App Factory
     :return:
     """
-
     # init db if necessary
     await init_db(config=config)
 
     # Database connection
-    client = AsyncIOMotorClient(
+    mongodb_connection_string = (
         f"mongodb://{config['database']['username']}:{config['database']['password']}@"
-        + f"{config['database']['host']}:{config['database']['port']}/{config['database']['db']}",
+        + f"{config['database']['host']}:{config['database']['port']}/{config['database']['db']}"
+    )
+    if config["database"]["replica_set"] is not None:
+        mongodb_connection_string += f"?replicaSet={config['database']['replica_set']}"
+    client = AsyncIOMotorClient(
+        mongodb_connection_string,
         maxPoolSize=config["database"]["max_pool_size"],
     )
     mongo = client[config["database"]["db"]]

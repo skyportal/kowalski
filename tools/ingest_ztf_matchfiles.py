@@ -42,10 +42,16 @@ def connect_to_db():
     :return:
     """
     try:
-        # there's only one instance of DB, it's too big to be replicated
-        _client = pymongo.MongoClient(
-            host=config["database"]["host"], port=config["database"]["port"]
-        )
+        if config["database"]["replica_set"] is None:
+            _client = pymongo.MongoClient(
+                host=config["database"]["host"], port=config["database"]["port"]
+            )
+        else:
+            _client = pymongo.MongoClient(
+                host=config["database"]["host"],
+                port=config["database"]["port"],
+                replicaset=config["database"]["replica_set"],
+            )
         # grab main database:
         _db = _client[config["database"]["db"]]
     except Exception:

@@ -88,6 +88,7 @@ def get_tns(grab_all: bool = False, num_pages: int = 10, entries_per_page: int =
     mongo = Mongo(
         host=config["database"]["host"],
         port=config["database"]["port"],
+        replica_set=config["database"]["replica_set"],
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
