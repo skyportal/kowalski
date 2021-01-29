@@ -27,8 +27,7 @@ jobs:
           cp docker-compose.defaults.yaml docker-compose.yaml
       - name: Build and spin up
         run: |
-          ./kowalski.py build
-          ./kowalski.py up
+          ./kowalski.py up --build --init
       - name: Run tests
         run: |
           ./kowalski.py test
