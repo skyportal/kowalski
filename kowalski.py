@@ -165,20 +165,20 @@ class Kowalski:
 
     @staticmethod
     def check_containers_up(
-        container_list: Sequence,
+        containers: Sequence,
         num_retries: int = 10,
         sleep_for: int = 2,
     ):
         """Check if containers in question are up and running
 
-        :param container_list: container name sequence, e.g. ("kowalski_api_1", "kowalski_mongo_1")
+        :param containers: container name sequence, e.g. ("kowalski_api_1", "kowalski_mongo_1")
         :param num_retries:
         :param sleep_for: number of seconds to sleep for before retrying
         :return:
         """
         for i in range(num_retries):
             if i == num_retries - 1:
-                raise RuntimeError(f"{container_list} containers failed to spin up")
+                raise RuntimeError(f"{containers} containers failed to spin up")
 
             command = ["docker", "ps", "-a"]
             container_list = (
@@ -200,11 +200,11 @@ class Kowalski:
                     ]
                 )
                 > 0
-                for container_name in container_list
+                for container_name in containers
             )
 
             if not all(containers_up):
-                print(f"{container_list} containers are not up, waiting...")
+                print(f"{containers} containers are not up, waiting...")
                 time.sleep(sleep_for)
                 continue
 
@@ -238,7 +238,7 @@ class Kowalski:
                 "mongo",
             ]
             subprocess.run(command, check=True)
-            cls.check_containers_up(container_list=("kowalski_mongo_1",))
+            cls.check_containers_up(containers=("kowalski_mongo_1",))
             print("Attempting MongoDB replica set initiation")
             command = [
                 "docker",
