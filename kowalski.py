@@ -404,9 +404,7 @@ class Kowalski:
         print("Running the test suite")
 
         # make sure the containers are up and running
-        cls.check_containers_up(
-            container_list=("kowalski_ingester_1", "kowalski_api_1")
-        )
+        cls.check_containers_up(containers=("kowalski_ingester_1", "kowalski_api_1"))
 
         print("Testing ZTF alert ingestion")
 
