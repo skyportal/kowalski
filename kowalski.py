@@ -227,11 +227,6 @@ class Kowalski:
         with status("Checking configuration"):
             check_configs(config_wildcards=config_wildcards)
 
-        # with open(
-        #     pathlib.Path(__file__).parent.absolute() / "config.yaml"
-        # ) as config_yaml:
-        #     config = yaml.load(config_yaml, Loader=yaml.FullLoader)["kowalski"]
-
         if init:
             # spin up mongo container
             command = [
@@ -246,6 +241,8 @@ class Kowalski:
             cls.check_containers_up(containers=("kowalski_mongo_1",))
 
             print("Attempting MongoDB replica set initiation")
+            # note: even once the mongod process is running inside the container, it may take some time
+            #       for it to become operational/responsive
             num_retries = 10
             for i in range(num_retries):
                 if i == num_retries - 1:
@@ -257,9 +254,6 @@ class Kowalski:
                         "-i",
                         "kowalski_mongo_1",
                         "mongo",
-                        # f"-u={config['database']['admin_username']}",
-                        # f"-p={config['database']['admin_password']}",
-                        # "--authenticationDatabase=admin",
                         "--eval",
                         "'rs.initiate()'",
                     ]
