@@ -2,16 +2,48 @@ from aiohttp import web
 from copy import deepcopy
 from functools import wraps
 import jwt
-from utils import load_config
+import traceback
+from utils import load_config, log
 
 
 config = load_config(config_file="config.yaml")["kowalski"]
 
 
 @web.middleware
-async def auth_middleware(request, handler):
+async def error_middleware(request, handler) -> web.Response:
+    """Error handling middleware
+
+    :param request:
+    :param handler:
+    :return:
     """
-        auth middleware
+    try:
+        response = await handler(request)
+        if response.status in (200, 400):
+            return response
+        error_message = response.reason
+        status = response.status
+    except web.HTTPException as ex:
+        # catch "not found"
+        if ex.status != 404:
+            raise
+        error_message = ex.reason
+        status = ex.status
+    except Exception as exception:
+        # catch everything else
+        log(traceback.format_exc())
+        error_message = f"{type(exception).__name__}: {exception}"
+        status = 400
+
+    return web.json_response(
+        {"status": "error", "message": error_message}, status=status
+    )
+
+
+@web.middleware
+async def auth_middleware(request, handler) -> web.Response:
+    """Auth middleware
+
     :param request:
     :param handler:
     :return:
@@ -43,32 +75,34 @@ async def auth_middleware(request, handler):
 
 
 def auth_required(func):
-    """
-        Decorator to ensure successful user authorization to use the API
+    """Decorator to ensure successful user authorization to use the API
+
     :param func:
     :return:
     """
 
     @wraps(func)
-    def wrapper(request):
+    def wrapper(*args, **kwargs):
+        request = args[-1]
         if not request.user:
             return web.json_response(
                 {"status": "error", "message": "auth required"}, status=401
             )
-        return func(request)
+        return func(*args, **kwargs)
 
     return wrapper
 
 
 def admin_required(func):
-    """
-        Decorator to ensure user authorization _and_ admin rights
+    """Decorator to ensure user authorization _and_ admin rights
+
     :param func:
     :return:
     """
 
     @wraps(func)
-    def wrapper(request):
+    def wrapper(*args, **kwargs):
+        request = args[-1]
         if not request.user:
             return web.json_response(
                 {"status": "error", "message": "auth required"}, status=401
@@ -77,25 +111,6 @@ def admin_required(func):
             return web.json_response(
                 {"status": "error", "message": "admin rights required"}, status=403
             )
-        return func(request)
+        return func(*args, **kwargs)
 
     return wrapper
-
-
-# def auth(admin: bool = False):
-#     """
-#         Decorator to ensure user authorization _and_ admin rights
-#     :param admin: admin name
-#     :return:
-#     """
-#     def inner_function(func):
-#         @wraps(func)
-#         def wrapper(request):
-#             if not request.user:
-#                 return web.json_response({'status': 'error', 'message': 'auth required'}, status=401)
-#             if admin and request.user != config['server']['admin_username']:
-#                 return web.json_response({'status': 'error', 'message': 'admin rights required'}, status=403)
-#             return func(request)
-#         return wrapper
-#
-#     return inner_function

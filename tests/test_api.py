@@ -1,6 +1,7 @@
-from api import app_factory
+import random
+from typing import List
 
-# import pytest
+from api import app_factory
 from utils import load_config, uid
 
 
@@ -11,7 +12,8 @@ class TestAPIs(object):
     # python -m pytest -s api.py
     # python -m pytest api.py
 
-    async def auth_admin(self, aiohttp_client):
+    @staticmethod
+    async def get_admin_credentials(aiohttp_client):
         """
             Fixture to get authorization token for admin
         :param aiohttp_client:
@@ -32,6 +34,42 @@ class TestAPIs(object):
         assert "token" in credentials
 
         return credentials
+
+    @staticmethod
+    def make_filter(
+        filter_id: int = random.randint(1, 1000),
+        group_id: int = random.randint(1, 1000),
+        collection: str = "ZTF_alerts",
+        permissions: List = None,
+        pipeline: List = None,
+    ):
+        if permissions is None:
+            permissions = [1, 2]
+
+        if pipeline is None:
+            pipeline = [
+                {
+                    "$match": {
+                        "candidate.drb": {"$gt": 0.9999},
+                        "cross_matches.CLU_20190625.0": {"$exists": False},
+                    }
+                },
+                {
+                    "$addFields": {
+                        "annotations.author": "dd",
+                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
+                    }
+                },
+                {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
+            ]
+
+        return {
+            "group_id": group_id,
+            "filter_id": filter_id,
+            "catalog": collection,
+            "permissions": permissions,
+            "pipeline": pipeline,
+        }
 
     async def test_auth(self, aiohttp_client):
         """
@@ -67,9 +105,8 @@ class TestAPIs(object):
         assert _auth.status == 401
 
         credentials = await _auth.json()
-        # print(credentials)
         assert credentials["status"] == "error"
-        assert credentials["message"] == "wrong credentials"
+        assert credentials["message"] == "Unauthorized"
 
     async def test_users(self, aiohttp_client):
         """
@@ -80,7 +117,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # check JWT authorization
-        credentials = await self.auth_admin(aiohttp_client)
+        credentials = await self.get_admin_credentials(aiohttp_client)
         access_token = credentials["token"]
 
         headers = {"Authorization": f"Bearer {access_token}"}
@@ -123,46 +160,14 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize as admin, regular users cannot do this
-        credentials = await self.auth_admin(aiohttp_client)
+        credentials = await self.get_admin_credentials(aiohttp_client)
         access_token = credentials["token"]
 
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        group_id = 10000
-        filter_id = 10000
-        collection = "ZTF_alerts"
-        permissions = [1, 2]
+        filter_id = random.randint(1, 10000)
 
-        user_filter = {
-            "group_id": group_id,
-            "filter_id": filter_id,
-            "catalog": collection,
-            "permissions": permissions,
-            "pipeline": [
-                {
-                    "$match": {
-                        "candidate.drb": {"$gt": 0.9},
-                        "cross_matches.CLU_20190625.0": {"$exists": False},
-                    }
-                },
-                {
-                    "$addFields": {
-                        "annotations.author": "dd",
-                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
-                    }
-                },
-                {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
-            ],
-        }
-
-        # test:
-        resp = await client.post(
-            "/api/filters/test", json=user_filter, headers=headers, timeout=5
-        )
-        assert resp.status == 200
-        result = await resp.json()
-        # print(result)
-        assert result["status"] == "success"
+        user_filter = self.make_filter(filter_id=filter_id)
 
         # post:
         resp = await client.post(
@@ -170,29 +175,17 @@ class TestAPIs(object):
         )
         assert resp.status == 200
         result = await resp.json()
-        # print(result)
         assert result["status"] == "success"
         assert "data" in result
         assert "fid" in result["data"]
         fid1 = result["data"]["fid"]
 
         # retrieve
-        resp = await client.get(f"/api/filters/{group_id}", headers=headers, timeout=5)
+        resp = await client.get(f"/api/filters/{filter_id}", headers=headers, timeout=5)
         assert resp.status == 200
         result = await resp.json()
         assert result["status"] == "success"
-        assert result["message"] == f"retrieved filters of group_id {group_id}"
-
-        resp = await client.get(
-            f"/api/filters/{group_id}/{filter_id}", headers=headers, timeout=5
-        )
-        assert resp.status == 200
-        result = await resp.json()
-        assert result["status"] == "success"
-        assert (
-            result["message"]
-            == f"retrieved filter_id {filter_id} of group_id {group_id}"
-        )
+        assert result["message"] == f"Retrieved filter id {filter_id}"
         assert "data" in result
         assert "active_fid" in result["data"]
         assert result["data"]["active_fid"] == fid1
@@ -205,46 +198,39 @@ class TestAPIs(object):
         )
         assert resp.status == 200
         result = await resp.json()
-        # print(result)
         assert result["status"] == "success"
         assert "data" in result
         assert "fid" in result["data"]
         fid2 = result["data"]["fid"]
 
         # retrieve again
-        resp = await client.get(
-            f"/api/filters/{group_id}/{filter_id}", headers=headers, timeout=5
-        )
+        resp = await client.get(f"/api/filters/{filter_id}", headers=headers, timeout=5)
         assert resp.status == 200
         result = await resp.json()
         assert result["status"] == "success"
-        assert (
-            result["message"]
-            == f"retrieved filter_id {filter_id} of group_id {group_id}"
-        )
+        assert result["message"] == f"Retrieved filter id {filter_id}"
         assert "data" in result
         assert "active_fid" in result["data"]
         assert result["data"]["active_fid"] == fid2
 
         # make first version active
-        resp = await client.put(
+        resp = await client.patch(
             "/api/filters",
-            json={"group_id": group_id, "filter_id": filter_id, "active_fid": fid1},
+            json={"filter_id": filter_id, "active_fid": fid1},
             headers=headers,
             timeout=5,
         )
         assert resp.status == 200
         result = await resp.json()
-        # print(result)
         assert result["status"] == "success"
         assert "data" in result
         assert "active_fid" in result["data"]
         assert result["data"]["active_fid"] == fid1
 
         # turn autosave on
-        resp = await client.put(
+        resp = await client.patch(
             "/api/filters",
-            json={"group_id": group_id, "filter_id": filter_id, "autosave": True},
+            json={"filter_id": filter_id, "autosave": True},
             headers=headers,
             timeout=5,
         )
@@ -256,10 +242,9 @@ class TestAPIs(object):
         assert result["data"]["autosave"]
 
         # turn update_annotations on
-        resp = await client.put(
+        resp = await client.patch(
             "/api/filters",
             json={
-                "group_id": group_id,
                 "filter_id": filter_id,
                 "update_annotations": True,
             },
@@ -274,49 +259,39 @@ class TestAPIs(object):
         assert result["data"]["update_annotations"]
 
         # deactivate
-        resp = await client.put(
+        resp = await client.patch(
             "/api/filters",
-            json={"group_id": group_id, "filter_id": filter_id, "active": False},
+            json={"filter_id": filter_id, "active": False},
             headers=headers,
             timeout=5,
         )
         assert resp.status == 200
         result = await resp.json()
-        # print(result)
         assert result["status"] == "success"
         assert "data" in result
         assert "active" in result["data"]
         assert not result["data"]["active"]
 
         # retrieve again
-        resp = await client.get(
-            f"/api/filters/{group_id}/{filter_id}", headers=headers, timeout=5
-        )
+        resp = await client.get(f"/api/filters/{filter_id}", headers=headers, timeout=5)
         assert resp.status == 200
         result = await resp.json()
         assert result["status"] == "success"
-        assert (
-            result["message"]
-            == f"retrieved filter_id {filter_id} of group_id {group_id}"
-        )
+        assert result["message"] == f"Retrieved filter id {filter_id}"
         assert "data" in result
         assert "active" in result["data"]
         assert not result["data"]["active"]
 
         # remove filter
         resp = await client.delete(
-            "/api/filters",
-            json={"group_id": group_id, "filter_id": filter_id},
+            f"/api/filters/{filter_id}",
             headers=headers,
             timeout=5,
         )
         assert resp.status == 200
         result = await resp.json()
         assert result["status"] == "success"
-        assert (
-            result["message"]
-            == f"removed filter for group_id={group_id}, filter_id={filter_id}"
-        )
+        assert result["message"] == f"Removed filter id {filter_id}"
 
     # test raising errors
 
@@ -329,49 +304,34 @@ class TestAPIs(object):
         """
         client = await aiohttp_client(await app_factory())
 
-        credentials = await self.auth_admin(aiohttp_client)
+        credentials = await self.get_admin_credentials(aiohttp_client)
         access_token = credentials["token"]
 
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        collection = "ZTF_alerts"
+        pipeline = [
+            {
+                "$matc": {  # <- should be "$match"
+                    "candidate.drb": {"$gt": 0.9999},
+                    "cross_matches.CLU_20190625.0": {"$exists": False},
+                }
+            },
+            {
+                "$addFields": {
+                    "annotations.author": "dd",
+                    "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
+                }
+            },
+            {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
+        ]
 
-        user_filter = {
-            "group_id": 0,
-            "science_program_id": 0,
-            "catalog": collection,
-            "pipeline": [
-                {
-                    "$matc": {  # <-- should be "$match"
-                        "candidate.drb": {"$gt": 0.9999},
-                        "cross_matches.CLU_20190625.0": {"$exists": False},
-                    }
-                },
-                {
-                    "$addFields": {
-                        "annotations.author": "dd",
-                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
-                    }
-                },
-                {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
-            ],
-        }
-
-        # test:
-        resp = await client.post(
-            "/api/filters/test", json=user_filter, headers=headers, timeout=5
-        )
-        assert resp.status == 400
-        result = await resp.json()
-        # print(result)
-        assert result["status"] == "error"
+        user_filter = self.make_filter(pipeline=pipeline)
 
         resp = await client.post(
             "/api/filters", json=user_filter, headers=headers, timeout=5
         )
         assert resp.status == 400
         result = await resp.json()
-        # print(result)
         assert result["status"] == "error"
 
     async def test_forbidden_stage_in_filter(self, aiohttp_client):
@@ -383,49 +343,35 @@ class TestAPIs(object):
         """
         client = await aiohttp_client(await app_factory())
 
-        credentials = await self.auth_admin(aiohttp_client)
+        credentials = await self.get_admin_credentials(aiohttp_client)
         access_token = credentials["token"]
 
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        collection = "ZTF_alerts"
-
-        user_filter = {
-            "group_id": 0,
-            "science_program_id": 0,
-            "catalog": collection,
-            "pipeline": [
-                {
-                    "$match": {
-                        "candidate.drb": {"$gt": 0.9999},
-                        "cross_matches.CLU_20190625.0": {"$exists": False},
-                    }
-                },
-                {
-                    "$addFields": {
-                        "annotations.author": "dd",
-                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
-                    }
-                },
-                {
-                    "$lookup": {
-                        "from": "ZTF_alerts_aux",
-                        "localField": "objectId",
-                        "foreignField": "_id",
-                        "as": "aux",
-                    }
-                },
-                {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
-            ],
-        }
-
-        # test:
-        resp = await client.post(
-            "/api/filters/test", json=user_filter, headers=headers, timeout=5
-        )
-        assert resp.status == 400
-        result = await resp.json()
-        assert result["status"] == "error"
+        pipeline = [
+            {
+                "$match": {
+                    "candidate.drb": {"$gt": 0.9999},
+                    "cross_matches.CLU_20190625.0": {"$exists": False},
+                }
+            },
+            {
+                "$addFields": {
+                    "annotations.author": "dd",
+                    "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
+                }
+            },
+            {
+                "$lookup": {  # <- $lookup is not allowed
+                    "from": "ZTF_alerts_aux",
+                    "localField": "objectId",
+                    "foreignField": "_id",
+                    "as": "aux",
+                }
+            },
+            {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
+        ]
+        user_filter = self.make_filter(pipeline=pipeline)
 
         resp = await client.post(
             "/api/filters", json=user_filter, headers=headers, timeout=5
@@ -433,6 +379,46 @@ class TestAPIs(object):
         assert resp.status == 400
         result = await resp.json()
         assert result["status"] == "error"
+        assert "message" in result
+        assert "pipeline uses forbidden stages" in result["message"]
+
+    async def test_set_nonexistent_active_fid(self, aiohttp_client):
+        """
+        Test trying to save a bad filter: /api/filters/test
+
+        :param aiohttp_client:
+        :return:
+        """
+        client = await aiohttp_client(await app_factory())
+
+        credentials = await self.get_admin_credentials(aiohttp_client)
+        access_token = credentials["token"]
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        filter_id = random.randint(1, 1000)
+
+        user_filter = self.make_filter(filter_id=filter_id)
+
+        resp = await client.post(
+            "/api/filters", json=user_filter, headers=headers, timeout=5
+        )
+        assert resp.status == 200
+        result = await resp.json()
+        assert result["status"] == "success"
+
+        # make first version active
+        resp = await client.patch(
+            "/api/filters",
+            json={"filter_id": filter_id, "active_fid": "somerandomfid"},
+            headers=headers,
+            timeout=5,
+        )
+        assert resp.status == 400
+        result = await resp.json()
+        assert result["status"] == "error"
+        assert "message" in result
+        assert "filter version fid not in filter" in result["message"]
 
     # test multiple query types without book-keeping (the default and almost exclusively used scenario):
     #  - find_one
@@ -452,7 +438,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        credentials = await self.auth_admin(aiohttp_client)
+        credentials = await self.get_admin_credentials(aiohttp_client)
         access_token = credentials["token"]
 
         headers = {"Authorization": f"Bearer {access_token}"}
@@ -497,7 +483,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        credentials = await self.auth_admin(aiohttp_client)
+        credentials = await self.get_admin_credentials(aiohttp_client)
         access_token = credentials["token"]
 
         headers = {"Authorization": access_token}
@@ -531,7 +517,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        credentials = await self.auth_admin(aiohttp_client)
+        credentials = await self.get_admin_credentials(aiohttp_client)
         access_token = credentials["token"]
 
         headers = {"Authorization": access_token}
@@ -568,7 +554,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        credentials = await self.auth_admin(aiohttp_client)
+        credentials = await self.get_admin_credentials(aiohttp_client)
         access_token = credentials["token"]
 
         headers = {"Authorization": access_token}
@@ -605,7 +591,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        credentials = await self.auth_admin(aiohttp_client)
+        credentials = await self.get_admin_credentials(aiohttp_client)
         access_token = credentials["token"]
 
         headers = {"Authorization": access_token}
@@ -630,7 +616,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        credentials = await self.auth_admin(aiohttp_client)
+        credentials = await self.get_admin_credentials(aiohttp_client)
         access_token = credentials["token"]
 
         headers = {"Authorization": access_token}
@@ -661,7 +647,7 @@ class TestAPIs(object):
         client = await aiohttp_client(await app_factory())
 
         # authorize
-        credentials = await self.auth_admin(aiohttp_client)
+        credentials = await self.get_admin_credentials(aiohttp_client)
         access_token = credentials["token"]
 
         headers = {"Authorization": access_token}

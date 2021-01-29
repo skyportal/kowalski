@@ -1,3 +1,4 @@
+from abc import ABC
 import aiofiles
 from aiohttp import web
 from aiohttp_swagger3 import SwaggerDocs, ReDocUiSettings
@@ -21,19 +22,21 @@ import io
 import jwt
 from matplotlib.colors import LogNorm
 import matplotlib.pyplot as plt
-from middlewares import auth_middleware, auth_required, admin_required
+from middlewares import auth_middleware, error_middleware, auth_required, admin_required
 from motor.motor_asyncio import AsyncIOMotorClient
 from multidict import MultiDict
 import numpy as np
+from odmantic import AIOEngine, EmbeddedModel, Field, Model
 import os
 import pathlib
+from pydantic import root_validator
 import shutil
 import traceback
+from typing import List, Mapping, Optional
 from utils import (
     add_admin,
     check_password_hash,
     compute_hash,
-    forgiving_true,
     generate_password_hash,
     init_db,
     load_config,
@@ -46,7 +49,18 @@ import uvloop
 
 config = load_config(config_file="config.yaml")["kowalski"]
 
-# routes = web.RouteTableDef()
+
+class Handler:
+    @staticmethod
+    def success(message: str = "", data: Optional[Mapping] = None):
+        response = {"status": "success", "message": message}
+        if data is not None:
+            response["data"] = data
+        return web.json_response(response, status=200, dumps=dumps)
+
+    @staticmethod
+    def error(message: str = "", status: int = 400):
+        return web.json_response({"status": "error", "message": message}, status=status)
 
 
 """ authentication and authorization """
@@ -195,7 +209,7 @@ async def auth_post(request: web.Request) -> web.Response:
         try:
             # user exists and passwords match?
             select = await request.app["mongo"].users.find_one({"_id": username})
-            if check_password_hash(select["password"], password):
+            if select is not None and check_password_hash(select["password"], password):
                 payload = {
                     "user_id": username,
                     "exp": datetime.datetime.utcnow()
@@ -233,9 +247,9 @@ async def auth_post(request: web.Request) -> web.Response:
         )
 
 
-# @routes.get('/', name='root', allow_head=False)
+# @routes.get('/', name='ping', allow_head=False)
 @auth_required
-async def root(request: web.Request) -> web.Response:
+async def ping(request: web.Request) -> web.Response:
     """
     ping/pong
 
@@ -271,7 +285,7 @@ async def root(request: web.Request) -> web.Response:
     )
 
 
-""" users api """
+""" users """
 
 
 # @routes.post('/api/users')
@@ -638,7 +652,7 @@ async def users_put(request: web.Request) -> web.Response:
         )
 
 
-""" query apis """
+""" queries """
 
 
 def parse_query(task, save: bool = False):
@@ -1638,930 +1652,182 @@ async def queries_delete(request):
         )
 
 
-""" filters apis """
+""" filters """
 
 
-# @routes.get('/api/filters/{group_id}', allow_head=False)
-@admin_required
-async def filters_get_group_id(request):
-    """
-    Retrieve all user-defined filters of group group_id
-
-    :param request:
-    :return:
-
-    ---
-    summary: Retrieve all user-defined filters of group group_id
-    tags:
-      - filters
-
-    parameters:
-      - in: path
-        name: group_id
-        description: "group_id"
-        required: true
-        schema:
-          type: integer
-          minimum: 1
-
-    responses:
-      '200':
-        description: retrieved filter data
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-                - data
-              properties:
-                status:
-                  type: string
-                  enum: [success]
-                message:
-                  type: string
-                data:
-                  type: object
-            example:
-              "status": "success"
-              "message": "retrieved filters of group_id 1"
-              "data": [{
-                "group_id": 1,
-                "filter_id": 1,
-                "catalog": "ZTF_alerts",
-                "permissions": [1, 2],
-                "autosave": false,
-                "update_annotations": false,
-                "active": true,
-                "active_fid": "nnsun9",
-                "fv": [
-                  "fid": "nnsun9",
-                  "pipeline": "<serialized extended json string>",
-                  "created": {
-                      "$date": 1584403506877
-                  }
-                ]
-              }]
-
-      '400':
-        description: retrieval failed or internal/unknown cause of failure
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [error]
-                message:
-                  type: string
-            example:
-              status: error
-              message: "failure: <error message>"
-    """
-    try:
-        # get query params
-        group_id = request.match_info["group_id"]
-
-        cursor = request.app["mongo"][
-            config["database"]["collections"]["filters"]
-        ].find({"group_id": int(group_id)}, {"_id": 0})
-        user_filters = await cursor.to_list(length=None)
-
-        if len(user_filters) == 0:
-            return web.json_response(
-                {
-                    "status": "error",
-                    "message": f"filters for group_id={group_id} not found",
-                },
-                status=400,
-            )
-
-        return web.json_response(
-            {
-                "status": "success",
-                "message": f"retrieved filters of group_id {group_id}",
-                "data": user_filters,
-            },
-            status=200,
-            dumps=dumps,
-        )
-
-    except Exception as _e:
-        log(f"Got error: {str(_e)}")
-        _err = traceback.format_exc()
-        log(_err)
-        return web.json_response(
-            {"status": "error", "message": f"failure: {_err}"}, status=400
-        )
+FORBIDDEN_STAGES = {"$lookup", "$unionWith", "$out", "$merge"}
 
 
-# @routes.get('/api/filters/{group_id}/{filter_id}', allow_head=False)
-@admin_required
-async def filters_get_group_id_filter_id(request):
-    """
-    Retrieve user-defined filter filter_id of group group_id
+class FilterVersion(EmbeddedModel, ABC):
+    """Data model for Filter versions"""
 
-    :param request:
-    :return:
+    fid: str = uid(length=6)
+    pipeline: str
+    created_at: datetime.datetime = datetime.datetime.utcnow()
 
-    ---
-    summary: Retrieve user-defined filter filter_id of group group_id
-    tags:
-      - filters
+    @root_validator
+    def check_min_stages(cls, values):
+        pipeline = values.get("pipeline")
+        if len(loads(pipeline)) == 0:  # it is stored as a string
+            raise ValueError("pipeline must contain at least one stage")
+        return values
 
-    parameters:
-      - in: path
-        name: group_id
-        description: "group_id"
-        required: true
-        schema:
-          type: integer
-          minimum: 1
-      - in: path
-        name: filter_id
-        description: "filter_id"
-        required: true
-        schema:
-          type: integer
-          minimum: 1
-
-    responses:
-      '200':
-        description: retrieved filter data
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-                - data
-              properties:
-                status:
-                  type: string
-                  enum: [success]
-                message:
-                  type: string
-                data:
-                  type: object
-            example:
-              "status": "success"
-              "message": "retrieved filter_id 1 of group_id 1"
-              "data": {
-                "group_id": 1,
-                "filter_id": 1,
-                "catalog": "ZTF_alerts",
-                "permissions": [1, 2],
-                "autosave": false,
-                "update_annotations": false,
-                "active": true,
-                "active_fid": "nnsun9",
-                "fv": [
-                  "fid": "nnsun9",
-                  "pipeline": "<serialized extended json string>",
-                  "created": {
-                      "$date": 1584403506877
-                  }
-                ]
-              }
-
-      '400':
-        description: retrieval failed or internal/unknown cause of failure
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [error]
-                message:
-                  type: string
-            example:
-              status: error
-              message: "failure: <error message>"
-    """
-    try:
-        # get query params
-        group_id = request.match_info["group_id"]
-        filter_id = request.match_info["filter_id"]
-
-        user_filter = await request.app["mongo"][
-            config["database"]["collections"]["filters"]
-        ].find_one({"group_id": int(group_id), "filter_id": int(filter_id)})
-
-        if user_filter is None:
-            return web.json_response(
-                {
-                    "status": "error",
-                    "message": f"filter for group_id={group_id}, filter_id={filter_id} not found",
-                },
-                status=400,
-            )
-
-        user_filter.pop("_id", None)
-
-        return web.json_response(
-            {
-                "status": "success",
-                "message": f"retrieved filter_id {filter_id} of group_id {group_id}",
-                "data": user_filter,
-            },
-            status=200,
-            dumps=dumps,
-        )
-
-    except Exception as _e:
-        log(f"Got error: {str(_e)}")
-        _err = traceback.format_exc()
-        log(_err)
-        return web.json_response(
-            {"status": "error", "message": f"failure: {_err}"}, status=400
-        )
-
-
-# @routes.post('/api/filters')
-@admin_required
-async def filters_post(request):
-    """
-    Create user-defined alert filter
-    store as serialized extended json string, use literal_eval to convert to dict at execution
-    run a simple sanity check before saving
-    https://www.npmjs.com/package/bson
-
-    ---
-    summary: Create user-defined alert filter
-    tags:
-      - filters
-
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            required:
-              - group_id
-              - filter_id
-              - catalog
-              - permissions
-              - pipeline
-            properties:
-              group_id:
-                type: integer
-                description: "[fritz] user group (science program) id"
-                minimum: 1
-              filter_id:
-                type: integer
-                description: "[fritz] science program filter id for this user group id"
-                minimum: 1
-              catalog:
-                type: string
-                description: "alert stream to filter"
-                enum: [ZTF_alerts, ZUDS_alerts]
-              permissions:
-                type: array
-                items:
-                  type: integer
-                description: "permissions to access streams"
-                minItems: 1
-              autosave:
-                type: boolean
-                description: "automatically save passing alerts to group <group_id>"
-                default: false
-              update_annotations:
-                type: boolean
-                description: "update existing annotations for newly passing alerts"
-                default: false
-              pipeline:
-                type: array
-                items:
-                  type: object
-                description: "user-defined aggregation pipeline stages in MQL"
-                minItems: 1
-          examples:
-            filter_1:
-              value:
-                "group_id": 1
-                "filter_id": 1
-                "catalog": ZTF_alerts
-                "permissions": [1, 2]
-                "pipeline": [
-                {
-                  "$match": {
-                    "candidate.drb": {
-                      "$gt": 0.9999
-                    },
-                    "cross_matches.CLU_20190625.0": {
-                      "$exists": False
-                    }
-                  }
-                },
-                {
-                  "$addFields": {
-                    "annotations.author": "dd",
-                    "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
-                  }
-                },
-                {
-                  "$project": {
-                    "_id": 0,
-                    "candid": 1,
-                    "objectId": 1,
-                    "annotations": 1
-                  }
-                }
-                ]
-            filter_2:
-              value:
-                "group_id": 2
-                "filter_id": 1
-                "catalog": ZTF_alerts
-                "permissions": [1, 2, 3]
-                "autosave": true
-                "update_annotations": false
-                "pipeline": [
-                {
-                  "$match": {
-                    "candidate.drb": {
-                      "$gt": 0.9999
-                    },
-                    "cross_matches.CLU_20190625.0": {
-                      "$exists": True
-                    }
-                  }
-                },
-                {
-                  "$addFields": {
-                    "annotations.author": "dd",
-                    "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
-                  }
-                },
-                {
-                  "$project": {
-                    "_id": 0,
-                    "candid": 1,
-                    "objectId": 1,
-                    "annotations": 1
-                  }
-                }
-                ]
-
-
-    responses:
-      '200':
-        description: filter successfully saved
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-                - data
-              properties:
-                status:
-                  type: string
-                  enum: [success]
-                message:
-                  type: string
-                user:
-                  type: string
-                data:
-                  description: "contains unique filter identifier"
-                  type: object
-                  additionalProperties:
-                    type: object
-                    properties:
-                      fid:
-                        type: string
-                        description: "generated unique filter identifier"
-                        minLength: 6
-                        maxLength: 6
-            example:
-              "status": "success"
-              "message": "saved filter: c3ig1t"
-              "data": {
-               "fid": "c3ig1t"
-              }
-
-      '400':
-        description: filter parsing/testing/saving error
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [error]
-                message:
-                  type: string
-            example:
-              status: error
-              message: "failure: <error message>"
-    """
-    try:
-
-        try:
-            filter_spec = await request.json()
-        except Exception as _e:
-            log(f"Cannot extract json() from request, trying post(): {str(_e)}")
-            filter_spec = await request.post()
-
-        # checks:
-        group_id = filter_spec.get("group_id", None)
-        filter_id = filter_spec.get("filter_id", None)
-        catalog = filter_spec.get("catalog", None)
-        permissions = filter_spec.get("permissions", None)
-        autosave = filter_spec.get("autosave", False)
-        update_annotations = filter_spec.get("update_annotations", False)
-        pipeline = filter_spec.get("pipeline", None)
-        if group_id is None:
-            return web.json_response(
-                {"status": "error", "message": "group_id must be set"}, status=400
-            )
-        if filter_id is None:
-            return web.json_response(
-                {"status": "error", "message": "filter_id must be set"}, status=400
-            )
-        if catalog is None:
-            return web.json_response(
-                {"status": "error", "message": "catalog must be set"}, status=400
-            )
-        if permissions is None:
-            return web.json_response(
-                {"status": "error", "message": "permissions must be set"}, status=400
-            )
-        if pipeline is None:
-            return web.json_response(
-                {"status": "error", "message": "pipeline must be set"}, status=400
-            )
-
-        autosave = forgiving_true(autosave)
-        update_annotations = forgiving_true(update_annotations)
-
-        group_id = int(group_id)
-        filter_id = int(filter_id)
-
-        # check if a filter for these (group_id, filter_id) already exists:
-        doc_saved = await request.app["mongo"].filters.find_one(
-            {"group_id": group_id, "filter_id": filter_id}
-        )
-
-        if not isinstance(pipeline, str):
-            pipeline = dumps(pipeline)
-
-        if len(loads(pipeline)) == 0:
-            return web.json_response(
-                {"status": "error", "message": "pipeline must have at least one stage"},
-                status=400,
-            )
-
+    @root_validator
+    def check_forbidden_stages(cls, values):
+        pipeline = values.get("pipeline")
         # check that only allowed stages are used in the pipeline
-        forbidden_stages = {"$lookup", "$unionWith", "$out", "$merge"}
-        stages = set([list(pp.keys())[0] for pp in loads(pipeline)])
-        if len(stages.intersection(forbidden_stages)):
-            return web.json_response(
-                {
-                    "status": "error",
-                    "message": f"pipeline uses forbidden stages: {str(stages.intersection(forbidden_stages))}",
-                },
-                status=400,
+        stages = set([list(stage.keys())[0] for stage in loads(pipeline)])
+        if len(stages.intersection(FORBIDDEN_STAGES)):
+            raise ValueError(
+                f"pipeline uses forbidden stages: {str(stages.intersection(FORBIDDEN_STAGES))}"
             )
+        return values
 
-        # try on most recently ingested alert
-        n_docs = await request.app["mongo"][catalog].estimated_document_count()
-
-        if n_docs > 0:
-            # get latest candid:
-            select = (
-                request.app["mongo"][catalog]
-                .find({}, {"_id": 0, "candid": 1})
-                .sort([("$natural", -1)])
-                .limit(1)
-            )
-            alert = await select.to_list(length=1)
-            alert = alert[0]
-            # log(alert)
-
-            # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
-            # including archival photometry and cross-matches:
-            filter_pipeline_upstream = config["database"]["filters"][catalog]
-            filter_template = filter_pipeline_upstream + loads(pipeline)
-            # match candid
-            filter_template[0]["$match"]["candid"] = alert["candid"]
-            # match permissions
-            filter_template[0]["$match"]["candidate.programid"]["$in"] = permissions
-            filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][
-                0
-            ]["$in"][1] = permissions
-            # log(filter_template)
-            cursor = request.app["mongo"][catalog].aggregate(
-                filter_template, allowDiskUse=False, maxTimeMS=3000
-            )
-            # passed_filter = await cursor.to_list(length=None)
-            await cursor.to_list(length=None)
-        else:
-            log(
-                f"No alerts in db, cannot test filter: "
-                f"group_id {group_id}, filter_id {filter_id}"
-            )
-            log("Saving blindly, which is not great!")
-
-        # use a short fid and avoid random name collisions
-        fid = uid(length=6)
-        fv = {
-            "fid": fid,
-            "created_at": datetime.datetime.utcnow(),
-            "pipeline": pipeline,
-        }
-
-        if doc_saved is None:
-            # if a filter does not exist for (group_id, filter_id), create one:
-            doc = {
-                "group_id": group_id,
-                "filter_id": filter_id,
-                "catalog": catalog,
-                "permissions": permissions,
-                "autosave": autosave,
-                "update_annotations": update_annotations,
-                "active": True,
-                "active_fid": fid,
-                "fv": [],
-            }
-            doc["fv"].append(fv)
-
-            r = await request.app["mongo"].filters.insert_one(doc)
-
-        else:
-            # else, push a new entry to fv and set its fid as active
-            r = await request.app["mongo"].filters.update_one(
-                {"_id": doc_saved["_id"]},
-                {"$set": {"active_fid": fid}, "$push": {"fv": fv}},
-            )
-
-            if r.modified_count == 0:
-                return web.json_response(
-                    {"status": "error", "message": "failed to create filter"},
-                    status=400,
-                )
-
-        return web.json_response(
-            {
-                "status": "success",
-                "message": f"saved filter: {fid}",
-                "data": {"fid": fid},
-            },
-            status=200,
-        )
-
-    except Exception as _e:
-        log(f"Got error: {str(_e)}")
-        _err = traceback.format_exc()
-        log(_err)
-        return web.json_response(
-            {"status": "error", "message": f"failure: {_err}"}, status=400
-        )
+    class Config:
+        json_loads = loads
+        json_dumps = dumps
 
 
-# @routes.post('/api/filters/test')
-@admin_required
-async def filters_test_post(request):
-    """
-        Test user-defined filter: check that it is lexically correct, throws no errors and executes reasonably fast
-    :param request:
-    :return:
+class Filter(Model, ABC):
+    """Data model for Filters"""
 
-    ---
-    summary: Test user-defined alert filter
-    tags:
-      - filters
+    filter_id: int = Field(ge=1)
+    group_id: int = Field(ge=1)
+    catalog: str
+    permissions: List
+    autosave: bool = False
+    active: bool = True
+    update_annotations: bool = False
+    active_fid: Optional[str] = Field(min_length=6, max_length=6)
+    fv: List[FilterVersion] = list()
+    created_at: datetime.datetime = datetime.datetime.utcnow()
+    last_modified: datetime.datetime = datetime.datetime.utcnow()
 
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            required:
-              - group_id
-              - filter_id
-              - catalog
-              - permissions
-              - pipeline
-            properties:
-              group_id:
-                type: integer
-                description: "[fritz] user group (science program) id"
-                minimum: 1
-              filter_id:
-                type: integer
-                description: "[fritz] science program filter id for this user group id"
-                minimum: 1
-              catalog:
-                type: string
-                description: "alert stream to filter"
-                enum: [ZTF_alerts, ZUDS_alerts]
-              permissions:
-                type: array
-                items:
-                  type: integer
-                description: "permissions to access streams"
-                minItems: 1
-              autosave:
-                type: boolean
-                description: "automatically save passing alerts to group <group_id>"
-                default: false
-              update_annotations:
-                type: boolean
-                description: "update existing annotations for newly passing alerts"
-                default: false
-              pipeline:
-                type: array
-                items:
+    class Config:
+        # collection name in MongoDB
+        collection = "filters"
+        json_loads = loads
+        json_dumps = dumps
+
+
+class FilterHandler(Handler):
+    """Handlers to work with user-defined alert filters"""
+
+    @admin_required
+    async def get(self, request: web.Request) -> web.Response:
+        """Retrieve filter by filter_id
+
+        :param request:
+        :return:
+        ---
+        summary: Retrieve user-defined filters
+        tags:
+          - filters
+
+        parameters:
+          - in: query
+            name: filter_id
+            description: filter id
+            required: true
+            schema:
+              type: integer
+              minimum: 1
+
+        responses:
+          '200':
+            description: retrieved filter data
+            content:
+              application/json:
+                schema:
                   type: object
-                description: "user-defined aggregation pipeline stages in MQL"
-                minItems: 1
-          examples:
-            filter_1:
-              value:
-                "group_id": 1
-                "filter_id": 1
-                "catalog": ZTF_alerts
-                "permissions": [1, 2]
-                "pipeline": [
-                    {
-                        "$match": {
-                            "candidate.drb": {
-                                "$gt": 0.9999
-                            },
-                            "cross_matches.CLU_20190625.0": {
-                                "$exists": False
-                            }
-                        }
-                    },
-                    {
-                        "$addFields": {
-                            "annotations.author": "dd",
-                            "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
-                        }
-                    },
-                    {
-                        "$project": {
-                            "_id": 0,
-                            "candid": 1,
-                            "objectId": 1,
-                            "annotations": 1
-                        }
-                    }
-                ]
-            filter_2:
-              value:
-                "group_id": 2
-                "filter_id": 1
-                "catalog": ZTF_alerts
-                "permissions": [1, 2]
-                "autosave": true
-                "update_annotations": false
-                "pipeline": [
-                    {
-                        "$match": {
-                            "candidate.drb": {
-                                "$gt": 0.9999
-                            },
-                            "cross_matches.CLU_20190625.0": {
-                                "$exists": True
-                            }
-                        }
-                    },
-                    {
-                        "$addFields": {
-                            "annotations.author": "dd",
-                            "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
-                        }
-                    },
-                    {
-                        "$project": {
-                            "_id": 0,
-                            "candid": 1,
-                            "objectId": 1,
-                            "annotations": 1
-                        }
-                    }
-                ]
+                  required:
+                    - status
+                    - message
+                    - data
+                  properties:
+                    status:
+                      type: string
+                      enum: [success]
+                    message:
+                      type: string
+                    data:
+                      type: object
+                example:
+                  "status": "success"
+                  "message": "Retrieved filter id 1"
+                  "data": {
+                    "group_id": 1,
+                    "filter_id": 1,
+                    "catalog": "ZTF_alerts",
+                    "permissions": [1, 2],
+                    "autosave": false,
+                    "update_annotations": false,
+                    "active": true,
+                    "active_fid": "nnsun9",
+                    "fv": [
+                      "fid": "nnsun9",
+                      "pipeline": "<serialized extended json string>",
+                      "created": {
+                          "$date": 1584403506877
+                      }
+                    ]
+                  }
 
-    responses:
-      '200':
-        description: filter successfully tested
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [success]
-                message:
-                  type: string
-            example:
-              "status": "success"
-              "message": "successfully executed on candid <candid>"
+          '400':
+            description: retrieval failed or internal/unknown cause of failure
+            content:
+              application/json:
+                schema:
+                  type: object
+                  required:
+                    - status
+                    - message
+                  properties:
+                    status:
+                      type: string
+                      enum: [error]
+                    message:
+                      type: string
+                example:
+                  status: error
+                  message: "failure: <error message>"
+        """
+        filter_id = int(request.match_info["filter_id"])
 
-      '400':
-        description: filter parsing/testing error
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [error]
-                message:
-                  type: string
-            example:
-              status: error
-              message: "failure: <error message>"
-
-      '500':
-        description: "unable to test, no alerts in db"
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [error]
-                message:
-                  type: string
-            example:
-              status: error
-              message: "no alerts in <catalog>, cannot test filter"
-
-    """
-    try:
-
-        try:
-            filter_spec = await request.json()
-        except Exception as _e:
-            log(f"Cannot extract json() from request, trying post(): {str(_e)}")
-            filter_spec = await request.post()
-
-        # checks:
-        group_id = filter_spec.get("group_id", None)
-        filter_id = filter_spec.get("filter_id", None)
-        catalog = filter_spec.get("catalog", None)
-        permissions = filter_spec.get("permissions", None)
-        autosave = filter_spec.get("autosave", False)
-        update_annotations = filter_spec.get("update_annotations", False)
-        pipeline = filter_spec.get("pipeline", None)
-        if group_id is None:
-            return web.json_response(
-                {"status": "error", "message": "group_id must be set"}, status=400
-            )
-        if filter_id is None:
-            return web.json_response(
-                {"status": "error", "message": "filter_id must be set"}, status=400
-            )
-        if catalog is None:
-            return web.json_response(
-                {"status": "error", "message": "catalog must be set"}, status=400
-            )
-        if permissions is None:
-            return web.json_response(
-                {"status": "error", "message": "permissions must be set"}, status=400
-            )
-        if pipeline is None:
-            return web.json_response(
-                {"status": "error", "message": "pipeline must be set"}, status=400
-            )
-
-        autosave = forgiving_true(autosave)
-        update_annotations = forgiving_true(update_annotations)
-
-        if not isinstance(pipeline, str):
-            pipeline = dumps(pipeline)
-
-        if len(loads(pipeline)) == 0:
-            return web.json_response(
-                {"status": "error", "message": "pipeline must have at least one stage"},
-                status=400,
-            )
-
-        # check that only allowed stages are used in the pipeline
-        forbidden_stages = {"$lookup", "$unionWith", "$out", "$merge"}
-        stages = set([list(pp.keys())[0] for pp in loads(pipeline)])
-        if len(stages.intersection(forbidden_stages)):
-            return web.json_response(
-                {
-                    "status": "error",
-                    "message": f"pipeline uses forbidden stages: {str(stages.intersection(forbidden_stages))}",
-                },
-                status=400,
-            )
-
-        # try on most recently ingested alert
-        n_docs = await request.app["mongo"][catalog].estimated_document_count()
-
-        if n_docs > 0:
-            # get latest candid:
-            select = (
-                request.app["mongo"][catalog]
-                .find({}, {"_id": 0, "candid": 1})
-                .sort([("$natural", -1)])
-                .limit(1)
-            )
-            alert = await select.to_list(length=1)
-            alert = alert[0]
-            # log(alert)
-
-            # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
-            # including archival photometry and cross-matches:
-            filter_pipeline_upstream = config["database"]["filters"][catalog]
-            filter_template = filter_pipeline_upstream + loads(pipeline)
-            # match candid
-            filter_template[0]["$match"]["candid"] = alert["candid"]
-            # match permissions
-            filter_template[0]["$match"]["candidate.programid"]["$in"] = permissions
-            filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][
-                0
-            ]["$in"][1] = permissions
-            cursor = request.app["mongo"][catalog].aggregate(
-                filter_template, allowDiskUse=False, maxTimeMS=500
-            )
-            await cursor.to_list(length=None)
-        else:
-            return web.json_response(
-                {
-                    "status": "error",
-                    "message": f"no alerts in {catalog}, cannot test filter",
-                },
-                status=500,
-            )
-
-        return web.json_response(
-            {
-                "status": "success",
-                "message": f'successfully executed on candid {alert["candid"]}',
-            },
-            status=200,
+        filtr = await request.app["mongo_odm"].find_one(
+            Filter, Filter.filter_id == filter_id
         )
 
-    except Exception as _e:
-        log(f"Got error: {str(_e)}")
-        _err = traceback.format_exc()
-        log(_err)
-        return web.json_response(
-            {"status": "error", "message": f"failure: {_err}"}, status=400
-        )
+        if filtr is not None:
+            return self.success(
+                message=f"Retrieved filter id {filter_id}", data=filtr.doc()
+            )
+        return self.error(message=f"Filter id {filter_id} not found")
 
+    @admin_required
+    async def post(self, request: web.Request) -> web.Response:
+        """Post user-defined alert filter, or a new version thereof
+        - store pipeline as serialized extended json string,
+          to be used with literal_eval to convert to dict at execution
+        - run a simple sanity check before saving
 
-@admin_required
-async def filters_put(request):
-    """
-    Update user-defined filter
+        ---
+        summary: Post user-defined alert filter, or a new version thereof
+        tags:
+          - filters
 
-    :param request:
-    :return:
-
-    ---
-    summary: "Modify existing filters: activate/deactivate, set active_fid"
-    tags:
-      - filters
-
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            oneOf:
-              - type: object
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
                 required:
                   - group_id
                   - filter_id
-                  - active
+                  - catalog
+                  - permissions
+                  - pipeline
                 properties:
                   group_id:
                     type: integer
@@ -2570,418 +1836,468 @@ async def filters_put(request):
                   filter_id:
                     type: integer
                     description: "[fritz] science program filter id for this user group id"
+                    minimum: 1
+                  catalog:
+                    type: string
+                    description: "alert stream to filter"
+                    enum: [ZTF_alerts, ZUDS_alerts]
+                  permissions:
+                    type: array
+                    items:
+                      type: integer
+                    description: "permissions to access streams"
+                    minItems: 1
+                  autosave:
+                    type: boolean
+                    description: "automatically save passing alerts to group <group_id>"
+                    default: false
+                  update_annotations:
+                    type: boolean
+                    description: "update existing annotations for newly passing alerts"
+                    default: false
+                  pipeline:
+                    type: array
+                    items:
+                      type: object
+                    description: "user-defined aggregation pipeline stages in MQL"
+                    minItems: 1
+              examples:
+                filter_1:
+                  value:
+                    "group_id": 1
+                    "filter_id": 1
+                    "catalog": ZTF_alerts
+                    "permissions": [1, 2]
+                    "pipeline": [
+                    {
+                      "$match": {
+                        "candidate.drb": {
+                          "$gt": 0.9999
+                        },
+                        "cross_matches.CLU_20190625.0": {
+                          "$exists": False
+                        }
+                      }
+                    },
+                    {
+                      "$addFields": {
+                        "annotations.author": "dd",
+                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                      }
+                    },
+                    {
+                      "$project": {
+                        "_id": 0,
+                        "candid": 1,
+                        "objectId": 1,
+                        "annotations": 1
+                      }
+                    }
+                    ]
+                filter_2:
+                  value:
+                    "group_id": 2
+                    "filter_id": 1
+                    "catalog": ZTF_alerts
+                    "permissions": [1, 2, 3]
+                    "autosave": true
+                    "update_annotations": false
+                    "pipeline": [
+                    {
+                      "$match": {
+                        "candidate.drb": {
+                          "$gt": 0.9999
+                        },
+                        "cross_matches.CLU_20190625.0": {
+                          "$exists": True
+                        }
+                      }
+                    },
+                    {
+                      "$addFields": {
+                        "annotations.author": "dd",
+                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                      }
+                    },
+                    {
+                      "$project": {
+                        "_id": 0,
+                        "candid": 1,
+                        "objectId": 1,
+                        "annotations": 1
+                      }
+                    }
+                    ]
+
+
+        responses:
+          '200':
+            description: filter successfully saved
+            content:
+              application/json:
+                schema:
+                  type: object
+                  required:
+                    - status
+                    - message
+                    - data
+                  properties:
+                    status:
+                      type: string
+                      enum: [success]
+                    message:
+                      type: string
+                    user:
+                      type: string
+                    data:
+                      description: "contains unique filter identifier"
+                      type: object
+                      additionalProperties:
+                        type: object
+                        properties:
+                          fid:
+                            type: string
+                            description: "generated unique filter identifier"
+                            minLength: 6
+                            maxLength: 6
+                example:
+                  "status": "success"
+                  "message": "saved filter: c3ig1t"
+                  "data": {
+                   "fid": "c3ig1t"
+                  }
+
+          '400':
+            description: filter parsing/testing/saving error
+            content:
+              application/json:
+                schema:
+                  type: object
+                  required:
+                    - status
+                    - message
+                  properties:
+                    status:
+                      type: string
+                      enum: [error]
+                    message:
+                      type: string
+                example:
+                  status: error
+                  message: "failure: <error message>"
+        """
+        # allow both .json() and .post():
+        try:
+            filter_spec = await request.json()
+        except AttributeError:
+            filter_spec = await request.post()
+
+        filter_new = Filter(**filter_spec)
+        # check if a filter for these (group_id, filter_id) already exists:
+        filter_existing = await request.app["mongo_odm"].find_one(
+            Filter,
+            Filter.filter_id == filter_new.filter_id,
+            Filter.group_id == filter_new.group_id,
+        )
+
+        # new filter version:
+        pipeline = filter_spec.get("pipeline")
+        if not isinstance(pipeline, str):
+            pipeline = dumps(pipeline)
+        filter_version = FilterVersion(pipeline=pipeline)
+        try:
+            # try on most recently ingested alert to check correctness
+            n_docs = await request.app["mongo"][
+                filter_new.catalog
+            ].estimated_document_count()
+            log(f"Found {n_docs} documents in {filter_new.catalog} collection")
+
+            if n_docs > 0:
+                # get latest candid:
+                select = (
+                    request.app["mongo"][filter_new.catalog]
+                    .find({}, {"_id": 0, "candid": 1})
+                    .sort([("$natural", -1)])
+                    .limit(1)
+                )
+                alert = await select.to_list(length=1)
+                alert = alert[0]
+
+                # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
+                # including archival photometry and cross-matches:
+                filter_pipeline_upstream = config["database"]["filters"][
+                    filter_new.catalog
+                ]
+                filter_template = filter_pipeline_upstream + loads(
+                    filter_version.pipeline
+                )
+                # match candid
+                filter_template[0]["$match"]["candid"] = alert["candid"]
+                # match permissions
+                filter_template[0]["$match"]["candidate.programid"][
+                    "$in"
+                ] = filter_new.permissions
+                filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"][
+                    "$and"
+                ][0]["$in"][1] = filter_new.permissions
+                cursor = request.app["mongo"][filter_new.catalog].aggregate(
+                    filter_template, allowDiskUse=False, maxTimeMS=3000
+                )
+                await cursor.to_list(length=None)
+                test_successful, test_message = (
+                    True,
+                    f"pipeline test for filter id {filter_new.filter_id} successful",
+                )
+                log(test_message)
+            else:
+                test_successful, test_message = (
+                    True,
+                    f"WARNING: No documents in {filter_new.catalog} collection, "
+                    f"cannot properly test pipeline for filter id {filter_new.filter_id}",
+                )
+                log(test_message)
+
+        except Exception as e:
+            log(e)
+            test_successful, test_message = False, e
+        if not test_successful:
+            return self.error(message=test_message)
+
+        # if a filter does not exist for (filter_id, group_id), create one:
+        if filter_existing is None:
+            filter_new.fv.append(filter_version)
+            filter_new.active_fid = filter_version.fid
+            filter_new.last_modified = datetime.datetime.now()
+            await request.app["mongo_odm"].save(filter_new)
+        else:
+            # already exists? push new filter version and reset active_fid:
+            filter_existing.fv.append(filter_version)
+            filter_existing.active_fid = filter_version.fid
+            filter_existing.last_modified = datetime.datetime.now()
+            # note: filters are defined on streams on SkyPortal,
+            # with non-modifiable catalog and permissions parameters, so it should not be possible to modify such here
+            await request.app["mongo_odm"].save(filter_existing)
+
+        return self.success(
+            message=test_message + f"\nsaved new filter version: {filter_version.fid}",
+            data=filter_version.doc(),
+        )
+
+    @admin_required
+    async def patch(self, request: web.Request) -> web.Response:
+        """Update user-defined filter
+
+        :param request:
+        :return:
+
+        ---
+        summary: "Modify existing filters: activate/deactivate, set active_fid, autosave, or update_annotations"
+        tags:
+          - filters
+
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - filter_id
+                properties:
+                  filter_id:
+                    type: integer
+                    description: "[fritz] filter id for this group id"
                     minimum: 1
                   active:
                     type: boolean
                     description: "activate or deactivate filter"
-              - type: object
-                required:
-                  - group_id
-                  - filter_id
-                  - active_fid
-                properties:
-                  group_id:
-                    type: integer
-                    description: "[fritz] user group (science program) id"
-                    minimum: 1
-                  filter_id:
-                    type: integer
-                    description: "[fritz] science program filter id for this user group id"
-                    minimum: 1
                   active_fid:
                     description: "set fid as active version"
                     type: string
                     minLength: 6
                     maxLength: 6
-              - type: object
-                required:
-                  - group_id
-                  - filter_id
-                  - autosave
-                properties:
-                  group_id:
-                    type: integer
-                    description: "[fritz] user group (science program) id"
-                    minimum: 1
-                  filter_id:
-                    type: integer
-                    description: "[fritz] science program filter id for this user group id"
-                    minimum: 1
                   autosave:
                     type: boolean
                     description: "autosave candidates that pass filter to corresponding group?"
-              - type: object
-                required:
-                  - group_id
-                  - filter_id
-                  - update_annotations
-                properties:
-                  group_id:
-                    type: integer
-                    description: "[fritz] user group (science program) id"
-                    minimum: 1
-                  filter_id:
-                    type: integer
-                    description: "[fritz] science program filter id for this user group id"
-                    minimum: 1
                   update_annotations:
                     type: boolean
                     description: "update annotations for new candidates that previously passed filter?"
 
-          examples:
-            filter_1:
-              value:
-                "group_id": 1
-                "filter_id": 1
-                "active": false
-            filter_2:
-              value:
-                "group_id": 2
-                "filter_id": 5
-                "active_fid": "r7qiti"
-            filter_3:
-              value:
-                "group_id": 1
-                "filter_id": 1
-                "autosave": true
-            filter_4:
-              value:
-                "group_id": 1
-                "filter_id": 1
-                "update_annotations": true
+              examples:
+                filter_1:
+                  value:
+                    "filter_id": 1
+                    "active": false
+                filter_2:
+                  value:
+                    "filter_id": 5
+                    "active_fid": "r7qiti"
+                filter_3:
+                  value:
+                    "filter_id": 1
+                    "autosave": true
+                filter_4:
+                  value:
+                    "filter_id": 1
+                    "update_annotations": true
 
-    responses:
-      '200':
-        description: filter removed
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [success]
-                message:
-                  type: string
-            example:
-              status: success
-              message: "updated filter for group_id=1, filter_id=1"
-              data:
-                active: false
+        responses:
+          '200':
+            description: filter updated
+            content:
+              application/json:
+                schema:
+                  type: object
+                  required:
+                    - status
+                    - message
+                  properties:
+                    status:
+                      type: string
+                      enum: [success]
+                    message:
+                      type: string
+                example:
+                  status: success
+                  message: "updated filter id 1"
+                  data:
+                    active: false
 
-      '400':
-        description: filter not found or removal failed
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [error]
-                message:
-                  type: string
-            examples:
-              filter not found:
-                value:
-                  status: error
-                  message: filter for group_id=1, filter_id=1 not found
-
-      '500':
-        description: internal/unknown cause of failure
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [error]
-                message:
-                  type: string
-            example:
-              status: error
-              message: "failure: <error message>"
-    """
-    try:
+          '400':
+            description: filter not found or removal failed
+            content:
+              application/json:
+                schema:
+                  type: object
+                  required:
+                    - status
+                    - message
+                  properties:
+                    status:
+                      type: string
+                      enum: [error]
+                    message:
+                      type: string
+                examples:
+                  filter not found:
+                    value:
+                      status: error
+                      message: filter id 1 not found
+        """
+        # allow both .json() and .post():
         try:
             filter_spec = await request.json()
-        except Exception as _e:
-            log(f"Cannot extract json() from request, trying post(): {str(_e)}")
+        except AttributeError:
             filter_spec = await request.post()
 
-        # checks:
-        group_id = filter_spec.get("group_id", None)
-        filter_id = filter_spec.get("filter_id", None)
-        active = filter_spec.get("active", None)
-        active_fid = filter_spec.get("active_fid", None)
-        autosave = filter_spec.get("autosave", None)
-        update_annotations = filter_spec.get("update_annotations", None)
-        if group_id is None:
-            return web.json_response(
-                {"status": "error", "message": "group_id must be set"}, status=400
-            )
-        if filter_id is None:
-            return web.json_response(
-                {"status": "error", "message": "filter_id must be set"}, status=400
-            )
-        if (active, active_fid, autosave, update_annotations).count(None) != 3:
-            return web.json_response(
-                {
-                    "status": "error",
-                    "message": "exactly one of (active, active_fid, autosave, update_annotations) must be set",
-                },
-                status=400,
-            )
+        filter_id = filter_spec.get("filter_id")
 
-        group_id = int(group_id)
-        filter_id = int(filter_id)
+        # check if a filter for these (group_id, filter_id) already exists:
+        filter_existing = await request.app["mongo_odm"].find_one(
+            Filter, Filter.filter_id == filter_id
+        )
+        filter_doc = filter_existing.doc()
 
-        # check if a filter for these (group_id, filter_id) exists:
-        doc_saved = await request.app["mongo"].filters.find_one(
-            {"group_id": group_id, "filter_id": filter_id}
+        if filter_existing is None:
+            return self.error(message=f"filter id {filter_id} not found")
+
+        # note: partial model loading is not (yet?) available in odmantic + need a custom check on active_fid
+        for modifiable_field in (
+            "active",
+            "active_fid",
+            "autosave",
+            "update_annotations",
+        ):
+            value = filter_spec.get(modifiable_field)
+            if value is not None:
+                if modifiable_field == "active_fid" and value not in [
+                    filter_version["fid"] for filter_version in filter_doc["fv"]
+                ]:
+                    raise ValueError(
+                        f"cannot set active_fid to {value}: filter version fid not in filter.fv"
+                    )
+                filter_doc[modifiable_field] = value
+        filter_existing = Filter.parse_doc(filter_doc)
+
+        await request.app["mongo_odm"].save(filter_existing)
+
+        return self.success(
+            message=f"Updated filter id {filter_id}", data=filter_existing.doc()
         )
 
-        if doc_saved is None:
-            return web.json_response(
-                {
-                    "status": "error",
-                    "message": f"filter for group_id={group_id}, filter_id={filter_id} not found",
-                },
-                status=400,
-            )
+    @admin_required
+    async def delete(self, request: web.Request) -> web.Response:
+        """Delete user-defined filter for (group_id, filter_id) altogether
 
-        if active is not None:
-            r = await request.app["mongo"].filters.update_one(
-                {"_id": doc_saved["_id"]}, {"$set": {"active": active}}
-            )
+        :param request:
+        :return:
 
-            return_data = {"active": active}
+        ---
+        summary: Delete user-defined filter by filter_id
+        tags:
+          - filters
 
-        elif active_fid is not None:
-            # check that fid exists:
-            fids = {ff["fid"] for ff in doc_saved["fv"]}
-
-            if active_fid not in fids:
-                return web.json_response(
-                    {"status": "error", "message": f"fid {active_fid} not found"},
-                    status=400,
-                )
-
-            r = await request.app["mongo"].filters.update_one(
-                {"_id": doc_saved["_id"]}, {"$set": {"active_fid": active_fid}}
-            )
-
-            return_data = {"active_fid": active_fid}
-
-        elif autosave is not None:
-            autosave = forgiving_true(autosave)
-
-            r = await request.app["mongo"].filters.update_one(
-                {"_id": doc_saved["_id"]}, {"$set": {"autosave": autosave}}
-            )
-
-            return_data = {"autosave": autosave}
-
-        elif update_annotations is not None:
-            update_annotations = forgiving_true(update_annotations)
-
-            r = await request.app["mongo"].filters.update_one(
-                {"_id": doc_saved["_id"]},
-                {"$set": {"update_annotations": update_annotations}},
-            )
-
-            return_data = {"update_annotations": update_annotations}
-
-        if r.modified_count == 0:
-            return web.json_response(
-                {"status": "error", "message": "failed to update filter"},
-                status=400,
-            )
-
-        return web.json_response(
-            {
-                "status": "success",
-                "message": f"updated filter for group_id={group_id}, filter_id={filter_id}",
-                "data": return_data,
-            },
-            status=200,
-        )
-
-    except Exception as _e:
-        log(f"Got error: {str(_e)}")
-        _err = traceback.format_exc()
-        log(_err)
-        return web.json_response(
-            {"status": "error", "message": f"failure: {_err}"}, status=500
-        )
-
-
-# @routes.delete('/api/filters')
-@admin_required
-async def filters_delete(request):
-    """
-    Delete user-defined filter for (group_id, filter_id) altogether
-
-    :param request:
-    :return:
-
-    ---
-    summary: Delete user-defined filter by (group_id, filter_id)
-    tags:
-      - filters
-
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            required:
-              - group_id
-              - filter_id
-            properties:
-              group_id:
-                type: integer
-                description: "[fritz] user group (science program) id"
-                minimum: 1
-              filter_id:
-                type: integer
-                description: "[fritz] science program filter id for this user group id"
-                minimum: 1
-
-          examples:
-            filter_1:
-              value:
-                "group_id": 1
-                "filter_id": 1
-            filter_2:
-              value:
-                "group_id": 2
-                "filter_id": 5
-
-    responses:
-      '200':
-        description: filter removed
-        content:
-          application/json:
+        parameters:
+          - in: query
+            name: filter_id
+            description: filter id
+            required: true
             schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [success]
-                message:
-                  type: string
-            example:
-              status: success
-              message: "removed filter for group_id=1, filter_id=1"
+              type: integer
+              minimum: 1
 
-      '400':
-        description: filter not found or removal failed
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [error]
-                message:
-                  type: string
-            examples:
-              filter not found:
-                value:
-                  status: error
-                  message: filter for group_id=1, filter_id=1 not found
+        responses:
+          '200':
+            description: filter removed
+            content:
+              application/json:
+                schema:
+                  type: object
+                  required:
+                    - status
+                    - message
+                  properties:
+                    status:
+                      type: string
+                      enum: [success]
+                    message:
+                      type: string
+                example:
+                  status: success
+                  message: "Removed filter for group_id=1, filter_id=1"
 
-      '500':
-        description: internal/unknown cause of failure
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [error]
-                message:
-                  type: string
-            example:
-              status: error
-              message: "failure: <error message>"
-    """
-    try:
-        try:
-            filter_spec = await request.json()
-        except Exception as _e:
-            log(f"Cannot extract json() from request, trying post(): {str(_e)}")
-            filter_spec = await request.post()
+          '400':
+            description: filter not found or removal failed
+            content:
+              application/json:
+                schema:
+                  type: object
+                  required:
+                    - status
+                    - message
+                  properties:
+                    status:
+                      type: string
+                      enum: [error]
+                    message:
+                      type: string
+                examples:
+                  filter not found:
+                    value:
+                      status: error
+                      message: filter for group_id=1, filter_id=1 not found
+        """
+        filter_id = int(request.match_info["filter_id"])
 
-        # checks:
-        group_id = filter_spec.get("group_id", None)
-        filter_id = filter_spec.get("filter_id", None)
-        if group_id is None:
-            return web.json_response(
-                {"status": "error", "message": "group_id must be set"}, status=400
-            )
-        if filter_id is None:
-            return web.json_response(
-                {"status": "error", "message": "filter_id must be set"}, status=400
-            )
-
-        group_id = int(group_id)
-        filter_id = int(filter_id)
-
-        r = await request.app["mongo"].filters.delete_one(
-            {"group_id": group_id, "filter_id": filter_id}
-        )
+        r = await request.app["mongo"].filters.delete_one({"filter_id": filter_id})
 
         if r.deleted_count != 0:
-            return web.json_response(
-                {
-                    "status": "success",
-                    "message": f"removed filter for group_id={group_id}, filter_id={filter_id}",
-                },
-                status=200,
-            )
+            return self.success(message=f"Removed filter id {filter_id}")
         else:
-            return web.json_response(
-                {
-                    "status": "error",
-                    "message": f"filter for group_id={group_id}, filter_id={filter_id} not found",
-                },
-                status=400,
-            )
-
-    except Exception as _e:
-        log(f"Got error: {str(_e)}")
-        _err = traceback.format_exc()
-        log(_err)
-        return web.json_response(
-            {"status": "error", "message": f"failure: {_err}"}, status=500
-        )
+            return self.error(message=f"Filter id {filter_id} not found")
 
 
-""" lab apis """
+""" lab """
 
 
 # @routes.get('/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}', allow_head=False)
@@ -3427,8 +2743,8 @@ async def app_factory():
     # add site admin if necessary
     await add_admin(mongo, config=config)
 
-    # init app with auth middleware
-    app = web.Application(middlewares=[auth_middleware])
+    # init app with auth and error handling middlewares
+    app = web.Application(middlewares=[auth_middleware, error_middleware])
 
     # store mongo connection
     app["mongo"] = mongo
@@ -3444,6 +2760,11 @@ async def app_factory():
         _app["mongo"].client.close()
 
     app.on_cleanup.append(close_mongo)
+
+    # use ODMantic to work with structured data such as Filters
+    engine = AIOEngine(motor_client=client, database=config["database"]["db"])
+    # ODM = Object Document Mapper
+    app["mongo_odm"] = engine
 
     # set up JWT for user authentication/authorization
     app["JWT"] = {
@@ -3464,14 +2785,13 @@ async def app_factory():
         components="components_api.yaml",
     )
 
-    # route table from decorators:
-    # app.add_routes(routes)
-    # s.add_routes(routes)
+    # instantiate handler classes:
+    filter_handler = FilterHandler()
 
     # add routes manually
     s.add_routes(
         [
-            web.get("/", root, name="root", allow_head=False),
+            web.get("/", ping, name="root", allow_head=False),
             # auth:
             web.post("/api/auth", auth_post, name="auth"),
             # users:
@@ -3482,17 +2802,13 @@ async def app_factory():
             web.post("/api/queries", queries_post),
             web.get("/api/queries/{task_id}", queries_get, allow_head=False),
             web.delete("/api/queries/{task_id}", queries_delete),
-            # # filters:
-            web.get("/api/filters/{group_id}", filters_get_group_id, allow_head=False),
+            # filters:
             web.get(
-                "/api/filters/{group_id}/{filter_id}",
-                filters_get_group_id_filter_id,
-                allow_head=False,
+                r"/api/filters/{filter_id:[0-9]+}", filter_handler.get, allow_head=False
             ),
-            web.post("/api/filters", filters_post),
-            web.put("/api/filters", filters_put),
-            web.delete("/api/filters", filters_delete),
-            web.post("/api/filters/test", filters_test_post),
+            web.post("/api/filters", filter_handler.post),
+            web.patch("/api/filters", filter_handler.patch),
+            web.delete("/api/filters/{filter_id:[0-9]+}", filter_handler.delete),
             # lab:
             web.get(
                 "/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}",
