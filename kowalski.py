@@ -244,6 +244,20 @@ class Kowalski:
             ]
             subprocess.run(command, check=True)
             cls.check_containers_up(containers=("kowalski_mongo_1",))
+            # make sure mongod process is running inside the container
+            num_retries = 10
+            for i in range(num_retries):
+                if i == num_retries - 1:
+                    raise RuntimeError("MongoDB failed to spin up")
+                command = ["docker", "exec", "-i", "kowalski_mongo_1", "ps", "-ef"]
+                process_list = subprocess.check_output(
+                    command, universal_newlines=True
+                ).strip()
+                if "mongod" not in process_list:
+                    print("MongoDB is not up, waiting...")
+                    time.sleep(10)
+                    continue
+                break
             print("Attempting MongoDB replica set initiation")
             command = [
                 "docker",
