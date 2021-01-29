@@ -227,10 +227,10 @@ class Kowalski:
         with status("Checking configuration"):
             check_configs(config_wildcards=config_wildcards)
 
-        with open(
-            pathlib.Path(__file__).parent.absolute() / "config.yaml"
-        ) as config_yaml:
-            config = yaml.load(config_yaml, Loader=yaml.FullLoader)["kowalski"]
+        # with open(
+        #     pathlib.Path(__file__).parent.absolute() / "config.yaml"
+        # ) as config_yaml:
+        #     config = yaml.load(config_yaml, Loader=yaml.FullLoader)["kowalski"]
 
         if init:
             # spin up mongo container
@@ -244,35 +244,31 @@ class Kowalski:
             ]
             subprocess.run(command, check=True)
             cls.check_containers_up(containers=("kowalski_mongo_1",))
-            # make sure mongod process is running inside the container
+
+            print("Attempting MongoDB replica set initiation")
             num_retries = 10
             for i in range(num_retries):
                 if i == num_retries - 1:
-                    raise RuntimeError("MongoDB failed to spin up")
-                command = ["docker", "exec", "-i", "kowalski_mongo_1", "ps", "-ef"]
-                process_list = subprocess.check_output(
-                    command, universal_newlines=True
-                ).strip()
-                print(process_list)
-                if "mongod" not in process_list:
-                    print("MongoDB is not up, waiting...")
+                    raise RuntimeError("MongoDB replica set initiation failed")
+                try:
+                    command = [
+                        "docker",
+                        "exec",
+                        "-i",
+                        "kowalski_mongo_1",
+                        "mongo",
+                        # f"-u={config['database']['admin_username']}",
+                        # f"-p={config['database']['admin_password']}",
+                        # "--authenticationDatabase=admin",
+                        "--eval",
+                        "'rs.initiate()'",
+                    ]
+                    subprocess.run(command, check=True)
+                except subprocess.CalledProcessError:
+                    print("Failed attempt, waiting before retrying...")
                     time.sleep(10)
                     continue
                 break
-            print("Attempting MongoDB replica set initiation")
-            command = [
-                "docker",
-                "exec",
-                "-i",
-                "kowalski_mongo_1",
-                "mongo",
-                f"-u={config['database']['admin_username']}",
-                f"-p={config['database']['admin_password']}",
-                "--authenticationDatabase=admin",
-                "--eval",
-                "'rs.initiate()'",
-            ]
-            subprocess.run(command, check=True)
 
         command = ["docker-compose", "-f", "docker-compose.yaml", "up", "-d"]
 
