@@ -227,11 +227,6 @@ class Kowalski:
         with status("Checking configuration"):
             check_configs(config_wildcards=config_wildcards)
 
-        with open(
-            pathlib.Path(__file__).parent.absolute() / "config.yaml"
-        ) as config_yaml:
-            config = yaml.load(config_yaml, Loader=yaml.FullLoader)["kowalski"]
-
         if init:
             # spin up mongo container
             command = [
@@ -259,9 +254,6 @@ class Kowalski:
                         "-i",
                         "kowalski_mongo_1",
                         "mongo",
-                        f"-u={config['database']['admin_username']}",
-                        f"-p={config['database']['admin_password']}",
-                        "--authenticationDatabase=admin",
                         "--eval",
                         "'rs.initiate()'",
                     ]
