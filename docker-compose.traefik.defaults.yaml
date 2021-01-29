@@ -101,4 +101,4 @@ services:
     depends_on:
       - traefik
     # run as a replica set of size 1
-    entrypoint: [ "/usr/bin/mongod", "--bind_ip_all", "--replSet", "rs0" ]
+    command: [ "/usr/bin/mongod", "--bind_ip_all", "--replSet", "rs0" ]
