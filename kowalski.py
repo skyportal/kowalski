@@ -253,6 +253,7 @@ class Kowalski:
                 process_list = subprocess.check_output(
                     command, universal_newlines=True
                 ).strip()
+                print(process_list)
                 if "mongod" not in process_list:
                     print("MongoDB is not up, waiting...")
                     time.sleep(10)
