@@ -7,6 +7,8 @@ import fire
 import pathlib
 from pprint import pprint
 import questionary
+import secrets
+import string
 import subprocess
 import sys
 import time
@@ -210,13 +212,12 @@ class Kowalski:
 
             break
 
-    @classmethod
-    def up(cls, build: bool = False, init: bool = False):
+    @staticmethod
+    def up(build: bool = False):
         """
         🐧🚀 Launch Kowalski
 
         :param build: build the containers first?
-        :param init: attempt to initiate mongo replica set?
         :return:
         """
         print("Spinning up Kowalski 🐧🚀")
@@ -227,42 +228,19 @@ class Kowalski:
         with status("Checking configuration"):
             check_configs(config_wildcards=config_wildcards)
 
-        if init:
-            # spin up mongo container
-            command = [
-                "docker-compose",
-                "-f",
-                "docker-compose.yaml",
-                "up",
-                "-d",
-                "mongo",
-            ]
-            subprocess.run(command, check=True)
-            cls.check_containers_up(containers=("kowalski_mongo_1",))
-
-            print("Attempting MongoDB replica set initiation")
-            # note: even once the mongod process is running inside the container, it may take some time
-            #       for it to become operational/responsive
-            num_retries = 10
-            for i in range(num_retries):
-                if i == num_retries - 1:
-                    raise RuntimeError("MongoDB replica set initiation failed")
-                try:
-                    command = [
-                        "docker",
-                        "exec",
-                        "-i",
-                        "kowalski_mongo_1",
-                        "mongo",
-                        "--eval",
-                        "'rs.initiate()'",
-                    ]
-                    subprocess.run(command, check=True)
-                except subprocess.CalledProcessError:
-                    print("Failed attempt, waiting before retrying...")
-                    time.sleep(10)
-                    continue
-                break
+        # check MongoDB keyfile for replica set authorization
+        mongodb_keyfile = pathlib.Path(__file__).parent.absolute() / "mongo_key.yaml"
+        if not mongodb_keyfile.exists():
+            print("Generating MongoDB keyfile")
+            # generate a random key that is required to be able to use authorization with replica set
+            key = "".join(
+                secrets.choice(string.ascii_lowercase + string.digits)
+                for _ in range(32)
+            )
+            with open(mongodb_keyfile, "w") as f:
+                f.write(key)
+            command = ["chmod", "400", "mongo_key.yaml"]
+            subprocess.run(command)
 
         command = ["docker-compose", "-f", "docker-compose.yaml", "up", "-d"]
 

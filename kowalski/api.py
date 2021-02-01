@@ -2733,18 +2733,18 @@ async def app_factory():
 
     # Database connection
     mongodb_connection_string = (
-        f"mongodb://{config['database']['username']}:{config['database']['password']}@"
-        + f"{config['database']['host']}:{config['database']['port']}/{config['database']['db']}"
+        f"mongodb://{config['database']['admin_username']}:{config['database']['admin_password']}@"
+        + f"{config['database']['host']}:{config['database']['port']}"
     )
     if config["database"]["replica_set"] is not None:
-        mongodb_connection_string += f"?replicaSet={config['database']['replica_set']}"
+        mongodb_connection_string += f"/?replicaSet={config['database']['replica_set']}"
     client = AsyncIOMotorClient(
         mongodb_connection_string,
         maxPoolSize=config["database"]["max_pool_size"],
     )
     mongo = client[config["database"]["db"]]
 
-    # add site admin if necessary
+    # admin to connect to this instance from outside using API
     await add_admin(mongo, config=config)
 
     # init app with auth and error handling middlewares
