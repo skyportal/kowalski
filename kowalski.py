@@ -401,7 +401,8 @@ class Kowalski:
 
         # make sure the containers are up and running
         cls.check_containers_up(
-            containers=("kowalski_ingester_1", "kowalski_api_1"), sleep_for_seconds=10
+            containers=("kowalski_ingester_1", "kowalski_api_1", "kowalski_mongo_1"),
+            sleep_for_seconds=10,
         )
 
         print("Testing ZTF alert ingestion")
