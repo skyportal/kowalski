@@ -169,13 +169,13 @@ class Kowalski:
     def check_containers_up(
         containers: Sequence,
         num_retries: int = 10,
-        sleep_for: int = 2,
+        sleep_for_seconds: int = 10,
     ):
         """Check if containers in question are up and running
 
         :param containers: container name sequence, e.g. ("kowalski_api_1", "kowalski_mongo_1")
         :param num_retries:
-        :param sleep_for: number of seconds to sleep for before retrying
+        :param sleep_for_seconds: number of seconds to sleep for before retrying
         :return:
         """
         for i in range(num_retries):
@@ -190,7 +190,7 @@ class Kowalski:
             )
             if len(container_list) == 1:
                 print("No containers are running, waiting...")
-                time.sleep(2)
+                time.sleep(sleep_for_seconds)
                 continue
 
             containers_up = (
@@ -198,7 +198,12 @@ class Kowalski:
                     [
                         container
                         for container in container_list
-                        if container_name in container and " Up " in container
+                        if (
+                            (container_name in container)
+                            and (" Up " in container)
+                            and ("unhealthy" not in container)
+                            and ("health: starting" not in container)
+                        )
                     ]
                 )
                 > 0
@@ -207,7 +212,7 @@ class Kowalski:
 
             if not all(containers_up):
                 print(f"{containers} containers are not up, waiting...")
-                time.sleep(sleep_for)
+                time.sleep(sleep_for_seconds)
                 continue
 
             break
@@ -395,7 +400,9 @@ class Kowalski:
         print("Running the test suite")
 
         # make sure the containers are up and running
-        cls.check_containers_up(containers=("kowalski_ingester_1", "kowalski_api_1"))
+        cls.check_containers_up(
+            containers=("kowalski_ingester_1", "kowalski_api_1"), sleep_for_seconds=10
+        )
 
         print("Testing ZTF alert ingestion")
 
