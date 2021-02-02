@@ -188,6 +188,7 @@ class Kowalski:
                 .strip()
                 .split("\n")
             )
+            print(container_list)
             if len(container_list) == 1:
                 print("No containers are running, waiting...")
                 time.sleep(sleep_for_seconds)
