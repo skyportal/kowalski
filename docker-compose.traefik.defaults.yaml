@@ -87,6 +87,7 @@ services:
 
   mongo:
     image: mongo:latest
+    hostname: mongo
     expose:
       - "27017"
     # fixme:
