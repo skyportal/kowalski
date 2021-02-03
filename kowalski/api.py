@@ -2196,10 +2196,10 @@ class FilterHandler(Handler):
         filter_existing = await request.app["mongo_odm"].find_one(
             Filter, Filter.filter_id == filter_id
         )
-        filter_doc = filter_existing.doc()
-
         if filter_existing is None:
             return self.error(message=f"Filter id {filter_id} not found")
+
+        filter_doc = filter_existing.doc()
 
         # note: partial model loading is not (yet?) available in odmantic + need a custom check on active_fid
         for modifiable_field in (
