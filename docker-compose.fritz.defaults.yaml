@@ -43,7 +43,10 @@ services:
       - mongo
 
   mongo:
-    image: mongo:latest
+#    image: mongo:latest
+    build:
+      context: .
+      dockerfile: mongo.Dockerfile
     hostname: mongo
     expose:
       - "27017"
@@ -56,7 +59,6 @@ services:
       - MONGO_REPLICA_SET_NAME=rs0
     volumes:
       - mongodb:/data/db
-      - ./mongo_key.yaml:/opt/keyfile
     restart: always
     networks:
       - kowalski
