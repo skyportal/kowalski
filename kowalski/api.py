@@ -2182,7 +2182,7 @@ class FilterHandler(Handler):
                   filter not found:
                     value:
                       status: error
-                      message: filter id 1 not found
+                      message: Filter id 1 not found
         """
         # allow both .json() and .post():
         try:
@@ -2199,7 +2199,7 @@ class FilterHandler(Handler):
         filter_doc = filter_existing.doc()
 
         if filter_existing is None:
-            return self.error(message=f"filter id {filter_id} not found")
+            return self.error(message=f"Filter id {filter_id} not found")
 
         # note: partial model loading is not (yet?) available in odmantic + need a custom check on active_fid
         for modifiable_field in (
@@ -2214,7 +2214,7 @@ class FilterHandler(Handler):
                     filter_version["fid"] for filter_version in filter_doc["fv"]
                 ]:
                     raise ValueError(
-                        f"cannot set active_fid to {value}: filter version fid not in filter.fv"
+                        f"Cannot set active_fid to {value}: filter version fid not in filter.fv"
                     )
                 filter_doc[modifiable_field] = value
         filter_existing = Filter.parse_doc(filter_doc)
@@ -2285,7 +2285,7 @@ class FilterHandler(Handler):
                   filter not found:
                     value:
                       status: error
-                      message: filter for group_id=1, filter_id=1 not found
+                      message: Filter id 1 not found
         """
         filter_id = int(request.match_info["filter_id"])
 
@@ -2293,8 +2293,8 @@ class FilterHandler(Handler):
 
         if r.deleted_count != 0:
             return self.success(message=f"Removed filter id {filter_id}")
-        else:
-            return self.error(message=f"Filter id {filter_id} not found")
+
+        return self.error(message=f"Filter id {filter_id} not found")
 
 
 """ lab """

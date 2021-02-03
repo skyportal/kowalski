@@ -92,8 +92,8 @@ class TestAPIs(object):
         assert "token" in credentials
 
     async def test_auth_error(self, aiohttp_client):
-        """
-            Test authorization with invalid credentials: /api/auth
+        """Test authorization with invalid credentials: /api/auth
+
         :param aiohttp_client:
         :return:
         """
@@ -109,8 +109,8 @@ class TestAPIs(object):
         assert credentials["message"] == "Unauthorized"
 
     async def test_users(self, aiohttp_client):
-        """
-            Test user management: /api/users
+        """Test user management: /api/users
+
         :param aiohttp_client:
         :return:
         """
@@ -152,8 +152,8 @@ class TestAPIs(object):
     # test filters api
 
     async def test_filters(self, aiohttp_client):
-        """
-            Test saving, testing, retrieving, modifying, and removing a user-defined filter: /api/filters
+        """Test saving, testing, retrieving, modifying, and removing a user-defined filter: /api/filters
+
         :param aiohttp_client:
         :return:
         """
@@ -295,9 +295,8 @@ class TestAPIs(object):
 
     # test raising errors
 
-    async def test_bad_filter(self, aiohttp_client):
-        """
-        Test trying to save a bad filter: /api/filters/test
+    async def test_invalid_pipeline_stage_in_filter(self, aiohttp_client):
+        """Test trying to save a bad filter with an invalid pipeline stage: POST /api/filters
 
         :param aiohttp_client:
         :return:
@@ -334,9 +333,8 @@ class TestAPIs(object):
         result = await resp.json()
         assert result["status"] == "error"
 
-    async def test_forbidden_stage_in_filter(self, aiohttp_client):
-        """
-        Test trying to save a bad filter: /api/filters/test
+    async def test_forbidden_pipeline_stage_in_filter(self, aiohttp_client):
+        """Test trying to save a bad filter with an invalid stage: POST /api/filters
 
         :param aiohttp_client:
         :return:
@@ -384,7 +382,7 @@ class TestAPIs(object):
 
     async def test_set_nonexistent_active_fid(self, aiohttp_client):
         """
-        Test trying to save a bad filter: /api/filters/test
+        Test trying to set an invalid active filter version: PATCH /api/filters
 
         :param aiohttp_client:
         :return:
@@ -407,7 +405,7 @@ class TestAPIs(object):
         result = await resp.json()
         assert result["status"] == "success"
 
-        # make first version active
+        # Try making fake version active
         resp = await client.patch(
             "/api/filters",
             json={"filter_id": filter_id, "active_fid": "somerandomfid"},
@@ -419,6 +417,62 @@ class TestAPIs(object):
         assert result["status"] == "error"
         assert "message" in result
         assert "filter version fid not in filter" in result["message"]
+
+        # clean up: remove posted filter
+        resp = await client.delete(
+            f"/api/filters/{filter_id}",
+            headers=headers,
+            timeout=5,
+        )
+        assert resp.status == 200
+        result = await resp.json()
+        assert result["status"] == "success"
+        assert result["message"] == f"Removed filter id {filter_id}"
+
+    async def test_patch_remove_nonexistent_filter(self, aiohttp_client):
+        """Test trying to patch and remove a non-existent filter:
+        PATCH /api/filters
+        DELETE /api/filters/{filter_id}
+
+        :param aiohttp_client:
+        :return:
+        """
+        client = await aiohttp_client(await app_factory())
+
+        credentials = await self.get_admin_credentials(aiohttp_client)
+        access_token = credentials["token"]
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        filter_id = random.randint(1, 1000)
+
+        # Try patching a non-existent filter
+        resp = await client.patch(
+            "/api/filters",
+            json={
+                "filter_id": filter_id,
+                "update_annotations": True,
+            },
+            headers=headers,
+            timeout=5,
+        )
+        assert resp.status == 400
+        result = await resp.json()
+        assert result["status"] == "error"
+        assert "message" in result
+        assert f"Filter id {filter_id} not found" in result["message"]
+
+        # Try removing a non-existent filter
+        resp = await client.delete(
+            f"/api/filters/{filter_id}",
+            headers=headers,
+            timeout=5,
+        )
+        assert resp.status == 400
+        result = await resp.json()
+        assert result["status"] == "error"
+        assert "message" in result
+        assert f"Filter id {filter_id} not found" in result["message"]
 
     # test multiple query types without book-keeping (the default and almost exclusively used scenario):
     #  - find_one
