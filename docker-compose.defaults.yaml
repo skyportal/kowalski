@@ -1,4 +1,4 @@
-version: "3.3"
+version: "3.7"
 
 volumes:
   mongodb:
@@ -47,17 +47,27 @@ services:
       - kowalski
 
   mongo:
-    image: mongo:latest
+    build:
+      context: .
+      dockerfile: mongo.Dockerfile
+    hostname: mongo
     expose:
       - "27017"
     # fixme:
     ports:
-      - "27027:27017"
+      - "27017:27017"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=mongoadmin
       - MONGO_INITDB_ROOT_PASSWORD=mongoadminsecret
+      - MONGO_REPLICA_SET_NAME=rs0
     volumes:
       - mongodb:/data/db
     restart: always
     networks:
       - kowalski
+    healthcheck:
+      test: test $$(echo "rs.initiate().ok || rs.status().ok" | mongo -u $${MONGO_INITDB_ROOT_USERNAME} -p $${MONGO_INITDB_ROOT_PASSWORD} --quiet) -eq 1
+      interval: 10s
+      start_period: 20s
+    # run as a replica set of size 1 called rs0 using keyfile for internal authorization
+    command: [ "--keyFile", "/opt/keyfile", "--replSet", "rs0", "--bind_ip_all" ]

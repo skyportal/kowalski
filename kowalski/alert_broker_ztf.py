@@ -669,6 +669,7 @@ class AlertConsumer:
         self.mongo = Mongo(
             host=config["database"]["host"],
             port=config["database"]["port"],
+            replica_set=config["database"]["replica_set"],
             username=config["database"]["username"],
             password=config["database"]["password"],
             db=config["database"]["db"],
@@ -782,6 +783,7 @@ class AlertWorker:
         self.mongo = Mongo(
             host=config["database"]["host"],
             port=config["database"]["port"],
+            replica_set=config["database"]["replica_set"],
             username=config["database"]["username"],
             password=config["database"]["password"],
             db=config["database"]["db"],
