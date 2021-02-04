@@ -56,6 +56,7 @@ import secrets
 import string
 import time
 import traceback
+from typing import Optional
 import yaml
 
 
@@ -150,12 +151,15 @@ async def init_db(config, verbose=True):
     """
     Initialize db if necessary: create the sole non-admin user
     """
-    _client = AsyncIOMotorClient(
-        username=config["database"]["admin_username"],
-        password=config["database"]["admin_password"],
-        host=config["database"]["host"],
-        port=config["database"]["port"],
-    )
+    motor_client_arguments = {
+        "username": config["database"]["admin_username"],
+        "password": config["database"]["admin_password"],
+        "host": config["database"]["host"],
+        "port": config["database"]["port"],
+    }
+    if config["database"]["replica_set"] is not None:
+        motor_client_arguments["replicaset"] = config["database"]["replica_set"]
+    _client = AsyncIOMotorClient(**motor_client_arguments)
 
     # _id: db_name.user_name
     user_ids = []
@@ -184,12 +188,15 @@ def init_db_sync(config, verbose=False):
     """
     Initialize db if necessary: create the sole non-admin user
     """
-    client = pymongo.MongoClient(
-        host=config["database"]["host"],
-        port=config["database"]["port"],
-        username=config["database"]["admin_username"],
-        password=config["database"]["admin_password"],
-    )
+    pymongo_client_arguments = {
+        "username": config["database"]["admin_username"],
+        "password": config["database"]["admin_password"],
+        "host": config["database"]["host"],
+        "port": config["database"]["port"],
+    }
+    if config["database"]["replica_set"] is not None:
+        pymongo_client_arguments["replicaset"] = config["database"]["replica_set"]
+    client = pymongo.MongoClient(**pymongo_client_arguments)
 
     user_ids = []
     for _u in client.admin.system.users.find({}, {"_id": 1}):
@@ -242,7 +249,8 @@ class Mongo:
     def __init__(
         self,
         host: str = "127.0.0.1",
-        port: str = "27017",
+        port: str = 27017,
+        replica_set: Optional[str] = None,
         username: str = None,
         password: str = None,
         db: str = None,
@@ -253,8 +261,15 @@ class Mongo:
         self.port = port
         self.username = username
         self.password = password
+        self.replica_set = replica_set
 
-        self.client = pymongo.MongoClient(host=self.host, port=self.port)
+        pymongo_client_arguments = {
+            "host": self.host,
+            "port": self.port,
+        }
+        if self.replica_set is not None:
+            pymongo_client_arguments["replicaset"] = self.replica_set
+        self.client = pymongo.MongoClient(**pymongo_client_arguments)
         self.db = self.client[db]
         # authenticate
         self.db.authenticate(self.username, self.password)

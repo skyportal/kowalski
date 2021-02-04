@@ -7,6 +7,8 @@ import fire
 import pathlib
 from pprint import pprint
 import questionary
+import secrets
+import string
 import subprocess
 import sys
 import time
@@ -164,6 +166,59 @@ class Kowalski:
         self.yes = yes
 
     @staticmethod
+    def check_containers_up(
+        containers: Sequence,
+        num_retries: int = 10,
+        sleep_for_seconds: int = 10,
+    ):
+        """Check if containers in question are up and running
+
+        :param containers: container name sequence, e.g. ("kowalski_api_1", "kowalski_mongo_1")
+        :param num_retries:
+        :param sleep_for_seconds: number of seconds to sleep for before retrying
+        :return:
+        """
+        for i in range(num_retries):
+            if i == num_retries - 1:
+                raise RuntimeError(f"{containers} containers failed to spin up")
+
+            command = ["docker", "ps", "-a"]
+            container_list = (
+                subprocess.check_output(command, universal_newlines=True)
+                .strip()
+                .split("\n")
+            )
+            print(container_list)
+            if len(container_list) == 1:
+                print("No containers are running, waiting...")
+                time.sleep(sleep_for_seconds)
+                continue
+
+            containers_up = (
+                len(
+                    [
+                        container
+                        for container in container_list
+                        if (
+                            (container_name in container)
+                            and (" Up " in container)
+                            and ("unhealthy" not in container)
+                            and ("health: starting" not in container)
+                        )
+                    ]
+                )
+                > 0
+                for container_name in containers
+            )
+
+            if not all(containers_up):
+                print(f"{containers} containers are not up, waiting...")
+                time.sleep(sleep_for_seconds)
+                continue
+
+            break
+
+    @staticmethod
     def up(build: bool = False):
         """
         🐧🚀 Launch Kowalski
@@ -175,14 +230,28 @@ class Kowalski:
 
         config_wildcards = ["config.*yaml", "docker-compose.*yaml"]
 
+        # check configuration
+        with status("Checking configuration"):
+            check_configs(config_wildcards=config_wildcards)
+
+        # check MongoDB keyfile for replica set authorization
+        mongodb_keyfile = pathlib.Path(__file__).parent.absolute() / "mongo_key.yaml"
+        if not mongodb_keyfile.exists():
+            print("Generating MongoDB keyfile")
+            # generate a random key that is required to be able to use authorization with replica set
+            key = "".join(
+                secrets.choice(string.ascii_lowercase + string.digits)
+                for _ in range(32)
+            )
+            with open(mongodb_keyfile, "w") as f:
+                f.write(key)
+            command = ["chmod", "400", "mongo_key.yaml"]
+            subprocess.run(command)
+
         command = ["docker-compose", "-f", "docker-compose.yaml", "up", "-d"]
 
         if build:
             command += ["--build"]
-
-        # check configuration
-        with status("Checking configuration"):
-            check_configs(config_wildcards=config_wildcards)
 
         # start up Kowalski
         print("Starting up")
@@ -322,8 +391,8 @@ class Kowalski:
                 if rm_fetched:
                     pathlib.Path(path_dump).unlink()
 
-    @staticmethod
-    def test():
+    @classmethod
+    def test(cls):
         """
         Run the test suite
 
@@ -332,40 +401,10 @@ class Kowalski:
         print("Running the test suite")
 
         # make sure the containers are up and running
-        num_retries = 10
-        for i in range(num_retries):
-            if i == num_retries - 1:
-                raise RuntimeError("Kowalski's containers failed to spin up")
-
-            command = ["docker", "ps", "-a"]
-            container_list = (
-                subprocess.check_output(command, universal_newlines=True)
-                .strip()
-                .split("\n")
-            )
-            if len(container_list) == 1:
-                print("No containers are running, waiting...")
-                time.sleep(2)
-                continue
-
-            containers_up = (
-                len(
-                    [
-                        container
-                        for container in container_list
-                        if container_name in container and " Up " in container
-                    ]
-                )
-                > 0
-                for container_name in ("kowalski_ingester_1", "kowalski_api_1")
-            )
-
-            if not all(containers_up):
-                print("Kowalski's containers are not up, waiting...")
-                time.sleep(2)
-                continue
-
-            break
+        cls.check_containers_up(
+            containers=("kowalski_ingester_1", "kowalski_api_1", "kowalski_mongo_1"),
+            sleep_for_seconds=10,
+        )
 
         print("Testing ZTF alert ingestion")
 

@@ -5,3 +5,4 @@ data/dumps
 *.lock
 *.dirlock
 docker-compose.yaml
+mongo_key.yaml

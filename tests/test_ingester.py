@@ -7,7 +7,7 @@ import subprocess
 import time
 
 from alert_broker_ztf import watchdog
-from utils import load_config, log, Mongo
+from utils import init_db_sync, load_config, log, Mongo
 
 
 """ load config and secrets """
@@ -287,6 +287,8 @@ class TestIngester:
 
     def test_ingester(self):
 
+        init_db_sync(config=config, verbose=True)
+
         log("Setting up paths")
         # path_kafka = pathlib.Path(config["path"]["kafka"])
 
@@ -523,6 +525,7 @@ class TestIngester:
         mongo = Mongo(
             host=config["database"]["host"],
             port=config["database"]["port"],
+            replica_set=config["database"]["replica_set"],
             username=config["database"]["username"],
             password=config["database"]["password"],
             db=config["database"]["db"],

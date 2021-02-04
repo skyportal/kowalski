@@ -40,8 +40,10 @@ kowalski:
 
   database:
     max_pool_size: 200
-    host: "kowalski_mongo_1"
+    host: "mongo"
     port: 27017
+    # if not null, must be same as in entrypoint of mongo container
+    replica_set: "rs0"
     db: "kowalski"
     admin_username: "mongoadmin"
     # fixme: use strong password if exposing the database to the world
