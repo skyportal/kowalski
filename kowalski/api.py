@@ -1,5 +1,4 @@
 from abc import ABC
-import aiofiles
 from aiohttp import web
 from aiohttp_swagger3 import SwaggerDocs, ReDocUiSettings
 from astropy.io import fits
@@ -13,7 +12,6 @@ from astropy.visualization import (
     SqrtStretch,
     ImageNormalize,
 )
-import asyncio
 from ast import literal_eval
 from bson.json_util import dumps, loads
 import datetime
@@ -27,16 +25,13 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from multidict import MultiDict
 import numpy as np
 from odmantic import AIOEngine, EmbeddedModel, Field, Model
-import os
 import pathlib
 from pydantic import root_validator
-import shutil
 import traceback
-from typing import List, Mapping, Optional
+from typing import List, Mapping, Optional, Sequence
 from utils import (
     add_admin,
     check_password_hash,
-    compute_hash,
     generate_password_hash,
     init_db,
     load_config,
@@ -64,6 +59,15 @@ class Handler:
 
 
 """ authentication and authorization """
+
+
+def is_admin(username: str):
+    """Check if user is admin
+    note: may want to change the logic to allow multiple users to be admins
+
+    :param username:
+    """
+    return username == config["server"]["admin_username"]
 
 
 # @routes.post('/api/auth')
@@ -655,1007 +659,651 @@ async def users_put(request: web.Request) -> web.Response:
 """ queries """
 
 
-def parse_query(task, save: bool = False):
-    # save auxiliary stuff
-    kwargs = task.get("kwargs", dict())
+SYSTEM_COLLECTIONS = ("users", "filters", "queries")
+QUERY_TYPES = (
+    "cone_search",
+    "count_documents",
+    "estimated_document_count",
+    "find",
+    "find_one",
+    "aggregate",
+    "info",
+)
+INFO_COMMANDS = (
+    "catalog_names",
+    "catalog_info",
+    "index_info",
+    "db_info",
+)
+FORBIDDEN_STAGES = {"$lookup", "$unionWith", "$out", "$merge"}
+ANGULAR_UNITS = ("arcsec", "arcmin", "deg", "rad")
 
-    # reduce!
-    task_reduced = {"user": task["user"], "query": dict(), "kwargs": kwargs}
 
-    prohibited_collections = ("users", "filters", "queries")
+class Query(Model, ABC):
+    """Data model for queries for streamlined validation"""
 
-    if task["query_type"] == "estimated_document_count":
-        # specify task type:
-        task_reduced["query_type"] = "estimated_document_count"
+    query_type: str
+    query: Mapping
+    kwargs: dict = dict()
+    user: str
 
-        if task["user"] != config["server"]["admin_username"]:
-            if str(task["query"]["catalog"]) in prohibited_collections:
-                raise Exception("protected collection")
-
-        task_reduced["query"]["catalog"] = task["query"]["catalog"]
-
-    elif task["query_type"] == "find":
-        # specify task type:
-        task_reduced["query_type"] = "find"
-
-        if task["user"] != config["server"]["admin_username"]:
-            if str(task["query"]["catalog"]) in prohibited_collections:
-                raise Exception("protected collection")
-
-        task_reduced["query"]["catalog"] = task["query"]["catalog"]
-
-        # construct filter
-        _filter = task["query"]["filter"]
-        if isinstance(_filter, str):
+    @staticmethod
+    def construct_filter(query):
+        """Check validity of query filter specs and preprocess if necessary"""
+        catalog_filter = query.get("filter")
+        if not isinstance(catalog_filter, (str, Mapping)):
+            raise ValueError("Unsupported filter specification")
+        if isinstance(catalog_filter, str):
             # passed string? evaluate:
-            catalog_filter = literal_eval(_filter.strip())
-        elif isinstance(_filter, dict):
-            # passed dict?
-            catalog_filter = _filter
-        else:
-            raise ValueError("unsupported filter specification")
+            catalog_filter = literal_eval(catalog_filter.strip())
 
-        task_reduced["query"]["filter"] = catalog_filter
+        return catalog_filter
 
-        # construct projection
-        if "projection" in task["query"]:
-            _projection = task["query"]["projection"]
-            if isinstance(_projection, str):
-                # passed string? evaluate:
-                catalog_projection = literal_eval(_projection.strip())
-            elif isinstance(_projection, dict):
-                # passed dict?
-                catalog_projection = _projection
-            else:
+    @staticmethod
+    def construct_projection(query):
+        """Check validity of query projection specs and preprocess if necessary"""
+        catalog_projection = query.get("projection")
+        if catalog_projection is not None:
+            if not isinstance(catalog_projection, (str, Mapping)):
                 raise ValueError("Unsupported projection specification")
+            if isinstance(catalog_projection, str):
+                # passed string? evaluate:
+                catalog_projection = literal_eval(catalog_projection.strip())
         else:
             catalog_projection = dict()
 
-        task_reduced["query"]["projection"] = catalog_projection
+        return catalog_projection
 
-    elif task["query_type"] == "find_one":
-        # specify task type:
-        task_reduced["query_type"] = "find_one"
-
-        if task["user"] != config["server"]["admin_username"]:
-            if str(task["query"]["catalog"]) in prohibited_collections:
-                raise Exception("protected collection")
-
-        task_reduced["query"]["catalog"] = task["query"]["catalog"]
-
-        # construct filter
-        _filter = task["query"]["filter"]
-        if isinstance(_filter, str):
-            # passed string? evaluate:
-            catalog_filter = literal_eval(_filter.strip())
-        elif isinstance(_filter, dict):
-            # passed dict?
-            catalog_filter = _filter
-        else:
-            raise ValueError("Unsupported filter specification")
-
-        task_reduced["query"]["filter"] = catalog_filter
-
-    elif task["query_type"] == "count_documents":
-        # specify task type:
-        task_reduced["query_type"] = "count_documents"
-
-        if task["user"] != config["server"]["admin_username"]:
-            if str(task["query"]["catalog"]) in prohibited_collections:
-                raise Exception("protected collection")
-
-        task_reduced["query"]["catalog"] = task["query"]["catalog"]
-
-        # construct filter
-        _filter = task["query"]["filter"]
-        if isinstance(_filter, str):
-            # passed string? evaluate:
-            catalog_filter = literal_eval(_filter.strip())
-        elif isinstance(_filter, dict):
-            # passed dict?
-            catalog_filter = _filter
-        else:
-            raise ValueError("Unsupported filter specification")
-
-        task_reduced["query"]["filter"] = catalog_filter
-
-    elif task["query_type"] == "aggregate":
-        # specify task type:
-        task_reduced["query_type"] = "aggregate"
-
-        if task["user"] != config["server"]["admin_username"]:
-            if str(task["query"]["catalog"]) in prohibited_collections:
-                raise Exception("protected collection")
-
-        task_reduced["query"]["catalog"] = task["query"]["catalog"]
-
-        # construct pipeline
-        _pipeline = task["query"]["pipeline"]
-        if isinstance(_pipeline, str):
-            # passed string? evaluate:
-            catalog_pipeline = literal_eval(_pipeline.strip())
-        elif isinstance(_pipeline, list) or isinstance(_pipeline, tuple):
-            # passed dict?
-            catalog_pipeline = _pipeline
-        else:
-            raise ValueError("Unsupported pipeline specification")
-
-        task_reduced["query"]["pipeline"] = catalog_pipeline
-
-    elif task["query_type"] == "cone_search":
-        # specify task type:
-        task_reduced["query_type"] = "cone_search"
-
-        # apply filter before positional query?
-        filter_first = task_reduced["kwargs"].get("filter_first", False)
-
-        # cone search radius:
-        cone_search_radius = float(
-            task["query"]["object_coordinates"]["cone_search_radius"]
-        )
-        # convert to rad:
-        if task["query"]["object_coordinates"]["cone_search_unit"] == "arcsec":
-            cone_search_radius *= np.pi / 180.0 / 3600.0
-        elif task["query"]["object_coordinates"]["cone_search_unit"] == "arcmin":
-            cone_search_radius *= np.pi / 180.0 / 60.0
-        elif task["query"]["object_coordinates"]["cone_search_unit"] == "deg":
-            cone_search_radius *= np.pi / 180.0
-        elif task["query"]["object_coordinates"]["cone_search_unit"] == "rad":
-            cone_search_radius *= 1
-        else:
-            raise Exception(
-                'unknown cone search unit: must be in ["arcsec", "arcmin", "deg", "rad"]'
-            )
-
-        if isinstance(task["query"]["object_coordinates"]["radec"], str):
-            radec = task["query"]["object_coordinates"]["radec"].strip()
-
-            # comb radecs for a single source as per Tom's request:
-            if radec[0] not in ("[", "(", "{"):
-                ra, dec = radec.split()
-                if ("s" in radec) or (":" in radec):
-                    radec = f"[('{ra}', '{dec}')]"
-                else:
-                    radec = f"[({ra}, {dec})]"
-
-            objects = literal_eval(radec)
-        elif (
-            isinstance(task["query"]["object_coordinates"]["radec"], list)
-            or isinstance(task["query"]["object_coordinates"]["radec"], tuple)
-            or isinstance(task["query"]["object_coordinates"]["radec"], dict)
-        ):
-            objects = task["query"]["object_coordinates"]["radec"]
-        else:
-            raise Exception("bad source coordinates")
-
-        # this could either be list/tuple [(ra1, dec1), (ra2, dec2), ..] or dict {'name': (ra1, dec1), ...}
-        if isinstance(objects, list) or isinstance(objects, tuple):
-            object_coordinates = objects
-            object_names = [
-                str(obj_crd).replace(".", "_") for obj_crd in object_coordinates
-            ]
-        elif isinstance(objects, dict):
-            object_names, object_coordinates = zip(*objects.items())
-            object_names = list(map(str, object_names))
-            object_names = [on.replace(".", "_") for on in object_names]
-        else:
-            raise ValueError("Unsupported object coordinates specs")
-
-        for catalog in task["query"]["catalogs"]:
-            task_reduced["query"][catalog] = dict()
-
-            if task["user"] != config["server"]["admin_username"]:
-                if str(catalog.strip()) in prohibited_collections:
-                    raise Exception("Trying to query a protected collection")
-
-            task_reduced["query"][catalog.strip()] = dict()
-
-            # construct filter
-            if "filter" in task["query"]["catalogs"][catalog]:
-                _filter = task["query"]["catalogs"][catalog]["filter"]
-                if isinstance(_filter, str):
-                    # passed string? evaluate:
-                    catalog_filter = literal_eval(_filter.strip())
-                elif isinstance(_filter, dict):
-                    # passed dict?
-                    catalog_filter = _filter
-                else:
-                    raise ValueError("Unsupported filter specification")
-            else:
-                catalog_filter = dict()
-
-            # construct projection
-            if "projection" in task["query"]["catalogs"][catalog]:
-                _projection = task["query"]["catalogs"][catalog]["projection"]
-                if isinstance(_projection, str):
-                    # passed string? evaluate:
-                    catalog_projection = literal_eval(_projection.strip())
-                elif isinstance(_projection, dict):
-                    # passed dict?
-                    catalog_projection = _projection
-                else:
-                    raise ValueError("Unsupported projection specification")
-            else:
-                catalog_projection = dict()
-
-            # parse coordinate list
-
-            for oi, obj_crd in enumerate(object_coordinates):
-                # convert ra/dec into GeoJSON-friendly format
-                _ra, _dec = radec_str2geojson(*obj_crd)
-                object_position_query = dict()
-                object_position_query["coordinates.radec_geojson"] = {
-                    "$geoWithin": {"$centerSphere": [[_ra, _dec], cone_search_radius]}
-                }
-                # use stringified object coordinates as dict keys and merge dicts with cat/obj queries:
-
-                if not filter_first:
-                    task_reduced["query"][catalog][object_names[oi]] = (
-                        {**object_position_query, **catalog_filter},
-                        {**catalog_projection},
-                    )
-                else:
-                    # place the filter expression in front of the positional query?
-                    task_reduced["query"][catalog][object_names[oi]] = (
-                        {**catalog_filter, **object_position_query},
-                        {**catalog_projection},
-                    )
-
-    elif task["query_type"] == "info":
-
-        # specify task type:
-        task_reduced["query_type"] = "info"
-        task_reduced["query"] = task["query"]
-
-    if save:
-        task_hashable = dumps(task_reduced)
-        # compute hash for task. this is used as key in DB
-        task_hash = compute_hash(task_hashable)
-
-        # mark as enqueued in DB:
-        t_stamp = datetime.datetime.utcnow()
-        if "query_expiration_interval" not in kwargs:
-            # default expiration interval:
-            t_expires = t_stamp + datetime.timedelta(
-                days=int(config["misc"]["query_expiration_interval"])
-            )
-        else:
-            # custom expiration interval:
-            t_expires = t_stamp + datetime.timedelta(
-                days=int(kwargs["query_expiration_interval"])
-            )
-
-        # dump task_hashable to file, as potentially too big to store in mongo
-        # save task:
-        user_tmp_path = os.path.join(config["path"]["queries"], task["user"])
-        # mkdir if necessary
-        if not os.path.exists(user_tmp_path):
-            os.makedirs(user_tmp_path)
-        task_file = os.path.join(user_tmp_path, f"{task_hash}.task.json")
-
-        with open(task_file, "w") as f_task_file:
-            f_task_file.write(dumps(task))
-
-        task_doc = {
-            "task_id": task_hash,
-            "user": task["user"],
-            "task": task_file,
-            "result": None,
-            "status": "enqueued",
-            "created": t_stamp,
-            "expires": t_expires,
-            "last_modified": t_stamp,
+    @staticmethod
+    def validate_kwargs(kwargs, known_kwargs):
+        """Allow only known kwargs"""
+        return {
+            kk: vv
+            for kk, vv in kwargs.items()
+            if kk in [*known_kwargs, "max_time_ms", "comment"]
         }
 
-        return task_hash, task_reduced, task_doc
+    @root_validator
+    def check_query(cls, values):
+        """Validate query and preprocess it if necessary"""
+        query_type = values.get("query_type")
+        query = values.get("query")
+        kwargs = values.get("kwargs")
+        user = values.get("user")
 
-    else:
-        return "", task_reduced, {}
+        if query_type not in QUERY_TYPES:
+            raise KeyError(f"query_type {query_type} not in {str(QUERY_TYPES)}")
+
+        # this way, username will be propagated into mongodb's logs
+        kwargs["comment"] = user
+
+        if query.get("catalog") is not None:
+            catalog = query.get("catalog").strip()
+            if catalog in SYSTEM_COLLECTIONS and not is_admin(user):
+                raise ValueError("Protected collection")
+        if query.get("catalogs") is not None:
+            catalogs = query.get("catalogs")
+            for catalog in catalogs:
+                if catalog in SYSTEM_COLLECTIONS and not is_admin(user):
+                    raise ValueError("Protected collection")
+
+        if query_type == "aggregate":
+            pipeline = query.get("pipeline")
+            if (not isinstance(pipeline, str)) and (not isinstance(pipeline, Sequence)):
+                raise ValueError("Unsupported pipeline specification")
+            if isinstance(pipeline, str):
+                # passed string? evaluate:
+                pipeline = literal_eval(pipeline.strip())
+
+            if len(pipeline) == 0:
+                raise ValueError("Pipeline must contain at least one stage")
+
+            stages = set([list(stage.keys())[0] for stage in pipeline])
+            if len(stages.intersection(FORBIDDEN_STAGES)):
+                raise ValueError(
+                    f"Pipeline uses forbidden stages: {str(stages.intersection(FORBIDDEN_STAGES))}"
+                )
+
+            kwargs = cls.validate_kwargs(
+                kwargs=kwargs, known_kwargs=("allowDiskUse", "batchSize")
+            )
+
+            values["kwargs"] = kwargs
+
+            values["query"]["pipeline"] = pipeline
+
+        elif query_type == "cone_search":
+            # apply filter before positional query?
+            filter_first = kwargs.get("filter_first", False)
+
+            # cone search radius:
+            cone_search_radius = float(
+                query["object_coordinates"]["cone_search_radius"]
+            )
+            # convert to rad:
+            cone_search_units = query["object_coordinates"]["cone_search_unit"]
+            if cone_search_units not in ANGULAR_UNITS:
+                raise Exception(f"Cone search units not in {ANGULAR_UNITS}")
+            if cone_search_units == "arcsec":
+                cone_search_radius *= np.pi / 180.0 / 3600.0
+            elif cone_search_units == "arcmin":
+                cone_search_radius *= np.pi / 180.0 / 60.0
+            elif cone_search_units == "deg":
+                cone_search_radius *= np.pi / 180.0
+
+            radec = query["object_coordinates"]["radec"]
+
+            if isinstance(radec, str):
+                radec = radec.strip()
+
+                # comb radecs for a single source:
+                if not radec.startswith(("[", "(", "{")):
+                    ra, dec = radec.split()
+                    if ("s" in radec) or (":" in radec):
+                        radec = f"[('{ra}', '{dec}')]"
+                    else:
+                        radec = f"[({ra}, {dec})]"
+
+                objects = literal_eval(radec)
+            elif isinstance(radec, (Sequence, Mapping)):
+                objects = radec
+            else:
+                raise Exception("Unsupported format of source coordinates")
+
+            # could either be Sequence [(ra1, dec1), (ra2, dec2), ..] or Mapping {'name': (ra1, dec1), ...}
+            if isinstance(objects, Sequence):
+                object_coordinates = objects
+                # use coords as source ids replacing dots to keep Mongo happy:
+                object_names = [
+                    str(obj_crd).replace(".", "_") for obj_crd in object_coordinates
+                ]
+            elif isinstance(objects, Mapping):
+                object_names, object_coordinates = zip(*objects.items())
+                object_names = list(map(str, object_names))
+                object_names = [
+                    object_name.replace(".", "_") for object_name in object_names
+                ]
+            else:
+                raise ValueError("Unsupported object coordinates specs")
+
+            # reshuffle query to ease execution on Mongo side
+            query_preprocessed = dict()
+            for catalog in query["catalogs"]:
+                catalog = catalog.strip()
+                query_preprocessed[catalog] = dict()
+
+                # specifying filter is optional in this case
+                if "filter" in query["catalogs"][catalog]:
+                    catalog_filter = cls.construct_filter(query["catalogs"][catalog])
+                else:
+                    catalog_filter = dict()
+
+                # construct projection, which is always optional
+                catalog_projection = cls.construct_projection(
+                    query["catalogs"][catalog]
+                )
+
+                # parse coordinate list
+                for oi, obj_crd in enumerate(object_coordinates):
+                    # convert ra/dec into GeoJSON-friendly format
+                    _ra, _dec = radec_str2geojson(*obj_crd)
+                    object_position_query = dict()
+                    object_position_query["coordinates.radec_geojson"] = {
+                        "$geoWithin": {
+                            "$centerSphere": [[_ra, _dec], cone_search_radius]
+                        }
+                    }
+                    # use stringified object coordinates as dict keys and merge dicts with cat/obj queries:
+                    if not filter_first:
+                        query_preprocessed[catalog][object_names[oi]] = (
+                            {**object_position_query, **catalog_filter},
+                            {**catalog_projection},
+                        )
+                    else:
+                        # place the filter expression in front of the positional query?
+                        # this may be useful if an index exists to speed up the query
+                        query_preprocessed[catalog][object_names[oi]] = (
+                            {**catalog_filter, **object_position_query},
+                            {**catalog_projection},
+                        )
+
+            kwargs = cls.validate_kwargs(
+                kwargs=kwargs, known_kwargs=("skip", "hint", "limit", "sort")
+            )
+
+            values["kwargs"] = kwargs
+            values["query"] = query_preprocessed
+
+        elif query_type == "count_documents":
+            values["query"]["filter"] = cls.construct_filter(query)
+
+            kwargs = cls.validate_kwargs(
+                kwargs=kwargs, known_kwargs=("skip", "hint", "limit")
+            )
+            values["kwargs"] = kwargs
+
+        elif query_type == "find":
+            # construct filter
+            values["query"]["filter"] = cls.construct_filter(query)
+            # construct projection
+            values["query"]["projection"] = cls.construct_projection(query)
+
+            kwargs = cls.validate_kwargs(
+                kwargs=kwargs, known_kwargs=("skip", "hint", "limit", "sort")
+            )
+            values["kwargs"] = kwargs
+
+        elif query_type == "find_one":
+            values["query"]["filter"] = cls.construct_filter(query)
+
+            kwargs = cls.validate_kwargs(
+                kwargs=kwargs, known_kwargs=("skip", "hint", "limit", "sort")
+            )
+            values["kwargs"] = kwargs
+
+        elif query_type == "info":
+            command = query.get("command")
+            if command not in INFO_COMMANDS:
+                raise KeyError(f"command {command} not in {str(INFO_COMMANDS)}")
+
+        elif query_type == "near":
+            raise NotImplementedError(
+                "Working on the implementation, like, at this very moment"
+            )
+
+        return values
 
 
-async def execute_query(mongo, task_hash, task_reduced, task_doc, save: bool = False):
+class QueryHandler(Handler):
+    """Handlers to work with user queries"""
 
-    db = mongo
+    @auth_required
+    async def post(self, request: web.Request) -> web.Response:
+        """Query Kowalski
 
-    if save:
-        # mark query as enqueued:
-        await db.queries.insert_one(task_doc)
+        ---
+        summary: Query Kowalski
+        tags:
+          - queries
 
-    result = dict()
-    query_result = None
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - query_type
+                  - query
+                properties:
+                  query_type:
+                    type: string
+                    enum: [aggregate, cone_search, count_documents, estimated_document_count, find, find_one, info]
+                  query:
+                    type: object
+                    description: query. depends on query_type, see examples
+                    oneOf:
+                      - $ref: "#/components/schemas/aggregate"
+                      - $ref: "#/components/schemas/cone_search"
+                      - $ref: "#/components/schemas/count_documents"
+                      - $ref: "#/components/schemas/estimated_document_count"
+                      - $ref: "#/components/schemas/find"
+                      - $ref: "#/components/schemas/find_one"
+                      - $ref: "#/components/schemas/info"
+                  kwargs:
+                    type: object
+                    description: additional parameters. depends on query_type, see examples
+                    oneOf:
+                      - $ref: "#/components/schemas/aggregate_kwargs"
+                      - $ref: "#/components/schemas/cone_search_kwargs"
+                      - $ref: "#/components/schemas/count_documents_kwargs"
+                      - $ref: "#/components/schemas/estimated_document_count_kwargs"
+                      - $ref: "#/components/schemas/find_kwargs"
+                      - $ref: "#/components/schemas/find_one_kwargs"
+                      - $ref: "#/components/schemas/info_kwargs"
+              examples:
+                aggregate:
+                  value:
+                    "query_type": "aggregate"
+                    "query": {
+                      "catalog": "ZTF_alerts",
+                      "pipeline": [
+                        {'$match': {'candid': 1105522281015015000}},
+                        {"$project": {"_id": 0, "candid": 1, "candidate.drb": 1}}
+                      ],
+                    }
+                    "kwargs": {
+                      "max_time_ms": 2000
+                    }
 
-    _query = task_reduced
+                cone_search:
+                  value:
+                    "query_type": "cone_search"
+                    "query": {
+                      "object_coordinates": {
+                        "cone_search_radius": 2,
+                        "cone_search_unit": "arcsec",
+                        "radec": {"object1": [71.6577756, -10.2263957]}
+                      },
+                      "catalogs": {
+                        "ZTF_alerts": {
+                          "filter": {},
+                          "projection": {"_id": 0, "candid": 1, "objectId": 1}
+                        }
+                      }
+                    }
+                    "kwargs": {
+                      "filter_first": False
+                    }
 
-    result["user"] = _query.get("user")
-    result["kwargs"] = _query.get("kwargs", dict())
+                find:
+                  value:
+                    "query_type": "find"
+                    "query": {
+                      "catalog": "ZTF_alerts",
+                      "filter": {'candidate.drb': {"$gt": 0.9}},
+                      "projection": {"_id": 0, "candid": 1, "candidate.drb": 1},
+                    }
+                    "kwargs": {
+                      "sort": [["$natural", -1]],
+                      "limit": 2
+                    }
 
-    # by default, long-running queries will be killed after config['misc']['max_time_ms'] ms
-    max_time_ms = int(
-        result["kwargs"].get("max_time_ms", config["misc"]["max_time_ms"])
-    )
-    assert max_time_ms >= 1, "bad max_time_ms, must be int>=1"
+                find_one:
+                  value:
+                    "query_type": "find_one"
+                    "query": {
+                      "catalog": "ZTF_alerts",
+                      "filter": {}
+                    }
 
-    try:
+                info:
+                  value:
+                    "query_type": "info"
+                    "query": {
+                      "command": "catalog_names"
+                    }
 
-        # cone search:
-        if _query["query_type"] == "cone_search":
+                count_documents:
+                  value:
+                    "query_type": "count_documents"
+                    "query": {
+                      "catalog": "ZTF_alerts",
+                      "filter": {"objectId": "ZTF20aakyoez"}
+                    }
 
-            known_kwargs = ("skip", "hint", "limit", "sort")
-            kwargs = {
-                kk: vv for kk, vv in _query["kwargs"].items() if kk in known_kwargs
-            }
-            kwargs["comment"] = str(_query["user"])
+                estimated_document_count:
+                  value:
+                    "query_type": "estimated_document_count"
+                    "query": {
+                      "catalog": "ZTF_alerts"
+                    }
 
-            # iterate over catalogs as they represent
-            query_result = dict()
-            for catalog in _query["query"]:
-                query_result[catalog] = dict()
+        responses:
+          '200':
+            description: query result
+            content:
+              application/json:
+                schema:
+                  type: object
+                  required:
+                    - user
+                    - message
+                    - status
+                  properties:
+                    status:
+                      type: string
+                      enum: [success]
+                    message:
+                      type: string
+                    user:
+                      type: string
+                    kwargs:
+                      type: object
+                    data:
+                      oneOf:
+                        - type: number
+                        - type: array
+                        - type: object
+                examples:
+                  aggregate:
+                    value:
+                      "user": "admin"
+                      "kwargs": {
+                        "max_time_ms": 2000
+                      }
+                      "status": "success"
+                      "message": "query successfully executed"
+                      "data": [
+                        {
+                          "candid": 1105522281015015000,
+                          "candidate": {
+                            "drb": 0.999999463558197
+                          }
+                        }
+                      ]
+
+                  cone_search:
+                    value:
+                      "user": "admin"
+                      "kwargs": {
+                        "filter_first": false
+                      }
+                      "status": "success"
+                      "message": "query successfully executed"
+                      "data": {
+                        "ZTF_alerts": {
+                          "object1": [
+                            {"objectId": "ZTF20aaelulu",
+                             "candid": 1105522281015015000}
+                          ]
+                        }
+                      }
+
+                  find:
+                    value:
+                      "user": "admin"
+                      "kwargs": {
+                        "sort": [["$natural", -1]],
+                        "limit": 2
+                      }
+                      "status": "success"
+                      "message": "query successfully executed"
+                      "data": [
+                        {
+                          "candid": 1127561444715015009,
+                          "candidate": {
+                            "drb": 0.9999618530273438
+                          }
+                        },
+                        {
+                          "candid": 1127107111615015007,
+                          "candidate": {
+                            "drb": 0.9986417293548584
+                          }
+                        }
+                      ]
+
+                  info:
+                    value:
+                      "user": "admin"
+                      "kwargs": {}
+                      "status": "success"
+                      "message": "query successfully executed"
+                      "data": [
+                        "ZTF_alerts_aux",
+                        "ZTF_alerts"
+                      ]
+
+                  count_documents:
+                    value:
+                      "user": "admin"
+                      "kwargs": {}
+                      "status": "success"
+                      "message": "query successfully executed"
+                      "data": 1
+
+                  estimated_document_count:
+                    value:
+                      "user": "admin"
+                      "kwargs": {}
+                      "status": "success"
+                      "message": "query successfully executed"
+                      "data": 11
+
+          '400':
+            description: query parsing/execution error
+            content:
+              application/json:
+                schema:
+                  type: object
+                  required:
+                    - status
+                    - message
+                  properties:
+                    status:
+                      type: string
+                      enum: [error]
+                    message:
+                      type: string
+                examples:
+                  unknown query type:
+                    value:
+                      status: error
+                      message: "query_type not in ('cone_search', 'count_documents', 'estimated_document_count', 'find', 'find_one', 'aggregate', 'info')"
+                  random error:
+                    value:
+                      status: error
+                      message: "failure: <error message>"
+        """
+        # allow both .json() and .post():
+        try:
+            query_spec = await request.json()
+        except AttributeError:
+            query_spec = await request.post()
+
+        # this is set by auth_middleware
+        query_spec["user"] = request.user
+
+        # validate and preprocess
+        query = Query(**query_spec)
+
+        # by default, long-running queries will be killed after config['misc']['max_time_ms'] ms
+        max_time_ms = int(
+            query.kwargs.get("max_time_ms", config["misc"]["max_time_ms"])
+        )
+        if max_time_ms < 1:
+            raise ValueError("max_time_ms must be int >= 1")
+        query.kwargs.pop("max_time_ms", None)
+
+        # execute query, depending on query.query_type
+        data = dict()
+
+        if query.query_type == "cone_search":
+            # iterate over catalogs
+            for catalog in query.query:
+                data[catalog] = dict()
                 # iterate over objects:
-                for obj in _query["query"][catalog]:
+                for obj in query.query[catalog]:
                     # project?
-                    if len(_query["query"][catalog][obj][1]) > 0:
-                        _select = db[catalog].find(
-                            _query["query"][catalog][obj][0],
-                            _query["query"][catalog][obj][1],
+                    if len(query.query[catalog][obj][1]) > 0:
+                        cursor = request.app["mongo"][catalog].find(
+                            query.query[catalog][obj][0],
+                            query.query[catalog][obj][1],
                             max_time_ms=max_time_ms,
-                            **kwargs,
+                            **query.kwargs,
                         )
                     # return the whole documents by default
                     else:
-                        _select = db[catalog].find(
-                            _query["query"][catalog][obj][0],
+                        cursor = request.app["mongo"][catalog].find(
+                            query.query[catalog][obj][0],
                             max_time_ms=max_time_ms,
-                            **kwargs,
+                            **query.kwargs,
                         )
-                    # mongodb does not allow having dots in field names -> replace with underscores
-                    query_result[catalog][
-                        obj.replace(".", "_")
-                    ] = await _select.to_list(length=None)
+                    data[catalog][obj] = await cursor.to_list(length=None)
 
-        # convenience general search subtypes:
-        elif _query["query_type"] == "find":
-            known_kwargs = ("skip", "hint", "limit", "sort")
-            kwargs = {
-                kk: vv for kk, vv in _query["kwargs"].items() if kk in known_kwargs
-            }
-            kwargs["comment"] = str(_query["user"])
-
+        if query.query_type == "find":
+            catalog = query.query["catalog"]
+            catalog_filter = query.query["filter"]
+            catalog_projection = query.query["projection"]
             # project?
-            if len(_query["query"]["projection"]) > 0:
-
-                _select = db[_query["query"]["catalog"]].find(
-                    _query["query"]["filter"],
-                    _query["query"]["projection"],
+            if len(catalog_projection) > 0:
+                cursor = request.app["mongo"][catalog].find(
+                    catalog_filter,
+                    catalog_projection,
                     max_time_ms=max_time_ms,
-                    **kwargs,
+                    **query.kwargs,
                 )
             # return the whole documents by default
             else:
-                _select = db[_query["query"]["catalog"]].find(
-                    _query["query"]["filter"], max_time_ms=max_time_ms, **kwargs
+                cursor = request.app["mongo"][catalog].find(
+                    catalog_filter,
+                    max_time_ms=max_time_ms,
+                    **query.kwargs,
                 )
 
-            # todo: replace with inspect.iscoroutinefunction(object)?
-            if (
-                isinstance(_select, int)
-                or isinstance(_select, float)
-                or isinstance(_select, tuple)
-                or isinstance(_select, list)
-                or isinstance(_select, dict)
-                or (_select is None)
-            ):
-                query_result = _select
+            if isinstance(cursor, (int, float, Sequence, Mapping)) or (cursor is None):
+                data = cursor
             else:
-                query_result = await _select.to_list(length=None)
+                data = await cursor.to_list(length=None)
 
-        elif _query["query_type"] == "find_one":
-            known_kwargs = ("skip", "hint", "limit", "sort")
-            kwargs = {
-                kk: vv for kk, vv in _query["kwargs"].items() if kk in known_kwargs
-            }
-            kwargs["comment"] = str(_query["user"])
-
-            _select = db[_query["query"]["catalog"]].find_one(
-                _query["query"]["filter"], max_time_ms=max_time_ms
+        if query.query_type == "find_one":
+            catalog = query.query["catalog"]
+            cursor = request.app["mongo"][catalog].find_one(
+                query.query["filter"],
+                max_time_ms=max_time_ms,
             )
 
-            query_result = await _select
+            data = await cursor
 
-        elif _query["query_type"] == "count_documents":
-            known_kwargs = ("skip", "hint", "limit")
-            kwargs = {
-                kk: vv for kk, vv in _query["kwargs"].items() if kk in known_kwargs
-            }
-            kwargs["comment"] = str(_query["user"])
+        if query.query_type == "count_documents":
+            catalog = query.query["catalog"]
+            cursor = request.app["mongo"][catalog].count_documents(
+                query.query["filter"],
+                maxTimeMS=max_time_ms,
+            )
+            data = await cursor
 
-            _select = db[_query["query"]["catalog"]].count_documents(
-                _query["query"]["filter"], maxTimeMS=max_time_ms
+        if query.query_type == "estimated_document_count":
+            catalog = query.query["catalog"]
+            cursor = request.app["mongo"][catalog].estimated_document_count(
+                maxTimeMS=max_time_ms,
+            )
+            data = await cursor
+
+        if query.query_type == "aggregate":
+            catalog = query.query["catalog"]
+            pipeline = query.query["pipeline"]
+            cursor = request.app["mongo"][catalog].aggregate(
+                pipeline,
+                allowDiskUse=query.kwargs.get("allowDiskUse", True),
+                maxTimeMS=max_time_ms,
             )
 
-            query_result = await _select
+            data = await cursor.to_list(length=None)
 
-        elif _query["query_type"] == "estimated_document_count":
-            known_kwargs = ("maxTimeMS",)
-            kwargs = {
-                kk: vv for kk, vv in _query["kwargs"].items() if kk in known_kwargs
-            }
-            kwargs["comment"] = str(_query["user"])
-
-            _select = db[_query["query"]["catalog"]].estimated_document_count(
-                maxTimeMS=max_time_ms
-            )
-
-            query_result = await _select
-
-        elif _query["query_type"] == "aggregate":
-            known_kwargs = ("allowDiskUse", "maxTimeMS", "batchSize")
-            kwargs = {
-                kk: vv for kk, vv in _query["kwargs"].items() if kk in known_kwargs
-            }
-            kwargs["comment"] = str(_query["user"])
-
-            _select = db[_query["query"]["catalog"]].aggregate(
-                _query["query"]["pipeline"], allowDiskUse=True, maxTimeMS=max_time_ms
-            )
-
-            query_result = await _select.to_list(length=None)
-
-        elif _query["query_type"] == "info":
-            # collection/catalog info
-            if _query["query"]["command"] == "catalog_names":
-
+        if query.query_type == "info":
+            if query.query["command"] == "catalog_names":
                 # get available catalog names
-                catalogs = await db.list_collection_names()
-                # exclude system collections
-                catalogs_system = (
-                    config["database"]["collections"]["users"],
-                    config["database"]["collections"]["filters"],
-                    config["database"]["collections"]["queries"],
-                )
-
-                query_result = [
-                    c for c in sorted(catalogs)[::-1] if c not in catalogs_system
+                catalog_names = await request.app["mongo"].list_collection_names()
+                data = [
+                    catalog_name
+                    for catalog_name in sorted(catalog_names)[::-1]
+                    if catalog_name not in SYSTEM_COLLECTIONS
                 ]
-
-            elif _query["query"]["command"] == "catalog_info":
-                catalog = _query["query"]["catalog"]
-
-                stats = await db.command("collstats", catalog)
-
-                query_result = stats
-
-            elif _query["query"]["command"] == "index_info":
-                catalog = _query["query"]["catalog"]
-
-                stats = await db[catalog].index_information()
-
-                query_result = stats
-
-            elif _query["query"]["command"] == "db_info":
-                stats = await db.command("dbstats")
-                query_result = stats
-
-        # success!
-        result["status"] = "success"
-        result["message"] = "query successfully executed"
-
-        if not save:
-            # dump result back
-            result["data"] = query_result
-
-        else:
-            # save task result:
-            user_tmp_path = os.path.join(config["path"]["queries"], _query["user"])
-            # mkdir if necessary
-            if not os.path.exists(user_tmp_path):
-                os.makedirs(user_tmp_path)
-            task_result_file = os.path.join(user_tmp_path, f"{task_hash}.result.json")
-
-            # save location in db:
-            result["result"] = task_result_file
-
-            async with aiofiles.open(task_result_file, "w") as f_task_result_file:
-                task_result = dumps(query_result)
-                await f_task_result_file.write(task_result)
-
-        # db book-keeping:
-        if save:
-            # mark query as done:
-            await db.queries.update_one(
-                {"user": _query["user"], "task_id": task_hash},
-                {
-                    "$set": {
-                        "status": result["status"],
-                        "last_modified": datetime.datetime.utcnow(),
-                        "result": result["result"],
-                    }
-                },
-            )
-
-        return task_hash, result
-
-    except Exception as e:
-        log(f"Got error: {str(e)}")
-        _err = traceback.format_exc()
-        log(_err)
-
-        # book-keeping:
-        if save:
-            # save task result with error message:
-            user_tmp_path = os.path.join(config["path"]["queries"], _query["user"])
-            # mkdir if necessary
-            if not os.path.exists(user_tmp_path):
-                os.makedirs(user_tmp_path)
-            task_result_file = os.path.join(user_tmp_path, f"{task_hash}.result.json")
-
-            # save location in db:
-            result["status"] = "error"
-            result["message"] = _err
-
-            async with aiofiles.open(task_result_file, "w") as f_task_result_file:
-                task_result = dumps(result)
-                await f_task_result_file.write(task_result)
-
-            # mark query as failed:
-            await db.queries.update_one(
-                {"user": _query["user"], "task_id": task_hash},
-                {
-                    "$set": {
-                        "status": result["status"],
-                        "last_modified": datetime.datetime.utcnow(),
-                        "result": None,
-                    }
-                },
-            )
-
-        else:
-            result["status"] = "error"
-            result["message"] = _err
-
-            return task_hash, result
-
-        raise Exception("query failed badly")
-
-
-# @routes.post('/api/queries')
-@auth_required
-async def queries_post(request: web.Request) -> web.Response:
-    """
-    Query Kowalski
-
-    ---
-    summary: Query Kowalski
-    tags:
-      - queries
-
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            required:
-              - query_type
-              - query
-            properties:
-              query_type:
-                type: string
-                enum: [aggregate, cone_search, count_documents, estimated_document_count, find, find_one, info]
-              query:
-                type: object
-                description: query. depends on query_type, see examples
-                oneOf:
-                  - $ref: "#/components/schemas/aggregate"
-                  - $ref: "#/components/schemas/cone_search"
-                  - $ref: "#/components/schemas/count_documents"
-                  - $ref: "#/components/schemas/estimated_document_count"
-                  - $ref: "#/components/schemas/find"
-                  - $ref: "#/components/schemas/find_one"
-                  - $ref: "#/components/schemas/info"
-              kwargs:
-                type: object
-                description: additional parameters. depends on query_type, see examples
-                oneOf:
-                  - $ref: "#/components/schemas/aggregate_kwargs"
-                  - $ref: "#/components/schemas/cone_search_kwargs"
-                  - $ref: "#/components/schemas/count_documents_kwargs"
-                  - $ref: "#/components/schemas/estimated_document_count_kwargs"
-                  - $ref: "#/components/schemas/find_kwargs"
-                  - $ref: "#/components/schemas/find_one_kwargs"
-                  - $ref: "#/components/schemas/info_kwargs"
-          examples:
-            aggregate:
-              value:
-                "query_type": "aggregate"
-                "query": {
-                  "catalog": "ZTF_alerts",
-                  "pipeline": [
-                    {'$match': {'candid': 1105522281015015000}},
-                    {"$project": {"_id": 0, "candid": 1, "candidate.drb": 1}}
-                  ],
-                }
-                "kwargs": {
-                  "max_time_ms": 2000
-                }
-
-            cone_search:
-              value:
-                "query_type": "cone_search"
-                "query": {
-                  "object_coordinates": {
-                    "cone_search_radius": 2,
-                    "cone_search_unit": "arcsec",
-                    "radec": {"object1": [71.6577756, -10.2263957]}
-                  },
-                  "catalogs": {
-                    "ZTF_alerts": {
-                      "filter": {},
-                      "projection": {"_id": 0, "candid": 1, "objectId": 1}
-                    }
-                  }
-                }
-                "kwargs": {
-                  "filter_first": False
-                }
-
-            find:
-              value:
-                "query_type": "find"
-                "query": {
-                  "catalog": "ZTF_alerts",
-                  "filter": {'candidate.drb': {"$gt": 0.9}},
-                  "projection": {"_id": 0, "candid": 1, "candidate.drb": 1},
-                }
-                "kwargs": {
-                  "sort": [["$natural", -1]],
-                  "limit": 2
-                }
-
-            find_one:
-              value:
-                "query_type": "find_one"
-                "query": {
-                  "catalog": "ZTF_alerts",
-                  "filter": {}
-                }
-
-            info:
-              value:
-                "query_type": "info"
-                "query": {
-                  "command": "catalog_names"
-                }
-
-            count_documents:
-              value:
-                "query_type": "count_documents"
-                "query": {
-                  "catalog": "ZTF_alerts",
-                  "filter": {"objectId": "ZTF20aakyoez"}
-                }
-
-            estimated_document_count:
-              value:
-                "query_type": "estimated_document_count"
-                "query": {
-                  "catalog": "ZTF_alerts"
-                }
-
-    responses:
-      '200':
-        description: query result
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - user
-                - message
-                - status
-              properties:
-                status:
-                  type: string
-                  enum: [success]
-                message:
-                  type: string
-                user:
-                  type: string
-                kwargs:
-                  type: object
-                data:
-                  oneOf:
-                    - type: number
-                    - type: array
-                    - type: object
-            examples:
-              aggregate:
-                value:
-                  "user": "admin"
-                  "kwargs": {
-                    "max_time_ms": 2000
-                  }
-                  "status": "success"
-                  "message": "query successfully executed"
-                  "data": [
-                    {
-                      "candid": 1105522281015015000,
-                      "candidate": {
-                        "drb": 0.999999463558197
-                      }
-                    }
-                  ]
-
-              cone_search:
-                value:
-                  "user": "admin"
-                  "kwargs": {
-                    "filter_first": false
-                  }
-                  "status": "success"
-                  "message": "query successfully executed"
-                  "data": {
-                    "ZTF_alerts": {
-                      "object1": [
-                        {"objectId": "ZTF20aaelulu",
-                         "candid": 1105522281015015000}
-                      ]
-                    }
-                  }
-
-              find:
-                value:
-                  "user": "admin"
-                  "kwargs": {
-                    "sort": [["$natural", -1]],
-                    "limit": 2
-                  }
-                  "status": "success"
-                  "message": "query successfully executed"
-                  "data": [
-                    {
-                      "candid": 1127561444715015009,
-                      "candidate": {
-                        "drb": 0.9999618530273438
-                      }
-                    },
-                    {
-                      "candid": 1127107111615015007,
-                      "candidate": {
-                        "drb": 0.9986417293548584
-                      }
-                    }
-                  ]
-
-              info:
-                value:
-                  "user": "admin"
-                  "kwargs": {}
-                  "status": "success"
-                  "message": "query successfully executed"
-                  "data": [
-                    "ZTF_alerts_aux",
-                    "ZTF_alerts"
-                  ]
-
-              count_documents:
-                value:
-                  "user": "admin"
-                  "kwargs": {}
-                  "status": "success"
-                  "message": "query successfully executed"
-                  "data": 1
-
-              estimated_document_count:
-                value:
-                  "user": "admin"
-                  "kwargs": {}
-                  "status": "success"
-                  "message": "query successfully executed"
-                  "data": 11
-
-      '400':
-        description: query parsing/execution error
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - status
-                - message
-              properties:
-                status:
-                  type: string
-                  enum: [error]
-                message:
-                  type: string
-            examples:
-              unknown query type:
-                value:
-                  status: error
-                  message: "query_type not in ('cone_search', 'count_documents', 'estimated_document_count', 'find', 'find_one', 'aggregate', 'info')"
-              random error:
-                value:
-                  status: error
-                  message: "failure: <error message>"
-    """
-    try:
-        try:
-            _query = await request.json()
-        except Exception as _e:
-            log(f"Cannot extract json() from request, trying post(): {str(_e)}")
-            _query = await request.post()
-
-        # parse query
-        known_query_types = (
-            "cone_search",
-            "count_documents",
-            "estimated_document_count",
-            "find",
-            "find_one",
-            "aggregate",
-            "info",
-        )
-
-        if _query["query_type"] not in known_query_types:
-            return web.json_response(
-                {
-                    "status": "error",
-                    "message": f'query_type {_query["query_type"]} not in {str(known_query_types)}',
-                },
-                status=400,
-            )
-
-        _query["user"] = request.user
-
-        # by default, [unless enqueue_only is requested]
-        # all queries are not registered in the db and the task/results are not stored on disk as json files
-        # giving a significant execution speed up. this behaviour can be overridden.
-        save = _query.get("kwargs", dict()).get("save", False)
-
-        task_hash, task_reduced, task_doc = parse_query(_query, save=save)
-
-        # execute query:
-        if not save:
-            task_hash, result = await execute_query(
-                request.app["mongo"], task_hash, task_reduced, task_doc, save
-            )
-
-            return web.json_response(result, status=200, dumps=dumps)
-        else:
-            # only schedule query execution. store query and results, return query id to user
-            asyncio.create_task(
-                execute_query(
-                    request.app["mongo"], task_hash, task_reduced, task_doc, save
-                )
-            )
-            return web.json_response(
-                {
-                    "status": "success",
-                    "query_id": task_hash,
-                    "message": "query enqueued",
-                },
-                status=200,
-                dumps=dumps,
-            )
-
-    except Exception as _e:
-        log(f"Got error: {str(_e)}")
-        _err = traceback.format_exc()
-        log(_err)
-        return web.json_response(
-            {"status": "error", "message": f"failure: {_err}"}, status=400
-        )
-
-
-# @routes.get('/api/queries/{task_id}', allow_head=False)
-@auth_required
-async def queries_get(request):
-    """
-        Grab saved query / result.
-
-    :return:
-    """
-
-    # get user:
-    user = request.user
-
-    # get query params
-    task_id = request.match_info["task_id"]
-    _data = request.query
-
-    try:
-        part = _data.get("part", "result")
-
-        _query = await request.app["mongo"].queries.find_one(
-            {"user": user, "task_id": {"$eq": task_id}},
-        )
-
-        if part == "task":
-            task_file = os.path.join(
-                config["path"]["queries"], user, f"{task_id}.task.json"
-            )
-            async with aiofiles.open(task_file, "r") as f_task_file:
-                return web.json_response(await f_task_file.read(), status=200)
-
-        elif part == "result":
-            if _query["status"] == "enqueued":
-                return web.json_response(
-                    {"status": "success", "message": "query not finished yet"},
-                    status=200,
-                )
-
-            task_result_file = os.path.join(
-                config["path"]["queries"], user, f"{task_id}.result.json"
-            )
-
-            async with aiofiles.open(task_result_file, "r") as f_task_result_file:
-                return web.json_response(await f_task_result_file.read(), status=200)
-
-        else:
-            return web.json_response(
-                {"status": "error", "message": "part not recognized"}, status=400
-            )
-
-    except Exception as _e:
-        log(f"Got error: {str(_e)}")
-        _err = traceback.format_exc()
-        log(_err)
-        return web.json_response(
-            {"status": "error", "message": f"failure: {_err}"}, status=500
-        )
-
-
-# @routes.delete('/api/queries/{task_id}')
-@auth_required
-async def queries_delete(request):
-    """
-        Delete saved query from DB programmatically.
-
-    :return:
-    """
-
-    # get user:
-    user = request.user
-
-    # get query params
-    task_id = request.match_info["task_id"]
-
-    try:
-        if task_id != "all":
-            await request.app["mongo"].queries.delete_one(
-                {"user": user, "task_id": {"$eq": task_id}}
-            )
-
-            # remove files containing task and result
-            for p in pathlib.Path(os.path.join(config["path"]["queries"], user)).glob(
-                f"{task_id}*"
-            ):
-                p.unlink()
-
-        else:
-            await request.app["mongo"].queries.delete_many({"user": user})
-
-            # remove all files containing task and result
-            if os.path.exists(os.path.join(config["path"]["queries"], user)):
-                shutil.rmtree(os.path.join(config["path"]["queries"], user))
-
-        return web.json_response(
-            {"status": "success", "message": f"removed query: {task_id}"}, status=200
-        )
-
-    except Exception as _e:
-        log(f"Got error: {str(_e)}")
-        _err = traceback.format_exc()
-        log(_err)
-        return web.json_response(
-            {"status": "error", "message": f"failure: {_err}"}, status=500
-        )
+            elif query.query["command"] == "catalog_info":
+                catalog = query.query["catalog"]
+                data = await request.app["mongo"].command("collstats", catalog)
+            elif query.query["command"] == "index_info":
+                catalog = query.query["catalog"]
+                data = await request.app["mongo"][catalog].index_information()
+            elif query.query["command"] == "db_info":
+                data = await request.app["mongo"].command("dbstats")
+
+        return self.success(message="Successfully executed query", data=data)
 
 
 """ filters """
-
-
-FORBIDDEN_STAGES = {"$lookup", "$unionWith", "$out", "$merge"}
 
 
 class FilterVersion(EmbeddedModel, ABC):
@@ -2790,6 +2438,7 @@ async def app_factory():
     )
 
     # instantiate handler classes:
+    query_handler = QueryHandler()
     filter_handler = FilterHandler()
 
     # add routes manually
@@ -2803,9 +2452,7 @@ async def app_factory():
             web.delete("/api/users/{username}", users_delete),
             web.put("/api/users/{username}", users_put),
             # queries:
-            web.post("/api/queries", queries_post),
-            web.get("/api/queries/{task_id}", queries_get, allow_head=False),
-            web.delete("/api/queries/{task_id}", queries_delete),
+            web.post("/api/queries", query_handler.post),
             # filters:
             web.get(
                 r"/api/filters/{filter_id:[0-9]+}", filter_handler.get, allow_head=False

@@ -485,7 +485,7 @@ class TestAPIs(object):
 
     async def test_query_cone_search(self, aiohttp_client):
         """
-            Test {"query_type": "cone_search", ...}: /api/queries
+            Test {"query_type": "cone_search", ...}: POST /api/queries
         :param aiohttp_client:
         :return:
         """
@@ -521,16 +521,15 @@ class TestAPIs(object):
         resp = await client.post("/api/queries", json=qu, headers=headers, timeout=5)
         assert resp.status == 200
         result = await resp.json()
-        # print(result)
         assert result["status"] == "success"
-        assert result["message"] == "query successfully executed"
+        assert result["message"] == "Successfully executed query"
         assert "data" in result
         # should always return a dict, even if it's empty
         assert isinstance(result["data"], dict)
 
     async def test_query_find_one(self, aiohttp_client):
         """
-            Test {"query_type": "find_one", ...}: /api/queries
+            Test {"query_type": "find_one", ...}: POST /api/queries
         :param aiohttp_client:
         :return:
         """
@@ -559,12 +558,12 @@ class TestAPIs(object):
         result = await resp.json()
         # print(result)
         assert result["status"] == "success"
-        assert result["message"] == "query successfully executed"
+        assert result["message"] == "Successfully executed query"
         assert "data" in result
 
     async def test_query_find(self, aiohttp_client):
         """
-            Test {"query_type": "find", ...}: /api/queries
+            Test {"query_type": "find", ...}: POST /api/queries
         :param aiohttp_client:
         :return:
         """
@@ -594,14 +593,14 @@ class TestAPIs(object):
         result = await resp.json()
         # print(result)
         assert result["status"] == "success"
-        assert result["message"] == "query successfully executed"
+        assert result["message"] == "Successfully executed query"
         assert "data" in result
         # should always return a list, even if it's empty
         assert isinstance(result["data"], list)
 
     async def test_query_aggregate(self, aiohttp_client):
         """
-            Test {"query_type": "aggregate", ...}: /api/queries
+            Test {"query_type": "aggregate", ...}: POST /api/queries
         :param aiohttp_client:
         :return:
         """
@@ -633,12 +632,12 @@ class TestAPIs(object):
         result = await resp.json()
         # print(result)
         assert result["status"] == "success"
-        assert result["message"] == "query successfully executed"
+        assert result["message"] == "Successfully executed query"
         assert "data" in result
 
     async def test_query_info(self, aiohttp_client):
         """
-            Test {"query_type": "info", ...}: /api/queries
+            Test {"query_type": "info", ...}: POST /api/queries
         :param aiohttp_client:
         :return:
         """
@@ -658,12 +657,12 @@ class TestAPIs(object):
         result = await resp.json()
         # print(result)
         assert result["status"] == "success"
-        assert result["message"] == "query successfully executed"
+        assert result["message"] == "Successfully executed query"
         assert "data" in result
 
     async def test_query_count_documents(self, aiohttp_client):
         """
-            Test {"query_type": "count_documents", ...}: /api/queries
+            Test {"query_type": "count_documents", ...}: POST /api/queries
         :param aiohttp_client:
         :return:
         """
@@ -688,13 +687,13 @@ class TestAPIs(object):
         result = await resp.json()
         # print(result)
         assert result["status"] == "success"
-        assert result["message"] == "query successfully executed"
+        assert result["message"] == "Successfully executed query"
         assert "data" in result
         assert result["data"] == 0
 
     async def test_query_estimated_document_count(self, aiohttp_client):
         """
-            Test {"query_type": "estimated_document_count", ...}: /api/queries
+            Test {"query_type": "estimated_document_count", ...}: POST /api/queries
         :param aiohttp_client:
         :return:
         """
@@ -719,7 +718,7 @@ class TestAPIs(object):
         result = await resp.json()
         # print(result)
         assert result["status"] == "success"
-        assert result["message"] == "query successfully executed"
+        assert result["message"] == "Successfully executed query"
         assert "data" in result
         # assert result['data'] == 0
 
@@ -727,7 +726,7 @@ class TestAPIs(object):
 
     async def test_query_unauthorized(self, aiohttp_client):
         """
-            Test an unauthorized query: /api/queries
+            Test an unauthorized query: POST /api/queries
         :param aiohttp_client:
         :return:
         """
