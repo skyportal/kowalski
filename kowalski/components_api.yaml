@@ -342,31 +342,31 @@ components:
               description: "{'object_name': [<ra>, <dec>], ...} <ra/dec> could be either strings or numbers [deg]"
             - type: string
           description: "ICRF position(s): R.A. and Decl."
-      near_kwargs:
+    near_kwargs:
+      type: object
+      additionalProperties:
         type: object
-        additionalProperties:
-          type: object
-          properties:
-            max_time_ms:
-              type: integer
-              default: 300000
-              description: "maximum query execution time in ms. defaults to 5 minutes"
-              minimum: 1
-            filter_first:
-              type: boolean
-              default: false
-              description: "apply filter before positional query?"
-            skip:
-              type: integer
-              description: "number of matched documents to skip"
-              minimum: 0
-            hint:
-              type: string
-              description: "index name to use"
-            limit:
-              type: integer
-              description: "maximum number of matched documents to return"
-              minimum: 1
-            sort:
-              type: array
-              description: "sorting order"
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
+          filter_first:
+            type: boolean
+            default: false
+            description: "apply filter before positional query?"
+          skip:
+            type: integer
+            description: "number of matched documents to skip"
+            minimum: 0
+          hint:
+            type: string
+            description: "index name to use"
+          limit:
+            type: integer
+            description: "maximum number of matched documents to return"
+            minimum: 1
+          sort:
+            type: array
+            description: "sorting order"
