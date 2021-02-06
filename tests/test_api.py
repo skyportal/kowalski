@@ -720,7 +720,49 @@ class TestAPIs(object):
         assert result["status"] == "success"
         assert result["message"] == "Successfully executed query"
         assert "data" in result
-        # assert result['data'] == 0
+
+    async def test_query_near(self, aiohttp_client):
+        """
+            Test {"query_type": "cone_search", ...}: POST /api/queries
+        :param aiohttp_client:
+        :return:
+        """
+        client = await aiohttp_client(await app_factory())
+
+        # authorize
+        credentials = await self.get_admin_credentials(aiohttp_client)
+        access_token = credentials["token"]
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        collection = "ZTF_alerts"
+
+        # check query without book-keeping
+        qu = {
+            "query_type": "near",
+            "query": {
+                "min_distance": 0.1,
+                "max_distance": 30,
+                "distance_units": "arcsec",
+                "radec": {"object1": [71.6577756, -10.2263957]},
+                "catalogs": {
+                    collection: {
+                        "filter": {},
+                        "projection": {"_id": 0, "candid": 1, "objectId": 1},
+                    }
+                },
+            },
+            "kwargs": {"filter_first": False},
+        }
+        # print(qu)
+        resp = await client.post("/api/queries", json=qu, headers=headers, timeout=5)
+        assert resp.status == 200
+        result = await resp.json()
+        assert result["status"] == "success"
+        assert result["message"] == "Successfully executed query"
+        assert "data" in result
+        # should always return a dict, even if it's empty
+        assert isinstance(result["data"], dict)
 
     # test raising errors
 

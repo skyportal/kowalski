@@ -668,6 +668,7 @@ QUERY_TYPES = (
     "find_one",
     "aggregate",
     "info",
+    "near",
 )
 INFO_COMMANDS = (
     "catalog_names",
@@ -713,6 +714,60 @@ class Query(Model, ABC):
             catalog_projection = dict()
 
         return catalog_projection
+
+    @staticmethod
+    def angle_to_rad(angle, units):
+        angle_rad = float(angle)
+        if units not in ANGULAR_UNITS:
+            raise Exception(f"Angular units not in {ANGULAR_UNITS}")
+        if units == "arcsec":
+            angle_rad *= np.pi / 180.0 / 3600.0
+        elif units == "arcmin":
+            angle_rad *= np.pi / 180.0 / 60.0
+        elif units == "deg":
+            angle_rad *= np.pi / 180.0
+
+        return angle_rad
+
+    @staticmethod
+    def parse_object_coordinates(coordinates):
+        """Parse object coordinates in degrees/HMS_DMS
+
+        Options:
+         - String that is parsed either as ra dec for a single source or stringified Sequence, as below
+         - Sequence, such as [(ra1, dec1), (ra2, dec2), ..]
+         - Mapping, such as {'object_name': (ra1, dec1), ...}
+
+        """
+        if isinstance(coordinates, str):
+            coordinates = coordinates.strip()
+
+            # comb coordinates for a single source:
+            if not coordinates.startswith(("[", "(", "{")):
+                a, b = coordinates.split()
+                if ("s" in coordinates) or (":" in coordinates):
+                    coordinates = f"[('{a}', '{b}')]"
+                else:
+                    coordinates = f"[({a}, {b})]"
+
+            coordinates = literal_eval(coordinates)
+
+        if isinstance(coordinates, Sequence):
+            object_coordinates = coordinates
+            # use coords as source ids replacing dots to keep Mongo happy:
+            object_names = [
+                str(obj_crd).replace(".", "_") for obj_crd in object_coordinates
+            ]
+        elif isinstance(coordinates, Mapping):
+            object_names, object_coordinates = zip(*coordinates.items())
+            object_names = list(map(str, object_names))
+            object_names = [
+                object_name.replace(".", "_") for object_name in object_names
+            ]
+        else:
+            raise ValueError("Unsupported object coordinate specs")
+
+        return object_names, object_coordinates
 
     @staticmethod
     def validate_kwargs(kwargs, known_kwargs):
@@ -777,54 +832,14 @@ class Query(Model, ABC):
             filter_first = kwargs.get("filter_first", False)
 
             # cone search radius:
-            cone_search_radius = float(
-                query["object_coordinates"]["cone_search_radius"]
+            cone_search_radius = cls.angle_to_rad(
+                angle=query["object_coordinates"]["cone_search_radius"],
+                units=query["object_coordinates"]["cone_search_unit"],
             )
-            # convert to rad:
-            cone_search_units = query["object_coordinates"]["cone_search_unit"]
-            if cone_search_units not in ANGULAR_UNITS:
-                raise Exception(f"Cone search units not in {ANGULAR_UNITS}")
-            if cone_search_units == "arcsec":
-                cone_search_radius *= np.pi / 180.0 / 3600.0
-            elif cone_search_units == "arcmin":
-                cone_search_radius *= np.pi / 180.0 / 60.0
-            elif cone_search_units == "deg":
-                cone_search_radius *= np.pi / 180.0
 
-            radec = query["object_coordinates"]["radec"]
-
-            if isinstance(radec, str):
-                radec = radec.strip()
-
-                # comb radecs for a single source:
-                if not radec.startswith(("[", "(", "{")):
-                    ra, dec = radec.split()
-                    if ("s" in radec) or (":" in radec):
-                        radec = f"[('{ra}', '{dec}')]"
-                    else:
-                        radec = f"[({ra}, {dec})]"
-
-                objects = literal_eval(radec)
-            elif isinstance(radec, (Sequence, Mapping)):
-                objects = radec
-            else:
-                raise Exception("Unsupported format of source coordinates")
-
-            # could either be Sequence [(ra1, dec1), (ra2, dec2), ..] or Mapping {'name': (ra1, dec1), ...}
-            if isinstance(objects, Sequence):
-                object_coordinates = objects
-                # use coords as source ids replacing dots to keep Mongo happy:
-                object_names = [
-                    str(obj_crd).replace(".", "_") for obj_crd in object_coordinates
-                ]
-            elif isinstance(objects, Mapping):
-                object_names, object_coordinates = zip(*objects.items())
-                object_names = list(map(str, object_names))
-                object_names = [
-                    object_name.replace(".", "_") for object_name in object_names
-                ]
-            else:
-                raise ValueError("Unsupported object coordinates specs")
+            object_names, object_coordinates = cls.parse_object_coordinates(
+                query["object_coordinates"]["radec"]
+            )
 
             # reshuffle query to ease execution on Mongo side
             query_preprocessed = dict()
@@ -907,9 +922,70 @@ class Query(Model, ABC):
                 raise KeyError(f"command {command} not in {str(INFO_COMMANDS)}")
 
         elif query_type == "near":
-            raise NotImplementedError(
-                "Working on the implementation, like, at this very moment"
+            # apply filter before positional query?
+            filter_first = kwargs.get("filter_first", False)
+
+            min_distance = cls.angle_to_rad(
+                angle=query.get("min_distance", 0),
+                units=query.get("distance_units", "rad"),
             )
+
+            max_distance = cls.angle_to_rad(
+                angle=query.get("max_distance", np.pi / 180.0 / 60.0),  # default to 1'
+                units=query.get("distance_units", "rad"),
+            )
+
+            object_names, object_coordinates = cls.parse_object_coordinates(
+                query["radec"]
+            )
+
+            # reshuffle query to ease execution on Mongo side
+            query_preprocessed = dict()
+            for catalog in query["catalogs"]:
+                catalog = catalog.strip()
+                query_preprocessed[catalog] = dict()
+
+                # specifying filter is optional in this case
+                if "filter" in query["catalogs"][catalog]:
+                    catalog_filter = cls.construct_filter(query["catalogs"][catalog])
+                else:
+                    catalog_filter = dict()
+
+                # construct projection, which is always optional
+                catalog_projection = cls.construct_projection(
+                    query["catalogs"][catalog]
+                )
+
+                # parse coordinate list
+                for oi, obj_crd in enumerate(object_coordinates):
+                    # convert ra/dec into GeoJSON-friendly format
+                    _ra, _dec = radec_str2geojson(*obj_crd)
+                    object_position_query = dict()
+                    object_position_query["coordinates.radec_geojson"] = {
+                        "$nearSphere": [_ra, _dec],
+                        "$minDistance": min_distance,
+                        "$maxDistance": max_distance,
+                    }
+                    # use stringified object coordinates as dict keys and merge dicts with cat/obj queries:
+                    if not filter_first:
+                        query_preprocessed[catalog][object_names[oi]] = (
+                            {**object_position_query, **catalog_filter},
+                            {**catalog_projection},
+                        )
+                    else:
+                        # place the filter expression in front of the positional query?
+                        # this may be useful if an index exists to speed up the query
+                        query_preprocessed[catalog][object_names[oi]] = (
+                            {**catalog_filter, **object_position_query},
+                            {**catalog_projection},
+                        )
+
+            kwargs = cls.validate_kwargs(
+                kwargs=kwargs, known_kwargs=("skip", "hint", "limit", "sort")
+            )
+
+            values["kwargs"] = kwargs
+            values["query"] = query_preprocessed
 
         return values
 
@@ -938,7 +1014,15 @@ class QueryHandler(Handler):
                 properties:
                   query_type:
                     type: string
-                    enum: [aggregate, cone_search, count_documents, estimated_document_count, find, find_one, info]
+                    enum:
+                      - aggregate
+                      - cone_search
+                      - count_documents
+                      - estimated_document_count
+                      - find
+                      - find_one
+                      - info
+                      - near
                   query:
                     type: object
                     description: query. depends on query_type, see examples
@@ -950,6 +1034,7 @@ class QueryHandler(Handler):
                       - $ref: "#/components/schemas/find"
                       - $ref: "#/components/schemas/find_one"
                       - $ref: "#/components/schemas/info"
+                      - $ref: "#/components/schemas/near"
                   kwargs:
                     type: object
                     description: additional parameters. depends on query_type, see examples
@@ -961,6 +1046,7 @@ class QueryHandler(Handler):
                       - $ref: "#/components/schemas/find_kwargs"
                       - $ref: "#/components/schemas/find_one_kwargs"
                       - $ref: "#/components/schemas/info_kwargs"
+                      - $ref: "#/components/schemas/near_kwargs"
               examples:
                 aggregate:
                   value:
@@ -1039,6 +1125,24 @@ class QueryHandler(Handler):
                       "catalog": "ZTF_alerts"
                     }
 
+                near:
+                  value:
+                    "query_type": "near"
+                    "query": {
+                      "max_distance": 30,
+                      "distance_units": "arcsec",
+                      "radec": {"object1": [71.6577756, -10.2263957]},
+                      "catalogs": {
+                        "ZTF_alerts": {
+                          "filter": {},
+                          "projection": {"_id": 0, "candid": 1, "objectId": 1}
+                        }
+                      }
+                    }
+                    "kwargs": {
+                      "limit": 1
+                    }
+
         responses:
           '200':
             description: query result
@@ -1068,12 +1172,8 @@ class QueryHandler(Handler):
                 examples:
                   aggregate:
                     value:
-                      "user": "admin"
-                      "kwargs": {
-                        "max_time_ms": 2000
-                      }
                       "status": "success"
-                      "message": "query successfully executed"
+                      "message": "Successfully executed query"
                       "data": [
                         {
                           "candid": 1105522281015015000,
@@ -1085,12 +1185,8 @@ class QueryHandler(Handler):
 
                   cone_search:
                     value:
-                      "user": "admin"
-                      "kwargs": {
-                        "filter_first": false
-                      }
                       "status": "success"
-                      "message": "query successfully executed"
+                      "message": "Successfully executed query"
                       "data": {
                         "ZTF_alerts": {
                           "object1": [
@@ -1102,13 +1198,8 @@ class QueryHandler(Handler):
 
                   find:
                     value:
-                      "user": "admin"
-                      "kwargs": {
-                        "sort": [["$natural", -1]],
-                        "limit": 2
-                      }
                       "status": "success"
-                      "message": "query successfully executed"
+                      "message": "Successfully executed query"
                       "data": [
                         {
                           "candid": 1127561444715015009,
@@ -1126,10 +1217,8 @@ class QueryHandler(Handler):
 
                   info:
                     value:
-                      "user": "admin"
-                      "kwargs": {}
                       "status": "success"
-                      "message": "query successfully executed"
+                      "message": "Successfully executed query"
                       "data": [
                         "ZTF_alerts_aux",
                         "ZTF_alerts"
@@ -1137,19 +1226,28 @@ class QueryHandler(Handler):
 
                   count_documents:
                     value:
-                      "user": "admin"
-                      "kwargs": {}
                       "status": "success"
-                      "message": "query successfully executed"
+                      "message": "Successfully executed query"
                       "data": 1
 
                   estimated_document_count:
                     value:
-                      "user": "admin"
-                      "kwargs": {}
                       "status": "success"
-                      "message": "query successfully executed"
+                      "message": "Successfully executed query"
                       "data": 11
+
+                  near:
+                    value:
+                      "status": "success"
+                      "message": "Successfully executed query"
+                      "data": {
+                        "ZTF_alerts": {
+                          "object1": [
+                            {"objectId": "ZTF20aaelulu",
+                             "candid": 1105522281015015000}
+                          ]
+                        }
+                      }
 
           '400':
             description: query parsing/execution error
@@ -1199,7 +1297,7 @@ class QueryHandler(Handler):
         # execute query, depending on query.query_type
         data = dict()
 
-        if query.query_type == "cone_search":
+        if query.query_type in ("cone_search", "near"):
             # iterate over catalogs
             for catalog in query.query:
                 data[catalog] = dict()
