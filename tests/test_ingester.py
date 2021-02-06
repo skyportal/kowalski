@@ -488,7 +488,7 @@ class TestIngester:
         log("Digested and ingested: all done!")
 
         # shut down Kafka server and ZooKeeper
-        time.sleep(10)
+        time.sleep(20)
 
         log("Shutting down Kafka Server at localhost:9092")
         # start the Kafka server:
