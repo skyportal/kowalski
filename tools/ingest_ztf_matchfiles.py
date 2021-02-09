@@ -141,7 +141,7 @@ def process_file(
         print(f"processing {_file}")
 
     try:
-        with tables.open_file(_file) as f:
+        with tables.open_file(_file, "r+") as f:
             # print(f.root['/matches'].attrs)
             group = f.root.matches
             # print(f.root.matches.exposures._v_attrs)
@@ -162,15 +162,115 @@ def process_file(
             if verbose:
                 # print(f'{_file}: {field} {filt} {ccd} {quad}')
                 print(f"{_file}: baseid {baseid}")
-
             exp_baseid = int(1e16 + field * 1e12 + rc * 1e10 + filt * 1e9)
-            # print(int(1e16), int(field*1e12), int(rc*1e10), int(filt*1e9), exp_baseid)
 
-            # tic = time.time()
+            def clean_up_doc(doc, _keep_all):
+                if not _keep_all:
+                    # refmagerr = 1.0857/refsnr
+                    sources_fields_to_keep = (
+                        "meanmag",
+                        "percentiles",
+                        "vonneumannratio",
+                        "dec",
+                        "matchid",
+                        "nobs",
+                        "ra",
+                        "refchi",
+                        "refmag",
+                        "refmagerr",
+                        "refsharp",
+                        "data",
+                    )
+
+                    doc_keys = list(doc.keys())
+                    for kk in doc_keys:
+                        if kk not in sources_fields_to_keep:
+                            doc.pop(kk)
+
+                # convert types for pymongo:
+                for k, v in doc.items():
+                    if k != "data":
+                        if np.issubdtype(type(v), np.integer):
+                            doc[k] = int(doc[k])
+                        if np.issubdtype(type(v), np.inexact):
+                            doc[k] = float(doc[k])
+                            if k not in ("ra", "dec"):
+                                doc[k] = round(doc[k], 3)
+                        # convert numpy arrays into lists
+                        if type(v) == np.ndarray:
+                            doc[k] = doc[k].tolist()
+
+                # generate unique _id:
+                doc["_id"] = baseid + doc["matchid"]
+
+                # from Frank Masci: compute ObjectID, same as serial key in ZTF Objects DB table in IRSA.
+                # oid = ((fieldid * 100000 + fid * 10000 + ccdid * 100 + qid * 10) * 10 ** 7) + int(matchid)
+
+                # doc["iqr"] = doc["percentiles"][8] - doc["percentiles"][3]
+                # doc["iqr"] = round(doc["iqr"], 3)
+                # doc.pop("percentiles")
+
+                doc["filter"] = filt
+                doc["field"] = field
+                doc["ccd"] = ccd
+                doc["quad"] = quad
+                doc["rc"] = rc
+
+                # GeoJSON for 2D indexing
+                doc["coordinates"] = {}
+                _ra = doc["ra"]
+                _dec = doc["dec"]
+                _radec_str = [deg2hms(_ra), deg2dms(_dec)]
+                doc["coordinates"]["radec_str"] = _radec_str
+                # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
+                _radec_geojson = [_ra - 180.0, _dec]
+                doc["coordinates"]["radec_geojson"] = {
+                    "type": "Point",
+                    "coordinates": _radec_geojson,
+                }
+                doc_data = doc["data"]
+                if not _keep_all:
+                    # do not store all fields to save space
+                    sourcedata_fields_to_keep = (
+                        "catflags",
+                        "chi",
+                        "dec",
+                        "expid",
+                        "hjd",
+                        "mag",
+                        "magerr",
+                        "programid",
+                        "ra",  # 'relphotflags', 'snr',
+                        "sharp",
+                    )
+                    doc_keys = list(doc_data[0].keys())
+                    for ddi, ddp in enumerate(doc["data"]):
+                        for kk in doc_keys:
+                            if kk not in sourcedata_fields_to_keep:
+                                doc["data"][ddi].pop(kk)
+
+                for dd in doc["data"]:
+                    # convert types for pymongo:
+                    for k, v in dd.items():
+                        # types.add(type(v))
+                        if np.issubdtype(type(v), np.integer):
+                            dd[k] = int(dd[k])
+                        if np.issubdtype(type(v), np.inexact):
+                            dd[k] = float(dd[k])
+                            if k not in ("ra", "dec", "hjd"):
+                                dd[k] = round(dd[k], 3)
+                            elif k == "hjd":
+                                dd[k] = round(dd[k], 5)
+                        # convert numpy arrays into lists
+                        if type(v) == np.ndarray:
+                            dd[k] = dd[k].tolist()
+
+                    # generate unique exposure id's that match _id's in exposures collection
+                    dd["uexpid"] = exp_baseid + dd["expid"]
+
+                return doc
+
             exposures = pd.DataFrame.from_records(group.exposures[:])
-            # exposures_colnames = exposures.columns.values
-            # print(exposures_colnames)
-
             # prepare docs to ingest into db:
             docs_exposures = []
             for index, row in exposures.iterrows():
@@ -209,186 +309,79 @@ def process_file(
             # fixme? skip transients
             # for source_type in ('source', 'transient'):
             for source_type in ("source",):
-
                 sources_colnames = group[f"{source_type}s"].colnames
-                sources = np.array(group[f"{source_type}s"].read())
-                # sources = group[f'{source_type}s'].read()
+                sources = pd.DataFrame.from_records(
+                    group[f"{source_type}s"].read(),
+                    index="matchid",
+                    exclude=[
+                        "nabovemeanbystd",
+                        "nbelowmeanbystd",
+                        "nconsecabovemeanbystd",
+                        "nconsecbelowmeanbystd",
+                        "nconsecfrommeanbystd",
+                        "percentiles",
+                    ],
+                )
 
-                # sourcedata = pd.DataFrame.from_records(group[f'{source_type}data'][:])
-                # sourcedata_colnames = sourcedata.columns.values
-                sourcedata_colnames = group[f"{source_type}data"].colnames
-                # sourcedata = np.array(group[f'{source_type}data'].read())
-
-                for source in sources:
+                sourcedatas = pd.DataFrame.from_records(
+                    group[f"{source_type}data"][:], index="matchid"
+                )
+                sourcedatas.rename(
+                    columns={"ra": "ra_data", "dec": "dec_data"}, inplace=True
+                )
+                sourcedata_colnames = sourcedatas.columns.values
+                merged = sources.merge(sourcedatas, left_index=True, right_index=True)
+                prev_matchid = None
+                current_doc = None
+                for row in merged.itertuples():
+                    matchid = row[0]
                     try:
-                        doc = dict(zip(sources_colnames, source))
+                        # At a new source
+                        if matchid != prev_matchid:
+                            # Done with last source; save
+                            if current_doc is not None:
+                                current_doc = clean_up_doc(current_doc, _keep_all)
+                                docs_sources.append(current_doc)
 
-                        # grab data first
-                        sourcedata = np.array(
-                            group[f"{source_type}data"].read_where(
-                                f'matchid == {doc["matchid"]}'
-                            )
-                        )
-                        # print(sourcedata)
-                        doc_data = [
-                            dict(zip(sourcedata_colnames, sd)) for sd in sourcedata
-                        ]
+                            # Set up new doc
+                            doc = dict(row._asdict())
+                            doc["matchid"] = doc["Index"]
+                            doc.pop("Index")
+                            # Coerce the source data info into its own nested array
+                            first_data_row = {}
+                            for col in sourcedata_colnames:
+                                if col not in ["dec_data", "ra_data"]:
+                                    first_data_row[col] = doc[col]
+                                else:
+                                    real_col = col.split("_data")[0]
+                                    first_data_row[real_col] = doc[col]
+                                doc.pop(col)
+                            doc["data"] = [first_data_row]
+                            current_doc = doc
+                        # For continued source, just append new data row
+                        else:
+                            data_row = {}
+                            data = dict(row._asdict())
+                            for col in sourcedata_colnames:
+                                if col not in ["dec_data", "ra_data"]:
+                                    data_row[col] = data[col]
+                                else:
+                                    real_col = col.split("_data")[0]
+                                    data_row[real_col] = data[col]
 
-                        # skip sources that are only detected in the reference image:
-                        if len(doc_data) == 0:
-                            continue
+                            current_doc["data"].append(data_row)
 
-                        # dump unwanted fields:
-                        if not _keep_all:
-                            # do not store all fields to save space
-                            # sources_fields_to_keep = ('astrometricrms', 'chisq', 'con', 'lineartrend',
-                            #                           'magrms', 'maxslope', 'meanmag', 'medianabsdev',
-                            #                           'medianmag', 'minmag', 'maxmag',
-                            #                           'nabovemeanbystd', 'nbelowmeanbystd',
-                            #                           'nconsecabovemeanbystd', 'nconsecbelowmeanbystd',
-                            #                           'nconsecfrommeanbystd',
-                            #                           'nmedianbufferrange',
-                            #                           'npairposslope', 'percentiles', 'skewness',
-                            #                           'smallkurtosis', 'stetsonj', 'stetsonk',
-                            #                           'vonneumannratio', 'weightedmagrms',
-                            #                           'weightedmeanmag',
-                            #                           'dec', 'matchid', 'nobs', 'ngoodobs',
-                            #                           'ra', 'refchi', 'refmag', 'refmagerr', 'refsharp', 'refsnr')
-
-                            # sources_fields_to_keep = ('meanmag',
-                            #                           'percentiles',
-                            #                           'vonneumannratio',
-                            #                           'dec', 'matchid', 'nobs',
-                            #                           'ra', 'refchi', 'refmag', 'refmagerr', 'refsharp', 'refsnr')
-
-                            # refmagerr = 1.0857/refsnr
-                            sources_fields_to_keep = (
-                                "meanmag",
-                                "percentiles",
-                                "vonneumannratio",
-                                "dec",
-                                "matchid",
-                                "nobs",
-                                "ra",
-                                "refchi",
-                                "refmag",
-                                "refmagerr",
-                                "refsharp",
-                            )
-
-                            doc_keys = list(doc.keys())
-                            for kk in doc_keys:
-                                if kk not in sources_fields_to_keep:
-                                    doc.pop(kk)
-
-                        # convert types for pymongo:
-                        for k, v in doc.items():
-                            # types.add(type(v))
-                            if np.issubdtype(type(v), np.integer):
-                                doc[k] = int(doc[k])
-                            if np.issubdtype(type(v), np.inexact):
-                                doc[k] = float(doc[k])
-                                if k not in ("ra", "dec"):
-                                    doc[k] = round(doc[k], 3)
-                            # convert numpy arrays into lists
-                            if type(v) == np.ndarray:
-                                doc[k] = doc[k].tolist()
-
-                        # generate unique _id:
-                        doc["_id"] = baseid + doc["matchid"]
-
-                        # from Frank Masci: compute ObjectID, same as serial key in ZTF Objects DB table in IRSA.
-                        # oid = ((fieldid * 100000 + fid * 10000 + ccdid * 100 + qid * 10) * 10 ** 7) + int(matchid)
-
-                        doc["iqr"] = doc["percentiles"][8] - doc["percentiles"][3]
-                        doc["iqr"] = round(doc["iqr"], 3)
-                        doc.pop("percentiles")
-
-                        # doc['matchfile'] = ff_basename
-                        doc["filter"] = filt
-                        doc["field"] = field
-                        doc["ccd"] = ccd
-                        doc["quad"] = quad
-                        doc["rc"] = rc
-
-                        # doc['source_type'] = source_type
-
-                        # GeoJSON for 2D indexing
-                        doc["coordinates"] = {}
-                        _ra = doc["ra"]
-                        _dec = doc["dec"]
-                        # _radec = [_ra, _dec]
-                        # string format: H:M:S, D:M:S
-                        # tic = time.time()
-                        _radec_str = [deg2hms(_ra), deg2dms(_dec)]
-                        # print(time.time() - tic)
-                        # print(_radec_str)
-                        doc["coordinates"]["radec_str"] = _radec_str
-                        # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
-                        _radec_geojson = [_ra - 180.0, _dec]
-                        doc["coordinates"]["radec_geojson"] = {
-                            "type": "Point",
-                            "coordinates": _radec_geojson,
-                        }
-                        # radians and degrees:
-                        # doc['coordinates']['radec_rad'] = [_ra * np.pi / 180.0, _dec * np.pi / 180.0]
-                        # doc['coordinates']['radec_deg'] = [_ra, _dec]
-
-                        # data
-
-                        doc["data"] = doc_data
-                        # print(doc['data'])
-
-                        if not _keep_all:
-                            # do not store all fields to save space
-                            if len(doc_data) > 0:
-                                # magerr = 1.0857/snr
-                                sourcedata_fields_to_keep = (
-                                    "catflags",
-                                    "chi",
-                                    "dec",
-                                    "expid",
-                                    "hjd",
-                                    "mag",
-                                    "magerr",
-                                    "programid",
-                                    "ra",  # 'relphotflags', 'snr',
-                                    "sharp",
-                                )
-                                doc_keys = list(doc_data[0].keys())
-                                for ddi, ddp in enumerate(doc["data"]):
-                                    for kk in doc_keys:
-                                        if kk not in sourcedata_fields_to_keep:
-                                            doc["data"][ddi].pop(kk)
-
-                        for dd in doc["data"]:
-                            # convert types for pymongo:
-                            for k, v in dd.items():
-                                # types.add(type(v))
-                                if np.issubdtype(type(v), np.integer):
-                                    dd[k] = int(dd[k])
-                                if np.issubdtype(type(v), np.inexact):
-                                    dd[k] = float(dd[k])
-                                    if k not in ("ra", "dec", "hjd"):
-                                        dd[k] = round(dd[k], 3)
-                                    elif k == "hjd":
-                                        dd[k] = round(dd[k], 5)
-                                # convert numpy arrays into lists
-                                if type(v) == np.ndarray:
-                                    dd[k] = dd[k].tolist()
-
-                            # generate unique exposure id's that match _id's in exposures collection
-                            dd["uexpid"] = exp_baseid + dd["expid"]
-
-                        # pprint(doc)
-                        docs_sources.append(doc)
+                        prev_matchid = matchid
 
                     except Exception as e_:
                         print(str(e_))
 
                     # ingest in batches
                     try:
-                        if len(docs_sources) % _batch_size == 0:
+                        if (
+                            len(docs_sources) % _batch_size == 0
+                            and len(docs_sources) != 0
+                        ):
                             if verbose:
                                 print(f"inserting batch #{batch_num} for {_file}")
                             if not _dry_run:
@@ -404,6 +397,9 @@ def process_file(
                     except Exception as e_:
                         print(str(e_))
 
+        # Clean up and append the last doc
+        current_doc = clean_up_doc(current_doc, _keep_all)
+        docs_sources.append(current_doc)
         # ingest remaining
         while len(docs_sources) > 0:
             try:
@@ -524,7 +520,7 @@ if __name__ == "__main__":
     print(f"# files to process: {len(files)}")
 
     input_list = [
-        [f, collections, batch_size, keep_all, rm_file, False, dry_run]
+        [f, collections, batch_size, keep_all, rm_file, True, dry_run]
         for f in sorted(files)
     ]
     # for a more even job distribution:
@@ -533,4 +529,4 @@ if __name__ == "__main__":
     with mp.Pool(processes=args.np) as p:
         list(tqdm(p.starmap(process_file, input_list), total=len(files)))
 
-    print("All done")
+    print(f"All done")
