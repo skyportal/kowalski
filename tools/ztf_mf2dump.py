@@ -66,7 +66,7 @@ if __name__ == "__main__":
                 "/usr/local/bin/gsutil",
                 "-m",
                 "cp",
-                f"gs://ztf-matchfiles-20201201/36/ztf_000245_zr_c10_q1_match.pytable",
+                f"gs://ztf-matchfiles-{args.tag}/{rc}/*.pytable",
                 # f"gs://ztf-matchfiles-{args.tag}/{rc}/ztf_000245_zg_c01_q1_match.pytable",  # test
                 f"/_tmp/ztf_matchfiles_{args.tag}/",
             ]
