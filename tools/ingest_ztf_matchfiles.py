@@ -180,7 +180,6 @@ def process_file(
     _file,
     _collections,
     _batch_size=2048,
-    _keep_all=False,
     _rm_file=False,
     verbose=False,
     _dry_run=False,
@@ -226,30 +225,7 @@ def process_file(
                 print(f"{_file}: baseid {baseid}")
             exp_baseid = int(1e16 + field * 1e12 + rc * 1e10 + filt * 1e9)
 
-            def clean_up_doc(doc, _keep_all):
-                if not _keep_all:
-                    # refmagerr = 1.0857/refsnr
-                    sources_fields_to_keep = (
-                        "meanmag",
-                        "percentiles",
-                        "vonneumannratio",
-                        "dec",
-                        "matchid",
-                        "nobs",
-                        "ra",
-                        "refchi",
-                        "refmag",
-                        "refmagerr",
-                        "refsharp",
-                        "iqr",
-                        "data",
-                    )
-
-                    doc_keys = list(doc.keys())
-                    for kk in doc_keys:
-                        if kk not in sources_fields_to_keep:
-                            doc.pop(kk)
-
+            def clean_up_doc(doc):
                 # convert types for pymongo:
                 for k, v in doc.items():
                     if k != "data":
@@ -285,25 +261,6 @@ def process_file(
                     "coordinates": _radec_geojson,
                 }
                 doc_data = doc["data"]
-                if not _keep_all:
-                    # do not store all fields to save space
-                    sourcedata_fields_to_keep = (
-                        "catflags",
-                        "chi",
-                        "dec",
-                        "expid",
-                        "hjd",
-                        "mag",
-                        "magerr",
-                        "programid",
-                        "ra",  # 'relphotflags', 'snr',
-                        "sharp",
-                    )
-                    doc_keys = list(doc_data[0].keys())
-                    for ddi, ddp in enumerate(doc["data"]):
-                        for kk in doc_keys:
-                            if kk not in sourcedata_fields_to_keep:
-                                doc["data"][ddi].pop(kk)
 
                 for dd in doc["data"]:
                     # convert types for pymongo:
@@ -362,18 +319,10 @@ def process_file(
             # fixme? skip transients
             # for source_type in ('source', 'transient'):
             for source_type in ("source",):
-                sources_colnames = group[f"{source_type}s"].colnames
                 sources = pd.DataFrame.from_records(
                     group[f"{source_type}s"].read(),
                     index="matchid",
-                    exclude=[
-                        "nabovemeanbystd",
-                        "nbelowmeanbystd",
-                        "nconsecabovemeanbystd",
-                        "nconsecbelowmeanbystd",
-                        "nconsecfrommeanbystd",
-                        "percentiles",
-                    ],
+                    exclude=sources_fields_to_exclude,
                 )
                 # Load in percentiles separately to compute the IQR column
                 # because Pandas DF from_records() only wants 2-D tables
@@ -382,12 +331,22 @@ def process_file(
                 sources["iqr"] = iqr
 
                 sourcedatas = pd.DataFrame.from_records(
-                    group[f"{source_type}data"][:], index="matchid"
+                    group[f"{source_type}data"][:],
+                    index="matchid",
+                    exclude=[
+                        "ypos",
+                        "xpos",
+                        "mjd",
+                        "psfflux",
+                        "psffluxerr",
+                        "magerrmodel",
+                    ],
                 )
                 sourcedatas.rename(
                     columns={"ra": "ra_data", "dec": "dec_data"}, inplace=True
                 )
                 sourcedata_colnames = sourcedatas.columns.values
+
                 merged = sources.merge(sourcedatas, left_index=True, right_index=True)
                 prev_matchid = None
                 current_doc = None
@@ -398,7 +357,7 @@ def process_file(
                         if matchid != prev_matchid:
                             # Done with last source; save
                             if current_doc is not None:
-                                current_doc = clean_up_doc(current_doc, _keep_all)
+                                current_doc = clean_up_doc(current_doc)
                                 docs_sources.append(current_doc)
 
                             # Set up new doc
@@ -457,7 +416,7 @@ def process_file(
 
         # Clean up and append the last doc
         if current_doc is not None:
-            current_doc = clean_up_doc(current_doc, _keep_all)
+            current_doc = clean_up_doc(current_doc)
             docs_sources.append(current_doc)
         # ingest remaining
         while len(docs_sources) > 0:
@@ -506,10 +465,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter, description=""
     )
-
-    parser.add_argument(
-        "--keepall", action="store_true", help="keep all fields from the matchfiles?"
-    )
     parser.add_argument(
         "--rm", action="store_true", help="remove matchfiles after ingestion?"
     )
@@ -525,7 +480,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     dry_run = args.dryrun
-    keep_all = args.keepall
     rm_file = args.rm
 
     # connect to MongoDB:
@@ -580,8 +534,7 @@ if __name__ == "__main__":
     print(f"# files to process: {len(files)}")
 
     input_list = [
-        [f, collections, batch_size, keep_all, rm_file, False, dry_run]
-        for f in sorted(files)
+        [f, collections, batch_size, rm_file, False, dry_run] for f in sorted(files)
     ]
     # for a more even job distribution:
     random.shuffle(input_list)
