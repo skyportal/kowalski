@@ -284,3 +284,89 @@ components:
             default: 300000
             description: "maximum query execution time in ms. defaults to 5 minutes"
             minimum: 1
+
+    near:
+      type: object
+      required:
+        - catalogs
+        - radec
+      properties:
+        catalogs:
+          type: object
+          additionalProperties:
+            type: object
+            required:
+              - "<catalog_name>"
+            properties:
+              "<catalog_name>":
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    filter:
+                      type: object
+                      description: "filter expression in MQL"
+                    projection:
+                      type: object
+                      description: "projection expression (document fields to return/ditch) in MQL"
+                description: "define filter and projection per catalog."
+        min_distance:
+          oneOf:
+            - type: number
+            - type: string
+          description: "min distance"
+        max_distance:
+          oneOf:
+            - type: number
+            - type: string
+          description: "max distance"
+        distance_units:
+          type: string
+          enum: [ arcsec, arcmin, deg, rad ]
+          description: "min and max distance units"
+        radec:
+          oneOf:
+            - type: array
+              items:
+                type: array
+                items:
+                  oneOf:
+                    - type: string
+                      description: "('HH:MM:SS', 'DD:MM:SS') or ('HHhMMmSSs', 'DDdMMmSSs')"
+                    - type: number
+                      description: "(deg, deg)"
+                  minItems: 2
+                  maxItems: 2
+                minItems: 1
+            - type: object
+              description: "{'object_name': [<ra>, <dec>], ...} <ra/dec> could be either strings or numbers [deg]"
+            - type: string
+          description: "ICRF position(s): R.A. and Decl."
+    near_kwargs:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
+          filter_first:
+            type: boolean
+            default: false
+            description: "apply filter before positional query?"
+          skip:
+            type: integer
+            description: "number of matched documents to skip"
+            minimum: 0
+          hint:
+            type: string
+            description: "index name to use"
+          limit:
+            type: integer
+            description: "maximum number of matched documents to return"
+            minimum: 1
+          sort:
+            type: array
+            description: "sorting order"
