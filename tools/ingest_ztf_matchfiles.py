@@ -16,8 +16,7 @@ import datetime
 import pytz
 from numba import jit
 
-# from concurrent.futures import ThreadPoolExecutor
-# from concurrent.futures import ProcessPoolExecutor
+import istarmap
 import multiprocessing as mp
 from tqdm import tqdm
 
@@ -327,7 +326,10 @@ def process_file(
                 # Load in percentiles separately to compute the IQR column
                 # because Pandas DF from_records() only wants 2-D tables
                 percentiles = group[f"{source_type}s"].col("percentiles")
+                # Ignore float errors due to infinity values
+                old_settings = np.seterr(all="ignore")
                 iqr = np.round(percentiles[:, 8] - percentiles[:, 3], 3)
+                np.seterr(**old_settings)
                 sources["iqr"] = iqr
 
                 sourcedatas = pd.DataFrame.from_records(
@@ -540,6 +542,6 @@ if __name__ == "__main__":
     random.shuffle(input_list)
 
     with mp.Pool(processes=args.np) as p:
-        list(tqdm(p.starmap(process_file, input_list), total=len(files)))
+        list(tqdm(p.istarmap(process_file, input_list), total=len(files)))
 
     print(f"All done")
