@@ -25,11 +25,20 @@ from utils import (
     deg2dms,
     deg2hms,
     load_config,
+    init_db_sync,
 )
+
+logfile = "/app/logs.txt"
+
+
+def log(msg):
+    with open(logfile, "a+") as f:
+        f.write(msg + "\n")
 
 
 """ load config and secrets """
 config = load_config(config_file="config.yaml")["kowalski"]
+init_db_sync(config=config)
 
 
 def utc_now():
@@ -119,6 +128,53 @@ def ccd_quad_2_rc(ccd: int, quad: int) -> int:
 
 filters = {"zg": 1, "zr": 2, "zi": 3}
 
+sources_int_fields = (
+    "matchid",
+    "ngoodobs",
+    "ngoodobsrel",
+    "nmedianbufferrange",
+    "nobs",
+    "nobsrel",
+    "npairposslope",
+)
+
+sourcedata_int_fields = ("catflags", "expid", "programid")
+sources_fields_to_exclude = [
+    "medmagerr",
+    "nmedianbufferrange",
+    "smallkurtosis",
+    "magrms",
+    "medianabsdev",
+    "maxmag",
+    "nconsecfrommeanbystd",
+    "medianmag",
+    "npairposslope",
+    "ngoodobs",
+    "stetsonk",
+    "nobsrel",
+    "lineartrend",
+    "z",
+    "minmag",
+    "nconsecabovemeanbystd",
+    "ngoodobsrel",
+    "weightedmagrms",
+    "x",
+    "nbelowmeanbystd",
+    "nabovemeanbystd",
+    "refsnr",
+    "nconsecbelowmeanbystd",
+    "con",
+    "astrometricrms",
+    "skewness",
+    "maxslope",
+    "weightedmeanmag",
+    "stetsonj",
+    "y",
+    "chisq",
+    "uncalibmeanmag",
+    "percentiles",
+]
+
 
 def process_file(
     _file,
@@ -129,17 +185,23 @@ def process_file(
     verbose=False,
     _dry_run=False,
 ):
-
+    log(f"Processing {_file}")
+    tic = time.time()
     # connect to MongoDB:
     if verbose:
         print("Connecting to DB")
-    _client, _db = connect_to_db()
+    try:
+        _client, _db = connect_to_db()
+    except ConnectionRefusedError:
+        log(f"DB disconnected for {_file}, retrying...")
+        time.sleep(10)
+        _client, _db = connect_to_db()
+
     if verbose:
         print("Successfully connected")
 
     if verbose:
         print(f"processing {_file}")
-
     try:
         with tables.open_file(_file, "r+") as f:
             # print(f.root['/matches'].attrs)
@@ -179,6 +241,7 @@ def process_file(
                         "refmag",
                         "refmagerr",
                         "refsharp",
+                        "iqr",
                         "data",
                     )
 
@@ -190,25 +253,18 @@ def process_file(
                 # convert types for pymongo:
                 for k, v in doc.items():
                     if k != "data":
-                        if np.issubdtype(type(v), np.integer):
+                        if k in sources_int_fields:
                             doc[k] = int(doc[k])
-                        if np.issubdtype(type(v), np.inexact):
+                        else:
                             doc[k] = float(doc[k])
                             if k not in ("ra", "dec"):
                                 doc[k] = round(doc[k], 3)
-                        # convert numpy arrays into lists
-                        if type(v) == np.ndarray:
-                            doc[k] = doc[k].tolist()
 
                 # generate unique _id:
                 doc["_id"] = baseid + doc["matchid"]
 
                 # from Frank Masci: compute ObjectID, same as serial key in ZTF Objects DB table in IRSA.
                 # oid = ((fieldid * 100000 + fid * 10000 + ccdid * 100 + qid * 10) * 10 ** 7) + int(matchid)
-
-                # doc["iqr"] = doc["percentiles"][8] - doc["percentiles"][3]
-                # doc["iqr"] = round(doc["iqr"], 3)
-                # doc.pop("percentiles")
 
                 doc["filter"] = filt
                 doc["field"] = field
@@ -253,17 +309,14 @@ def process_file(
                     # convert types for pymongo:
                     for k, v in dd.items():
                         # types.add(type(v))
-                        if np.issubdtype(type(v), np.integer):
+                        if k in sourcedata_int_fields:
                             dd[k] = int(dd[k])
-                        if np.issubdtype(type(v), np.inexact):
+                        else:
                             dd[k] = float(dd[k])
                             if k not in ("ra", "dec", "hjd"):
                                 dd[k] = round(dd[k], 3)
                             elif k == "hjd":
                                 dd[k] = round(dd[k], 5)
-                        # convert numpy arrays into lists
-                        if type(v) == np.ndarray:
-                            dd[k] = dd[k].tolist()
 
                     # generate unique exposure id's that match _id's in exposures collection
                     dd["uexpid"] = exp_baseid + dd["expid"]
@@ -322,6 +375,11 @@ def process_file(
                         "percentiles",
                     ],
                 )
+                # Load in percentiles separately to compute the IQR column
+                # because Pandas DF from_records() only wants 2-D tables
+                percentiles = group[f"{source_type}s"].col("percentiles")
+                iqr = np.round(percentiles[:, 8] - percentiles[:, 3], 3)
+                sources["iqr"] = iqr
 
                 sourcedatas = pd.DataFrame.from_records(
                     group[f"{source_type}data"][:], index="matchid"
@@ -398,8 +456,9 @@ def process_file(
                         print(str(e_))
 
         # Clean up and append the last doc
-        current_doc = clean_up_doc(current_doc, _keep_all)
-        docs_sources.append(current_doc)
+        if current_doc is not None:
+            current_doc = clean_up_doc(current_doc, _keep_all)
+            docs_sources.append(current_doc)
         # ingest remaining
         while len(docs_sources) > 0:
             try:
@@ -439,6 +498,7 @@ def process_file(
                 print("Successfully disconnected from db")
     finally:
         pass
+    log(f"Done with {_file}: {time.time() - tic}")
 
 
 if __name__ == "__main__":
@@ -520,7 +580,7 @@ if __name__ == "__main__":
     print(f"# files to process: {len(files)}")
 
     input_list = [
-        [f, collections, batch_size, keep_all, rm_file, True, dry_run]
+        [f, collections, batch_size, keep_all, rm_file, False, dry_run]
         for f in sorted(files)
     ]
     # for a more even job distribution:
