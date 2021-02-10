@@ -28,7 +28,7 @@ from odmantic import AIOEngine, EmbeddedModel, Field, Model
 import pathlib
 from pydantic import root_validator
 import traceback
-from typing import List, Mapping, Optional, Sequence
+from typing import List, Mapping, Optional, Sequence, Union
 from utils import (
     add_admin,
     check_password_hash,
@@ -688,8 +688,12 @@ class Query(Model, ABC):
     user: str
 
     @staticmethod
-    def construct_filter(query):
-        """Check validity of query filter specs and preprocess if necessary"""
+    def construct_filter(query: Mapping):
+        """Check validity of query filter specs and preprocess if necessary
+
+        :param query: Mapping containing filter specification either as a Mapping or a literal_eval'uable str
+        :return:
+        """
         catalog_filter = query.get("filter")
         if not isinstance(catalog_filter, (str, Mapping)):
             raise ValueError("Unsupported filter specification")
@@ -701,7 +705,11 @@ class Query(Model, ABC):
 
     @staticmethod
     def construct_projection(query):
-        """Check validity of query projection specs and preprocess if necessary"""
+        """Check validity of query projection specs and preprocess if necessary
+
+        :param query: Mapping containing projection specification either as a Mapping or a literal_eval'uable str
+        :return:
+        """
         catalog_projection = query.get("projection")
         if catalog_projection is not None:
             if not isinstance(catalog_projection, (str, Mapping)):
@@ -715,7 +723,13 @@ class Query(Model, ABC):
         return catalog_projection
 
     @staticmethod
-    def angle_to_rad(angle, units):
+    def angle_to_rad(angle: Union[float, int], units: str) -> float:
+        """Convert angle to rad
+
+        :param angle: angle [deg]
+        :param units: str, one of ["arcsec", "arcmin", "deg"]
+        :return:
+        """
         angle_rad = float(angle)
         if units not in ANGULAR_UNITS:
             raise Exception(f"Angular units not in {ANGULAR_UNITS}")
@@ -729,14 +743,18 @@ class Query(Model, ABC):
         return angle_rad
 
     @staticmethod
-    def parse_object_coordinates(coordinates):
-        """Parse object coordinates in degrees/HMS_DMS
+    def parse_object_coordinates(coordinates: Union[str, Sequence, Mapping]):
+        """
+        Parse object coordinates in degrees/HMS_DMS
 
-        Options:
-         - String that is parsed either as ra dec for a single source or stringified Sequence, as below
-         - Sequence, such as [(ra1, dec1), (ra2, dec2), ..]
-         - Mapping, such as {'object_name': (ra1, dec1), ...}
-
+        :param coordinates: object coordinates in decimal degrees
+                            or strings "HH:MM:SS.SSS..." / "DD:MM:SS.SSS..."
+                            or strings "HHhMMmSS.SSS...s" / "DDdMMmSS.SSS...s"
+            Options:
+             - str that is parsed either as ra dec for a single source or stringified Sequence, as below
+             - Sequence, such as [(ra1, dec1), (ra2, dec2), ..]
+             - Mapping, such as {'object_name': (ra1, dec1), ...}
+        :return:
         """
         if isinstance(coordinates, str):
             coordinates = coordinates.strip()
@@ -769,8 +787,14 @@ class Query(Model, ABC):
         return object_names, object_coordinates
 
     @staticmethod
-    def validate_kwargs(kwargs, known_kwargs):
-        """Allow only known kwargs"""
+    def validate_kwargs(kwargs: Mapping, known_kwargs: Sequence) -> dict:
+        """Allow only known kwargs:
+            check that kwargs.keys() are in known_kwargs and ditch those that are not
+
+        :param kwargs:
+        :param known_kwargs:
+        :return:
+        """
         return {
             kk: vv
             for kk, vv in kwargs.items()
