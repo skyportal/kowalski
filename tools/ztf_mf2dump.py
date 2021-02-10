@@ -3,7 +3,8 @@ import pathlib
 import subprocess
 import time
 
-logfile = ""
+logfile = "/scratch/kshin/kowalski/logs.txt"
+tmp_path = "/scratch/kshin/tmp"
 
 
 def log(msg):
@@ -33,6 +34,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     path_tmp = pathlib.Path(args.path)
+    path_tmp = pathlib.Path(tmp_path)
     if not path_tmp.exists():
         path_tmp.mkdir(parents=True, exist_ok=True)
 
@@ -50,7 +52,7 @@ if __name__ == "__main__":
     )
     print(f"Subprocess mkdir took {time.time() - t0}s")
 
-    rc_start, rc_stop = 36, 36
+    rc_start, rc_stop = 30, 30
 
     # cli argument - rc#: [0, 63] ? no, just iterate over range(0, 64) for the stuff below:
     for rc in range(rc_start, rc_stop + 1):
@@ -131,6 +133,7 @@ if __name__ == "__main__":
                 # "docker", "exec", "-it", "kowalski_ingester_1",
                 # "/usr/local/bin/gsutil",
                 "gsutil",
+                "-m",
                 "mv",
                 # f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
                 str(path_tmp / f"ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2"),
@@ -204,6 +207,7 @@ if __name__ == "__main__":
             # "docker", "exec", "-it", "kowalski_ingester_1",
             # "/usr/local/bin/gsutil",
             "gsutil",
+            "-m",
             "mv",
             # f"/_tmp/ZTF_exposures_{args.tag}.rc{rc_start:02d}_{rc_stop:02d}.dump.bz2",
             str(
