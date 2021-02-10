@@ -723,7 +723,7 @@ class TestAPIs(object):
 
     async def test_query_near(self, aiohttp_client):
         """
-            Test {"query_type": "cone_search", ...}: POST /api/queries
+            Test {"query_type": "near", ...}: POST /api/queries
         :param aiohttp_client:
         :return:
         """
@@ -754,7 +754,6 @@ class TestAPIs(object):
             },
             "kwargs": {"filter_first": False},
         }
-        # print(qu)
         resp = await client.post("/api/queries", json=qu, headers=headers, timeout=5)
         assert resp.status == 200
         result = await resp.json()

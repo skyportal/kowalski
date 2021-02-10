@@ -180,8 +180,7 @@ async def auth_post(request: web.Request) -> web.Response:
     try:
         try:
             post_data = await request.json()
-        except Exception as _e:
-            log(_e)
+        except AttributeError:
             post_data = await request.post()
 
         # must contain 'username' and 'password'
@@ -721,11 +720,11 @@ class Query(Model, ABC):
         if units not in ANGULAR_UNITS:
             raise Exception(f"Angular units not in {ANGULAR_UNITS}")
         if units == "arcsec":
-            angle_rad *= np.pi / 180.0 / 3600.0
+            angle_rad *= np.pi / 180 / 3600
         elif units == "arcmin":
-            angle_rad *= np.pi / 180.0 / 60.0
+            angle_rad *= np.pi / 180 / 60
         elif units == "deg":
-            angle_rad *= np.pi / 180.0
+            angle_rad *= np.pi / 180
 
         return angle_rad
 
@@ -931,7 +930,7 @@ class Query(Model, ABC):
             )
 
             max_distance = cls.angle_to_rad(
-                angle=query.get("max_distance", np.pi / 180.0 / 60.0),  # default to 1'
+                angle=query.get("max_distance", np.pi / 180 / 60),  # default to 1'
                 units=query.get("distance_units", "rad"),
             )
 
