@@ -1476,8 +1476,9 @@ class Filter(Model, ABC):
     class Config:
         # collection name in MongoDB
         collection = "filters"
-        json_loads = loads
         json_dumps = dumps
+        json_loads = loads
+        parse_doc_with_default_factories = True
 
 
 class FilterHandler(Handler):
