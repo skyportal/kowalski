@@ -177,8 +177,6 @@ def process_file(
     verbose=False,
     _dry_run=False,
 ):
-    log(f"Processing {_file}")
-    tic = time.time()
     # connect to MongoDB:
     if verbose:
         print("Connecting to DB")
@@ -431,7 +429,6 @@ def process_file(
                 print("Successfully disconnected from db")
     finally:
         pass
-    log(f"Done with {_file}: {time.time() - tic}")
 
 
 if __name__ == "__main__":
@@ -508,4 +505,4 @@ if __name__ == "__main__":
         for _ in tqdm(p.istarmap(process_file, input_list), total=len(files)):
             pass
 
-    print(f"All done")
+    print("All done")
