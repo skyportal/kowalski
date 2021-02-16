@@ -1430,9 +1430,9 @@ class QueryHandler(Handler):
 class FilterVersion(EmbeddedModel, ABC):
     """Data model for Filter versions"""
 
-    fid: str = uid(length=6)
+    fid: str = Field(default_factory=uid)
     pipeline: str
-    created_at: datetime.datetime = datetime.datetime.utcnow()
+    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
 
     @root_validator
     def check_min_stages(cls, values):
@@ -1453,8 +1453,9 @@ class FilterVersion(EmbeddedModel, ABC):
         return values
 
     class Config:
-        json_loads = loads
         json_dumps = dumps
+        json_loads = loads
+        parse_doc_with_default_factories = True
 
 
 class Filter(Model, ABC):
@@ -1469,14 +1470,15 @@ class Filter(Model, ABC):
     update_annotations: bool = False
     active_fid: Optional[str] = Field(min_length=6, max_length=6)
     fv: List[FilterVersion] = list()
-    created_at: datetime.datetime = datetime.datetime.utcnow()
-    last_modified: datetime.datetime = datetime.datetime.utcnow()
+    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    last_modified: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
 
     class Config:
         # collection name in MongoDB
         collection = "filters"
-        json_loads = loads
         json_dumps = dumps
+        json_loads = loads
+        parse_doc_with_default_factories = True
 
 
 class FilterHandler(Handler):

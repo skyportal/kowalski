@@ -203,6 +203,9 @@ class TestAPIs(object):
         assert "fid" in result["data"]
         fid2 = result["data"]["fid"]
 
+        # generated new id?
+        assert fid2 != fid1
+
         # retrieve again
         resp = await client.get(f"/api/filters/{filter_id}", headers=headers, timeout=5)
         assert resp.status == 200
