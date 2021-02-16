@@ -4,6 +4,7 @@ import glob
 
 # from pprint import pp
 import time
+import datetime
 
 # from astropy.coordinates import Angle
 import numpy as np
@@ -26,13 +27,6 @@ from utils import (
     load_config,
     init_db_sync,
 )
-
-logfile = "/app/logs.txt"
-
-
-def log(msg):
-    with open(logfile, "a+") as f:
-        f.write(msg + "\n")
 
 
 """ load config and secrets """
@@ -188,13 +182,7 @@ def process_file(
     # connect to MongoDB:
     if verbose:
         print("Connecting to DB")
-    try:
-        _client, _db = connect_to_db()
-    except ConnectionRefusedError:
-        log(f"DB disconnected for {_file}, retrying...")
-        time.sleep(10)
-        _client, _db = connect_to_db()
-
+    _client, _db = connect_to_db()
     if verbose:
         print("Successfully connected")
 
@@ -202,29 +190,22 @@ def process_file(
         print(f"processing {_file}")
     try:
         with tables.open_file(_file, "r+") as f:
-            # print(f.root['/matches'].attrs)
             group = f.root.matches
-            # print(f.root.matches.exposures._v_attrs)
-            # print(f.root.matches.sources._v_attrs)
-            # print(f.root.matches.sourcedata._v_attrs)
-
             ff_basename = os.path.basename(_file)
-
             # base id:
             _, field, filt, ccd, quad, _ = ff_basename.split("_")
             field = int(field)
             filt = filters[filt]
             ccd = int(ccd[1:])
             quad = int(quad[1:])
-
             rc = ccd_quad_2_rc(ccd=ccd, quad=quad)
             baseid = int(1e13 + field * 1e9 + rc * 1e7 + filt * 1e6)
             if verbose:
-                # print(f'{_file}: {field} {filt} {ccd} {quad}')
                 print(f"{_file}: baseid {baseid}")
             exp_baseid = int(1e16 + field * 1e12 + rc * 1e10 + filt * 1e9)
 
             def clean_up_doc(doc):
+                """ Format passed in dicts for Mongo insertion """
                 # convert types for pymongo:
                 for k, v in doc.items():
                     if k != "data":
@@ -237,10 +218,6 @@ def process_file(
 
                 # generate unique _id:
                 doc["_id"] = baseid + doc["matchid"]
-
-                # from Frank Masci: compute ObjectID, same as serial key in ZTF Objects DB table in IRSA.
-                # oid = ((fieldid * 100000 + fid * 10000 + ccdid * 100 + qid * 10) * 10 ** 7) + int(matchid)
-
                 doc["filter"] = filt
                 doc["field"] = field
                 doc["ccd"] = ccd
@@ -264,7 +241,6 @@ def process_file(
                 for dd in doc["data"]:
                     # convert types for pymongo:
                     for k, v in dd.items():
-                        # types.add(type(v))
                         if k in sourcedata_int_fields:
                             dd[k] = int(dd[k])
                         else:
@@ -273,7 +249,6 @@ def process_file(
                                 dd[k] = round(dd[k], 3)
                             elif k == "hjd":
                                 dd[k] = round(dd[k], 5)
-
                     # generate unique exposure id's that match _id's in exposures collection
                     dd["uexpid"] = exp_baseid + dd["expid"]
 
@@ -285,18 +260,14 @@ def process_file(
             for index, row in exposures.iterrows():
                 try:
                     doc = row.to_dict()
-
                     # unique exposure id:
                     doc["_id"] = exp_baseid + doc["expid"]
-                    # print(exp_baseid, doc['expid'], doc['_id'])
-
                     doc["matchfile"] = ff_basename
                     doc["filter"] = filt
                     doc["field"] = field
                     doc["ccd"] = ccd
                     doc["quad"] = quad
                     doc["rc"] = rc
-                    # pprint(doc)
                     docs_exposures.append(doc)
                 except Exception as e_:
                     print(str(e_))
@@ -348,7 +319,7 @@ def process_file(
                     columns={"ra": "ra_data", "dec": "dec_data"}, inplace=True
                 )
                 sourcedata_colnames = sourcedatas.columns.values
-
+                # Join sources and their data
                 merged = sources.merge(sourcedatas, left_index=True, right_index=True)
                 prev_matchid = None
                 current_doc = None
@@ -420,6 +391,7 @@ def process_file(
         if current_doc is not None:
             current_doc = clean_up_doc(current_doc)
             docs_sources.append(current_doc)
+
         # ingest remaining
         while len(docs_sources) > 0:
             try:
@@ -489,12 +461,6 @@ if __name__ == "__main__":
     client, db = connect_to_db()
     print("Successfully connected")
 
-    # t_tag = '20181220'
-    # t_tag = '20190412'
-    # t_tag = '20190614'
-    # t_tag = '20190718'
-    # t_tag = '20191101'
-    # t_tag = '20200401'
     t_tag = args.tag
 
     collections = {
@@ -523,12 +489,9 @@ if __name__ == "__main__":
         db[collections["sources"]].create_index(
             [("nobs", pymongo.ASCENDING), ("_id", pymongo.ASCENDING)], background=True
         )
-        # db[collections['sources']].create_index([('data.programid', pymongo.ASCENDING)], background=True)
-        # db[collections['sources']].create_index([('data.expid', pymongo.ASCENDING)], background=True)
 
     # number of records to insert
     batch_size = args.bs
-    # batch_size = 1
 
     _location = f"/_tmp/ztf_matchfiles_{t_tag}/"
     files = glob.glob(os.path.join(_location, "ztf_*.pytable"))
@@ -542,6 +505,7 @@ if __name__ == "__main__":
     random.shuffle(input_list)
 
     with mp.Pool(processes=args.np) as p:
-        list(tqdm(p.istarmap(process_file, input_list), total=len(files)))
+        for _ in tqdm(p.istarmap(process_file, input_list), total=len(files)):
+            pass
 
     print(f"All done")
