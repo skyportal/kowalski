@@ -4,7 +4,6 @@ import glob
 
 # from pprint import pp
 import time
-import datetime
 
 # from astropy.coordinates import Angle
 import numpy as np
@@ -17,7 +16,7 @@ import datetime
 import pytz
 from numba import jit
 
-import istarmap
+import istarmap  # noqa: F401
 import multiprocessing as mp
 from tqdm import tqdm
 
@@ -234,7 +233,6 @@ def process_file(
                     "type": "Point",
                     "coordinates": _radec_geojson,
                 }
-                doc_data = doc["data"]
 
                 for dd in doc["data"]:
                     # convert types for pymongo:
