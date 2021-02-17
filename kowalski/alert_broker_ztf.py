@@ -910,7 +910,9 @@ class AlertWorker:
 
     @memoize
     def api_skyportal_get_group(self, group_id):
-        return self.api_skyportal("GET", f"/api/groups/{group_id}")
+        return self.api_skyportal(
+            "GET", f"/api/groups/{group_id}?includeGroupUsers=False"
+        )
 
     def get_active_filters(self):
         """
