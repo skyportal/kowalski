@@ -219,7 +219,23 @@ class Kowalski:
             break
 
     @staticmethod
-    def up(build: bool = False):
+    def check_keyfile():
+        """Check if MongoDB keyfile for replica set authorization exists; generate one if not"""
+        mongodb_keyfile = pathlib.Path(__file__).parent.absolute() / "mongo_key.yaml"
+        if not mongodb_keyfile.exists():
+            print("Generating MongoDB keyfile")
+            # generate a random key that is required to be able to use authorization with replica set
+            key = "".join(
+                secrets.choice(string.ascii_lowercase + string.digits)
+                for _ in range(32)
+            )
+            with open(mongodb_keyfile, "w") as f:
+                f.write(key)
+            command = ["chmod", "400", "mongo_key.yaml"]
+            subprocess.run(command)
+
+    @classmethod
+    def up(cls, build: bool = False):
         """
         🐧🚀 Launch Kowalski
 
@@ -234,19 +250,7 @@ class Kowalski:
         with status("Checking configuration"):
             check_configs(config_wildcards=config_wildcards)
 
-        # check MongoDB keyfile for replica set authorization
-        mongodb_keyfile = pathlib.Path(__file__).parent.absolute() / "mongo_key.yaml"
-        if not mongodb_keyfile.exists():
-            print("Generating MongoDB keyfile")
-            # generate a random key that is required to be able to use authorization with replica set
-            key = "".join(
-                secrets.choice(string.ascii_lowercase + string.digits)
-                for _ in range(32)
-            )
-            with open(mongodb_keyfile, "w") as f:
-                f.write(key)
-            command = ["chmod", "400", "mongo_key.yaml"]
-            subprocess.run(command)
+        cls.check_keyfile()
 
         command = ["docker-compose", "-f", "docker-compose.yaml", "up", "-d"]
 
@@ -269,8 +273,8 @@ class Kowalski:
 
         subprocess.run(command)
 
-    @staticmethod
-    def build():
+    @classmethod
+    def build(cls):
         """
         Build Kowalski's containers
 
@@ -286,6 +290,8 @@ class Kowalski:
         # check configuration
         with status("Checking configuration"):
             check_configs(config_wildcards=config_wildcards)
+
+        cls.check_keyfile()
 
         subprocess.run(command)
 
