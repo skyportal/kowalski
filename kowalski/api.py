@@ -675,7 +675,8 @@ INFO_COMMANDS = (
     "index_info",
     "db_info",
 )
-FORBIDDEN_STAGES = {"$lookup", "$unionWith", "$out", "$merge"}
+FORBIDDEN_STAGES_QUERIES = {"$unionWith", "$out", "$merge"}
+FORBIDDEN_STAGES_FILTERS = {"$lookup", "$unionWith", "$out", "$merge"}
 ANGULAR_UNITS = ("arcsec", "arcmin", "deg", "rad")
 
 
@@ -837,9 +838,9 @@ class Query(Model, ABC):
                 raise ValueError("Pipeline must contain at least one stage")
 
             stages = set([list(stage.keys())[0] for stage in pipeline])
-            if len(stages.intersection(FORBIDDEN_STAGES)):
+            if len(stages.intersection(FORBIDDEN_STAGES_QUERIES)):
                 raise ValueError(
-                    f"Pipeline uses forbidden stages: {str(stages.intersection(FORBIDDEN_STAGES))}"
+                    f"Pipeline uses forbidden stages: {str(stages.intersection(FORBIDDEN_STAGES_QUERIES))}"
                 )
 
             kwargs = cls.validate_kwargs(
@@ -1446,9 +1447,9 @@ class FilterVersion(EmbeddedModel, ABC):
         pipeline = values.get("pipeline")
         # check that only allowed stages are used in the pipeline
         stages = set([list(stage.keys())[0] for stage in loads(pipeline)])
-        if len(stages.intersection(FORBIDDEN_STAGES)):
+        if len(stages.intersection(FORBIDDEN_STAGES_FILTERS)):
             raise ValueError(
-                f"pipeline uses forbidden stages: {str(stages.intersection(FORBIDDEN_STAGES))}"
+                f"pipeline uses forbidden stages: {str(stages.intersection(FORBIDDEN_STAGES_FILTERS))}"
             )
         return values
 
