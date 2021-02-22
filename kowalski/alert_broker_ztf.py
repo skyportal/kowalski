@@ -1198,7 +1198,7 @@ class AlertWorker:
         existing_annotations = {
             annotation["origin"]: {
                 "annotation_id": annotation["id"],
-                "author_id": annotation["author"]["id"],
+                "author_id": annotation["author_id"],
             }
             for annotation in response.json()["data"]
         }
