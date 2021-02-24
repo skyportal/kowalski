@@ -233,7 +233,7 @@ def process_file(
                     "type": "Point",
                     "coordinates": _radec_geojson,
                 }
-
+                doc["data"].sort(key=lambda x: x["hjd"])
                 for dd in doc["data"]:
                     # convert types for pymongo:
                     for k, v in dd.items():
