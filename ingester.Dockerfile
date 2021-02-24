@@ -44,7 +44,8 @@ COPY ["config.yaml", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py
       "kowalski/tns_watcher.py",\
       "kowalski/requirements_ingester.txt",\
       "tests/test_ingester.py", "tests/test_tns_watcher.py",\
-      "/app/", "tools/ingest_ztf_matchfiles.py", "tools/istarmap.py"]
+      "tools/ingest_ztf_matchfiles.py", "tools/istarmap.py",\
+      "/app/"]
 
 # change working directory to /app
 WORKDIR /app
