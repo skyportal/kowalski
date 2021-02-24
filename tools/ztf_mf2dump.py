@@ -111,6 +111,7 @@ if __name__ == "__main__":
                 # "docker", "exec", "-it", "kowalski_ingester_1",
                 # "/usr/local/bin/gsutil",
                 "gsutil",
+                "-m",
                 "mv",
                 # f"/_tmp/ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2",
                 str(path_tmp / f"ZTF_sources_{args.tag}.rc{rc:02d}.dump.bz2"),
@@ -176,6 +177,7 @@ if __name__ == "__main__":
             # "docker", "exec", "-it", "kowalski_ingester_1",
             # "/usr/local/bin/gsutil",
             "gsutil",
+            "-m",
             "mv",
             # f"/_tmp/ZTF_exposures_{args.tag}.rc{rc_start:02d}_{rc_stop:02d}.dump.bz2",
             str(
