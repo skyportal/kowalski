@@ -1214,7 +1214,7 @@ class AlertWorker:
                 continue
 
             annotations = {
-                "author_id": existing_annotations["origin"]["author_id"],
+                "author_id": existing_annotations[origin]["author_id"],
                 "obj_id": alert["objectId"],
                 "origin": origin,
                 "data": passed_filter.get("data", dict()).get("annotations", dict()),
@@ -1229,7 +1229,7 @@ class AlertWorker:
                 ):
                     response = self.api_skyportal(
                         "PUT",
-                        f"/api/annotation/{existing_annotations['origin']['annotation_id']}",
+                        f"/api/annotation/{existing_annotations[origin]['annotation_id']}",
                         annotations,
                     )
                 if response.json()["status"] == "success":
