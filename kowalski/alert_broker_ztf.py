@@ -1221,7 +1221,7 @@ class AlertWorker:
                 "group_ids": [passed_filter.get("group_id")],
             }
             if len(annotations["data"]) > 0 and passed_filter.get(
-                "update_annotation", False
+                "update_annotations", False
             ):
                 with timer(
                     f"Putting annotation for {alert['objectId']} {alert['candid']} to SkyPortal",
