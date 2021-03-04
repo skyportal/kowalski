@@ -69,129 +69,158 @@ kowalski:
       ZTF_alerts:
         - name: radec_candid
           fields:
-            - [ "coordinates.radec_geojson", "2dsphere" ]
-            - [ "candid", -1 ]
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["candid", -1]
           unique: false
         - name: radec_objectId
           fields:
-            - [ "coordinates.radec_geojson", "2dsphere" ]
-            - [ "objectId", -1 ]
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["objectId", -1]
           unique: false
         - name: jd_radec_candid
           fields:
-            - [ "candidate.jd", 1 ]
-            - [ "coordinates.radec_geojson", "2dsphere" ]
-            - [ "candid", -1 ]
+            - ["candidate.jd", 1]
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["candid", -1]
           unique: false
         - name: jd_radec_objectId
           fields:
-            - [ "candidate.jd", 1 ]
-            - [ "coordinates.radec_geojson", "2dsphere" ]
-            - [ "objectId", -1 ]
+            - ["candidate.jd", 1]
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["objectId", -1]
           unique: false
         - name: objectId
           fields:
-            - [ "objectId", -1 ]
+            - ["objectId", -1]
           unique: false
         - name: candid
           fields:
-            - [ "candid", -1 ]
+            - ["candid", -1]
           unique: true
         - name: pid
           fields:
-            - [ "candidate.pid", 1 ]
+            - ["candidate.pid", 1]
           unique: false
         - name: objectId_pid
           fields:
-            - [ "objectId", -1 ]
-            - [ "candidate.pid", 1 ]
+            - ["objectId", -1]
+            - ["candidate.pid", 1]
           unique: false
         - name: pdiffimfilename
           fields:
-            - [ "candidate.pdiffimfilename", 1 ]
+            - ["candidate.pdiffimfilename", 1]
           unique: false
         - name: jd_programid_programpi
           fields:
-            - [ "candidate.jd", 1 ]
-            - [ "candidate.programid", 1 ]
-            - [ "candidate.programpi", 1 ]
+            - ["candidate.jd", 1]
+            - ["candidate.programid", 1]
+            - ["candidate.programpi", 1]
           unique: false
         - name: jd_braai_candid
           fields:
-            - [ "candidate.jd", -1 ]
-            - [ "classifications.braai", -1 ]
-            - [ "candid", -1 ]
+            - ["candidate.jd", -1]
+            - ["classifications.braai", -1]
+            - ["candid", -1]
           unique: false
         - name: jd_drb_candid
           fields:
-            - [ "candidate.jd", -1 ]
-            - [ "candidate.drb", -1 ]
-            - [ "candid", -1 ]
+            - ["candidate.jd", -1]
+            - ["candidate.drb", -1]
+            - ["candid", -1]
           unique: false
         - name: jd_braai_magpsf_isdiffpos_ndethist
           fields:
-            - [ "candidate.jd", 1 ]
-            - [ "classifications.braai", 1 ]
-            - [ "candidate.magpsf", 1 ]
-            - [ "candidate.isdiffpos", 1 ]
-            - [ "candidate.ndethist", 1 ]
+            - ["candidate.jd", 1]
+            - ["classifications.braai", 1]
+            - ["candidate.magpsf", 1]
+            - ["candidate.isdiffpos", 1]
+            - ["candidate.ndethist", 1]
           unique: false
         - name: jd_field_drb_ndethhist_magpsf_isdiffpos_objectId
           fields:
-            - [ "candidate.jd", 1 ]
-            - [ "candidate.field", 1 ]
-            - [ "candidate.rb", 1 ]
-            - [ "candidate.drb", 1 ]
-            - [ "candidate.ndethist", 1 ]
-            - [ "candidate.magpsf", 1 ]
-            - [ "candidate.isdiffpos", 1 ]
-            - [ "objectId", -1 ]
+            - ["candidate.jd", 1]
+            - ["candidate.field", 1]
+            - ["candidate.rb", 1]
+            - ["candidate.drb", 1]
+            - ["candidate.ndethist", 1]
+            - ["candidate.magpsf", 1]
+            - ["candidate.isdiffpos", 1]
+            - ["objectId", -1]
           unique: false
 
       TNS:
         - name: radec__id
           fields:
-            - [ "coordinates.radec_geojson", "2dsphere" ]
-            - [ "_id", -1 ]
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["_id", -1]
           unique: false
         - name: discovery_date
           fields:
-            - [ "discovery_date", -1 ]
+            - ["discovery_date", -1]
           unique: false
 
     filters:
       ZTF_alerts:
         # default upstream aggregation pipeline stages for filtering ZTF alerts:
-        - {"$match": {"candid": null, "candidate.programid": {"$in": null}}}
-        - {"$project": {"cutoutScience": 0, "cutoutTemplate": 0, "cutoutDifference": 0}}
-        - {"$lookup": {"from": "ZTF_alerts_aux", "localField": "objectId", "foreignField": "_id", "as": "aux"}}
-        - {"$project": {
-          "cross_matches": {
-            "$arrayElemAt": [
-              "$aux.cross_matches", 0
-            ]
-          },
-          "prv_candidates": {
-            "$filter": {
-              "input": {"$arrayElemAt": ["$aux.prv_candidates", 0]},
-              "as": "item",
-              "cond": {
-                "$and": [
-                  {"$in": ["$$item.programid", null]},
-                  {"$lt": [{"$subtract": ["$candidate.jd", "$$item.jd"]}, 100]}
-                ]
-              }
-            }
-          },
-          "schemavsn": 1,
-          "publisher": 1,
-          "objectId": 1,
-          "candid": 1,
-          "candidate": 1,
-          "classifications": 1,
-          "coordinates": 1
+        - {
+            "$match":
+              { "candid": null, "candidate.programid": { "$in": null } },
           }
-        }
+        - {
+            "$project":
+              {
+                "cutoutScience": 0,
+                "cutoutTemplate": 0,
+                "cutoutDifference": 0,
+              },
+          }
+        - {
+            "$lookup":
+              {
+                "from": "ZTF_alerts_aux",
+                "localField": "objectId",
+                "foreignField": "_id",
+                "as": "aux",
+              },
+          }
+        - {
+            "$project":
+              {
+                "cross_matches": { "$arrayElemAt": ["$aux.cross_matches", 0] },
+                "prv_candidates":
+                  {
+                    "$filter":
+                      {
+                        "input": { "$arrayElemAt": ["$aux.prv_candidates", 0] },
+                        "as": "item",
+                        "cond":
+                          {
+                            "$and":
+                              [
+                                { "$in": ["$$item.programid", null] },
+                                {
+                                  "$lt":
+                                    [
+                                      {
+                                        "$subtract":
+                                          ["$candidate.jd", "$$item.jd"],
+                                      },
+                                      100,
+                                    ],
+                                },
+                              ],
+                          },
+                      },
+                  },
+                "schemavsn": 1,
+                "publisher": 1,
+                "objectId": 1,
+                "candid": 1,
+                "candidate": 1,
+                "classifications": 1,
+                "coordinates": 1,
+              },
+          }
 
     xmatch:
       cone_search_radius: 2
@@ -209,17 +238,17 @@ kowalski:
         AllWISE:
           filter: {}
           projection:
-             _id: 1
-             coordinates.radec_str: 1
-             w1mpro: 1
-             w1sigmpro: 1
-             w2mpro: 1
-             w2sigmpro: 1
-             w3mpro: 1
-             w3sigmpro: 1
-             w4mpro: 1
-             w4sigmpro: 1
-             ph_qual: 1
+            _id: 1
+            coordinates.radec_str: 1
+            w1mpro: 1
+            w1sigmpro: 1
+            w2mpro: 1
+            w2sigmpro: 1
+            w3mpro: 1
+            w3sigmpro: 1
+            w4mpro: 1
+            w4sigmpro: 1
+            ph_qual: 1
 
         Gaia_DR2:
           filter: {}
@@ -314,7 +343,7 @@ kowalski:
             snrz: 1
             objtype: 1
             class: 1
-            subclass:  1
+            subclass: 1
 
         PS1_DR1:
           filter: {}
@@ -334,7 +363,7 @@ kowalski:
 
   ml_models:
     braai:
-      version:  "d6_m9"
+      version: "d6_m9"
     acai_h:
       version: "d1_dnn_20201130"
     acai_v:
@@ -384,7 +413,12 @@ kowalski:
     max_time_ms: 300000
     max_retries: 100
     logging_level: "debug"
-    openapi_validate:  False
+    openapi_validate: False
+
+  slack:
+    # Used by the performance_reporter.py task to post Slack messages
+    slack_bot_token:
+    slack_channel_id:
 
   # this is used to make supervisord.conf files at build time
   supervisord:
@@ -504,3 +538,13 @@ kowalski:
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: "PRODUCTION=1"
+
+      "program:performance_reporter":
+        command: /usr/local/bin/python performance_reporter.py --send_to_slack --days_ago 1
+        directory: /app
+        user: root
+        autostart: true
+        autorestart: true
+        stdout_logfile: /data/logs/performance_reporter_stdout.log
+        stdout_logfile_maxbytes: 10MB
+        redirect_stderr: True
