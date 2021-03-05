@@ -80,10 +80,12 @@ def generate_report(output_path, start_date, end_date):
                             # Figure out which operation is being timed
                             for action, pattern in action_patterns.items():
                                 if re.search(pattern, line) is not None:
-                                    actions[action].append(float(tmp[-2]))
-                                    # We should only have one action per line so break out
-                                    # once we find a match
-                                    break
+                                    time_taken = float(tmp[-2])
+                                    if time_taken < 3600:
+                                        actions[action].append(float(tmp[-2]))
+                                        # We should only have one action per line so break out
+                                        # once we find a match
+                                        break
 
                 except Exception:
                     continue
@@ -91,7 +93,6 @@ def generate_report(output_path, start_date, end_date):
     with PdfPages(output_path) as pdf:
         # Add title page showing run parameters (using empty figure)
         firstPage = plt.figure(figsize=(8.5, 11))
-        firstPage.clf()
         start_date_str = start_date.strftime("%m / %d / %Y")
         end_date_str = end_date.strftime("%m / %d / %Y")
         params_text = (
@@ -100,8 +101,19 @@ def generate_report(output_path, start_date, end_date):
             f"End Date: {end_date_str}\n"
         )
         firstPage.text(
-            0.5, 0.5, params_text, transform=firstPage.transFigure, size=24, ha="center"
+            0.5, 0.9, params_text, transform=firstPage.transFigure, size=16, ha="center"
         )
+        for i, (action, values) in enumerate(actions.items()):
+            plt.hist(
+                values,
+                bins=100,
+                range=(0, 1),
+                alpha=0.5,
+                label=action,
+                histtype="step",
+            )
+
+        plt.legend(loc="upper right")
         pdf.savefig()
         plt.close()
 
@@ -122,15 +134,12 @@ def generate_report(output_path, start_date, end_date):
                     f"total number of calls: {len(values)}\n"
                 )
                 ax = axs[i % 2]
-                ax.hist(
-                    values, bins=100, range=(0, np.median(values) + 3 * np.std(values))
-                )
+                ax.hist(values, bins=100, range=(0, 1))
                 ax.grid(alpha=0.4)
                 ax.set_title(action)
                 ax.set_xlabel("time (s)")
                 ax.set_ylabel("num calls")
-                ax.set_box_aspect(0.3)
-                ax.text(0.5, -0.7, text, ha="center", transform=ax.transAxes)
+                ax.text(0.75, 0.65, text, ha="center", transform=ax.transAxes)
 
             if i % 2 == 1:
                 pdf.savefig()
@@ -177,7 +186,7 @@ def main(days_ago, send_to_slack=False):
             output_path = log_dir / output_file
 
             generate_report(output_path, start_date, end_date)
-
+            log(f"Report {output_file} generated")
             if send_to_slack:
                 send_report(output_path.as_posix())
 
