@@ -2126,14 +2126,13 @@ class ZTFTriggerHandler(Handler):
         _data = await request.json()
 
         # validate and preprocess
-        trig = ZTFTrigger(**_data)
+        ZTFTrigger(**_data)
 
-        r = requests.put(urllib.parse.urljoin(config["ztf"]["mountain_ip"],
-                                              "queues"),
-                         json=_data)
+        r = requests.put(
+            urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues"), json=_data
+        )
 
         return web.json_response(dict(r.headers), status=r.status_code)
-
 
     # @routes.post('/api/triggers/ztf.DELETE')
     @admin_required
@@ -2171,11 +2170,11 @@ class ZTFTriggerHandler(Handler):
         _data = await request.json()
 
         # validate and preprocess
-        trig = ZTFDelete(**_data)
+        ZTFDelete(**_data)
 
-        r = requests.delete(urllib.parse.urljoin(config["ztf"]["mountain_ip"],
-                                              "queues"),
-                            json=_data)
+        r = requests.delete(
+            urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues"), json=_data
+        )
 
         return web.json_response(dict(r.headers), status=r.status_code)
 
@@ -2696,7 +2695,6 @@ async def app_factory():
             web.post("/api/filters", filter_handler.post),
             web.patch("/api/filters", filter_handler.patch),
             web.delete("/api/filters/{filter_id:[0-9]+}", filter_handler.delete),
-
             # triggers
             web.post("/api/triggers/ztf", ztf_trigger_handler.post),
             web.delete("/api/triggers/ztf", ztf_trigger_handler.delete),
