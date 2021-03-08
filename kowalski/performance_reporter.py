@@ -112,8 +112,16 @@ def generate_report(output_path, start_date, end_date):
                 label=action,
                 histtype="step",
             )
-
-        plt.legend(loc="upper right")
+        if len(actions) > 0:
+            plt.legend(loc="upper right")
+        else:
+            firstPage.text(
+                0.5,
+                0.7,
+                "No relevant recent logs.",
+                transform=firstPage.transFigure,
+                ha="center",
+            )
         pdf.savefig()
         plt.close()
 
