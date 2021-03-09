@@ -1,6 +1,6 @@
 __all__ = [
     "add_admin",
-    "ccd_quad_2_rc",
+    "ccd_quad_to_rc",
     "check_password_hash",
     "compute_dmdt",
     "compute_hash",
@@ -57,7 +57,7 @@ import secrets
 import string
 import time
 import traceback
-from typing import Optional
+from typing import Optional, Sequence
 import yaml
 
 
@@ -1014,14 +1014,22 @@ DMDT_INTERVALS = {
 
 
 @jit
-def pwd_for(a):
+def pwd_for(a: Sequence):
     """
     Compute pairwise differences with for loops
     """
     return np.array([a[j] - a[i] for i in range(len(a)) for j in range(i + 1, len(a))])
 
 
-def compute_dmdt(jd, mag, dmdt_ints_v: str = "v20200318"):
+def compute_dmdt(jd: Sequence, mag: Sequence, dmdt_ints_v: str = "v20200318"):
+    """Compute dmdt matrix for time series (jd, mag)
+    See arXiv:1709.06257
+
+    :param jd:
+    :param mag:
+    :param dmdt_ints_v:
+    :return:
+    """
     jd_diff = pwd_for(jd)
     mag_diff = pwd_for(mag)
 
@@ -1045,9 +1053,17 @@ def compute_dmdt(jd, mag, dmdt_ints_v: str = "v20200318"):
 
 
 @jit
-def ccd_quad_2_rc(ccd: int, quad: int) -> int:
-    # assert ccd in range(1, 17)
-    # assert quad in range(1, 5)
+def ccd_quad_to_rc(ccd: int, quad: int) -> int:
+    """Convert ZTF CCD/QUADRANT to readout channel number
+
+    :param ccd:
+    :param quad:
+    :return:
+    """
+    if ccd not in range(1, 17):
+        raise ValueError("Bad CCD number")
+    if quad not in range(1, 5):
+        raise ValueError("Bad QUADRANT number")
     b = (ccd - 1) * 4
     rc = b + quad - 1
     return rc
