@@ -59,6 +59,21 @@ action_patterns = {
     "Get Group Info": "Getting info on group",
 }
 
+skyportal_actions = [
+    "Is Candidate",
+    "Is Source",
+    "Post Candidate Metadata",
+    "Save Source",
+    "Post Photometry",
+    "Post Annotation",
+    "Get Annotation",
+    "Put Annotation",
+    "Post Thumbnail",
+    "Get ZTF Instrument Id",
+    "Get Source Groups Info",
+    "Get Group Info",
+]
+
 
 def generate_report(output_path, start_date, end_date):
 
@@ -92,7 +107,7 @@ def generate_report(output_path, start_date, end_date):
 
     with PdfPages(output_path) as pdf:
         # Add title page showing run parameters (using empty figure)
-        firstPage = plt.figure(figsize=(8.5, 11))
+        first_page = plt.figure(figsize=(8.5, 11))
         start_date_str = start_date.strftime("%m / %d / %Y")
         end_date_str = end_date.strftime("%m / %d / %Y")
         params_text = (
@@ -100,10 +115,15 @@ def generate_report(output_path, start_date, end_date):
             f"Start Date: {start_date_str}\n"
             f"End Date: {end_date_str}\n"
         )
-        firstPage.text(
-            0.5, 0.9, params_text, transform=firstPage.transFigure, size=16, ha="center"
+        first_page.text(
+            0.5,
+            0.9,
+            params_text,
+            transform=first_page.transFigure,
+            size=16,
+            ha="center",
         )
-        for i, (action, values) in enumerate(actions.items()):
+        for action, values in actions.items():
             plt.hist(
                 values,
                 bins=100,
@@ -115,23 +135,67 @@ def generate_report(output_path, start_date, end_date):
         if len(actions) > 0:
             plt.legend(loc="upper right")
         else:
-            firstPage.text(
+            first_page.text(
                 0.5,
                 0.7,
                 "No relevant recent logs.",
-                transform=firstPage.transFigure,
+                transform=first_page.transFigure,
                 ha="center",
             )
         pdf.savefig()
         plt.close()
 
-        for i, (action, values) in enumerate(actions.items()):
-            if i % 2 == 0:
-                fig, axs = plt.subplots(2, 1)
-                fig.set_size_inches(8.5, 11)
-                fig.subplots_adjust(hspace=0.2)
+        # Second page is plot of all SkyPortal-related actions
+        fig, axs = plt.subplots(2, 1)
+        fig.set_size_inches(8.5, 11)
+        fig.subplots_adjust(hspace=0.2)
+        fig.text(
+            0.5,
+            0.9,
+            "SkyPortal Operations",
+            transform=fig.transFigure,
+            size=16,
+            ha="center",
+        )
+        for action in skyportal_actions:
+            # Put "Is Candidate" and "Is Source" in their
+            # own graphs as they have drastically more calls
+            if action in ["Is Candidate", "Is Source"]:
+                ax = axs[0]
+            else:
+                ax = axs[1]
 
+            ax.hist(
+                actions[action],
+                bins=100,
+                range=(0, 1),
+                alpha=0.5,
+                label=action,
+                histtype="step",
+            )
+
+        if len(actions) > 0:
+            axs[0].legend(loc="upper right")
+            axs[1].legend(loc="upper right")
+        else:
+            fig.text(
+                0.5,
+                0.7,
+                "No relevant recent logs.",
+                transform=fig.transFigure,
+                ha="center",
+            )
+
+        pdf.savefig()
+        plt.close()
+
+        for i, (action, values) in enumerate(actions.items()):
             if len(values) > 0:
+                if i % 2 == 0:
+                    fig, axs = plt.subplots(2, 1)
+                    fig.set_size_inches(8.5, 11)
+                    fig.subplots_adjust(hspace=0.2)
+
                 actions[action] = np.array(values)
                 text = (
                     f"median: {np.median(values):.5g}s, "
@@ -149,15 +213,15 @@ def generate_report(output_path, start_date, end_date):
                 ax.set_ylabel("num calls")
                 ax.text(0.75, 0.65, text, ha="center", transform=ax.transAxes)
 
-            if i % 2 == 1:
-                pdf.savefig()
-                plt.close()
+                if i % 2 == 1:
+                    pdf.savefig()
+                    plt.close()
 
-            # Set report metadata
-            d = pdf.infodict()
-            d["Title"] = "Kowalski Daily Performance Summary"
-            d["Author"] = "kowalski-bot"
-            d["ModDate"] = datetime.datetime.today()
+        # Set report metadata
+        d = pdf.infodict()
+        d["Title"] = "Kowalski Daily Performance Summary"
+        d["Author"] = "kowalski-bot"
+        d["ModDate"] = datetime.datetime.today()
 
 
 def send_report(report_path):
