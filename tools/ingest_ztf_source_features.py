@@ -252,8 +252,7 @@ def light_curve_dmdt(
     return dmdt
 
 
-def process_file(args):
-    _file, _collections, _xmatch = args
+def process_file(_file, _collections, _xmatch):
 
     # connect to MongoDB:
     mongo = Mongo(
@@ -269,14 +268,12 @@ def process_file(args):
     try:
         with h5py.File(_file, "r") as f:
             features = f["stats"][...]
+            periodic_features = f["stats_EAOV"][...]
 
-        column_names = [
+        feature_column_names = [
             "_id",
             "ra",
             "dec",
-            "period",
-            "significance",
-            "pdot",
             "n",
             "median",
             "wmean",
@@ -287,10 +284,10 @@ def process_file(args):
             "norm_excess_var",
             "median_abs_dev",
             "iqr",
-            "f60",
-            "f70",
-            "f80",
-            "f90",
+            "i60r",
+            "i70r",
+            "i80r",
+            "i90r",
             "skew",
             "smallkurt",
             "inv_vonneumannratio",
@@ -299,8 +296,15 @@ def process_file(args):
             "stetson_k",
             "ad",
             "sw",
+        ]
+
+        periodic_feature_column_names = [
+            "_id",
+            "period",
+            "significance",
+            "pdot",
             "f1_power",
-            "f1_bic",
+            "f1_BIC",
             "f1_a",
             "f1_b",
             "f1_amp",
@@ -312,10 +316,15 @@ def process_file(args):
             "f1_relamp3",
             "f1_relphi3",
             "f1_relamp4",
-            "f1_relphi5",
+            "f1_relphi4",
         ]
 
-        df = pd.DataFrame(features, columns=column_names)
+        df_features = pd.DataFrame(features, columns=feature_column_names)
+        df_periodic_features = pd.DataFrame(
+            periodic_features, columns=periodic_feature_column_names
+        )
+
+        df = pd.merge(df_features, df_periodic_features, on="_id")
         df["_id"] = df["_id"].apply(lambda x: int(x))
 
         docs = df.to_dict(orient="records")
@@ -391,15 +400,14 @@ def run(
     tag: str = "20201201",
     xmatch: bool = True,
     num_processes: int = mp.cpu_count(),
-    verbose: bool = False,
 ):
     """Pre-process and ingest ZTF source features
 
-    :param path:
-    :param tag:
-    :param xmatch:
+    :param path: path to hdf5 files containing ZTF source features
+                 see https://github.com/mcoughlin/ztfperiodic
+    :param tag: from collection name: ZTF_sources_<YYYYMMDD>
+    :param xmatch: cross-match against external catalogs?
     :param num_processes:
-    :param verbose:
     :return:
     """
     # connect to MongoDB:
@@ -442,7 +450,6 @@ def run(
 
     log(f"# files to process: {len(input_list)}")
 
-    # process_file(input_list[0])
     with mp.Pool(processes=num_processes) as p:
         for _ in tqdm(p.istarmap(process_file, input_list), total=len(input_list)):
             pass

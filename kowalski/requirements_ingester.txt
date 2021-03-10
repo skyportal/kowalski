@@ -11,6 +11,7 @@ fastavro>=1.2.1
 fire>=0.3.1
 gsutil>=4.56
 gunicorn>=20.0.4
+h5py>=1.15.0
 matplotlib>=3.3.3
 motor>=2.3.0
 multidict>=5.1.0
