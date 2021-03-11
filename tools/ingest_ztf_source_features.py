@@ -235,16 +235,24 @@ def light_curve_dmdt(
     :return:
     """
     try:
-        c = _mongo.db[catalog].find(
-            {"_id": _id}, {"_id": 0, "data.catflags": 1, "data.hjd": 1, "data.mag": 1}
+        data = list(
+            _mongo.db[catalog].find(
+                {"_id": _id},
+                {"_id": 0, "data.catflags": 1, "data.hjd": 1, "data.mag": 1},
+            )
         )
-        lc = list(c)[0]
+        if len(data) == 0:
+            dmdt = None
+        else:
+            light_curve = data[0]
 
-        df_lc = pd.DataFrame.from_records(lc["data"])
-        w_good = df_lc["catflags"] == 0
-        df_lc = df_lc.loc[w_good]
+            df_light_curve = pd.DataFrame.from_records(light_curve["data"])
+            mask_good_data = df_light_curve["catflags"] == 0
+            df_light_curve = df_light_curve.loc[mask_good_data]
 
-        dmdt = compute_dmdt(df_lc["hjd"].values, df_lc["mag"].values, dmdt_ints_v)
+            dmdt = compute_dmdt(
+                df_light_curve["hjd"].values, df_light_curve["mag"].values, dmdt_ints_v
+            )
     except Exception as e:
         log(e)
         dmdt = None
