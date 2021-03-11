@@ -412,57 +412,57 @@ class Kowalski:
             sleep_for_seconds=10,
         )
 
-        # print("Testing ZTF alert ingestion")
-        #
-        # command = [
-        #     "docker",
-        #     "exec",
-        #     "-i",
-        #     "kowalski_ingester_1",
-        #     "python",
-        #     "-m",
-        #     "pytest",
-        #     "-s",
-        #     "test_ingester.py",
-        # ]
-        # try:
-        #     subprocess.run(command, check=True)
-        # except subprocess.CalledProcessError:
-        #     sys.exit(1)
-        #
-        # print("Testing API")
-        # command = [
-        #     "docker",
-        #     "exec",
-        #     "-i",
-        #     "kowalski_api_1",
-        #     "python",
-        #     "-m",
-        #     "pytest",
-        #     "-s",
-        #     "test_api.py",
-        # ]
-        # try:
-        #     subprocess.run(command, check=True)
-        # except subprocess.CalledProcessError:
-        #     sys.exit(1)
-        #
-        # print("Testing TNS monitoring")
-        # command = [
-        #     "docker",
-        #     "exec",
-        #     "-i",
-        #     "kowalski_ingester_1",
-        #     "python",
-        #     "-m",
-        #     "pytest",
-        #     "-s",
-        #     "test_tns_watcher.py",
-        # ]
-        # try:
-        #     subprocess.run(command, check=True)
-        # except subprocess.CalledProcessError:
-        #     sys.exit(1)
+        print("Testing ZTF alert ingestion")
+
+        command = [
+            "docker",
+            "exec",
+            "-i",
+            "kowalski_ingester_1",
+            "python",
+            "-m",
+            "pytest",
+            "-s",
+            "test_ingester.py",
+        ]
+        try:
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError:
+            sys.exit(1)
+
+        print("Testing API")
+        command = [
+            "docker",
+            "exec",
+            "-i",
+            "kowalski_api_1",
+            "python",
+            "-m",
+            "pytest",
+            "-s",
+            "test_api.py",
+        ]
+        try:
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError:
+            sys.exit(1)
+
+        print("Testing TNS monitoring")
+        command = [
+            "docker",
+            "exec",
+            "-i",
+            "kowalski_ingester_1",
+            "python",
+            "-m",
+            "pytest",
+            "-s",
+            "test_tns_watcher.py",
+        ]
+        try:
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError:
+            sys.exit(1)
 
         print("Testing tools")
         # ZTF source features ingestion
