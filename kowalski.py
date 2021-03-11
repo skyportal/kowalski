@@ -412,8 +412,75 @@ class Kowalski:
             sleep_for_seconds=10,
         )
 
-        print("Testing ZTF alert ingestion")
+        # print("Testing ZTF alert ingestion")
+        #
+        # command = [
+        #     "docker",
+        #     "exec",
+        #     "-i",
+        #     "kowalski_ingester_1",
+        #     "python",
+        #     "-m",
+        #     "pytest",
+        #     "-s",
+        #     "test_ingester.py",
+        # ]
+        # try:
+        #     subprocess.run(command, check=True)
+        # except subprocess.CalledProcessError:
+        #     sys.exit(1)
+        #
+        # print("Testing API")
+        # command = [
+        #     "docker",
+        #     "exec",
+        #     "-i",
+        #     "kowalski_api_1",
+        #     "python",
+        #     "-m",
+        #     "pytest",
+        #     "-s",
+        #     "test_api.py",
+        # ]
+        # try:
+        #     subprocess.run(command, check=True)
+        # except subprocess.CalledProcessError:
+        #     sys.exit(1)
+        #
+        # print("Testing TNS monitoring")
+        # command = [
+        #     "docker",
+        #     "exec",
+        #     "-i",
+        #     "kowalski_ingester_1",
+        #     "python",
+        #     "-m",
+        #     "pytest",
+        #     "-s",
+        #     "test_tns_watcher.py",
+        # ]
+        # try:
+        #     subprocess.run(command, check=True)
+        # except subprocess.CalledProcessError:
+        #     sys.exit(1)
 
+        print("Testing tools")
+        # ZTF source features ingestion
+        path_ztf_source_feature = (
+            pathlib.Path(__file__).parent.absolute() / "data" / "ztf_source_features"
+        )
+        ztf_source_feature_files = list(map(str, path_ztf_source_feature.glob("*.h5")))
+        for ztf_source_feature_file in ztf_source_feature_files:
+            command = [
+                "docker",
+                "cp",
+                ztf_source_feature_file,
+                "kowalski_ingester_1:/data/",
+            ]
+            try:
+                subprocess.run(command, check=True)
+            except subprocess.CalledProcessError:
+                sys.exit(1)
         command = [
             "docker",
             "exec",
@@ -423,41 +490,7 @@ class Kowalski:
             "-m",
             "pytest",
             "-s",
-            "test_ingester.py",
-        ]
-        try:
-            subprocess.run(command, check=True)
-        except subprocess.CalledProcessError:
-            sys.exit(1)
-
-        print("Testing API")
-        command = [
-            "docker",
-            "exec",
-            "-i",
-            "kowalski_api_1",
-            "python",
-            "-m",
-            "pytest",
-            "-s",
-            "test_api.py",
-        ]
-        try:
-            subprocess.run(command, check=True)
-        except subprocess.CalledProcessError:
-            sys.exit(1)
-
-        print("Testing TNS monitoring")
-        command = [
-            "docker",
-            "exec",
-            "-i",
-            "kowalski_ingester_1",
-            "python",
-            "-m",
-            "pytest",
-            "-s",
-            "test_tns_watcher.py",
+            "test_tools.py",
         ]
         try:
             subprocess.run(command, check=True)

@@ -12,6 +12,7 @@ __all__ = [
     "desi_dr8_url",
     "forgiving_true",
     "generate_password_hash",
+    "get_default_args",
     "great_circle_distance",
     "in_ellipse",
     "init_db",
@@ -43,6 +44,7 @@ from copy import deepcopy
 import datetime
 import gzip
 import hashlib
+import inspect
 import io
 import math
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -130,6 +132,21 @@ def memoize(function):
 
     memoized_function.cache = dict()
     return memoized_function
+
+
+def get_default_args(func):
+    """Get default parameter values of a function. Useful for testing
+    See https://stackoverflow.com/questions/12627118/get-a-function-arguments-default-value
+
+    :param func:
+    :return:
+    """
+    signature = inspect.signature(func)
+    return {
+        k: v.default
+        for k, v in signature.parameters.items()
+        if v.default is not inspect.Parameter.empty
+    }
 
 
 def generate_password_hash(password, salt_rounds=12):
