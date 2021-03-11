@@ -1,5 +1,6 @@
 __all__ = [
     "add_admin",
+    "ccd_quad_to_rc",
     "check_password_hash",
     "compute_dmdt",
     "compute_hash",
@@ -11,6 +12,7 @@ __all__ = [
     "desi_dr8_url",
     "forgiving_true",
     "generate_password_hash",
+    "get_default_args",
     "great_circle_distance",
     "in_ellipse",
     "init_db",
@@ -42,6 +44,7 @@ from copy import deepcopy
 import datetime
 import gzip
 import hashlib
+import inspect
 import io
 import math
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -56,7 +59,7 @@ import secrets
 import string
 import time
 import traceback
-from typing import Optional
+from typing import Optional, Sequence
 import yaml
 
 
@@ -129,6 +132,21 @@ def memoize(function):
 
     memoized_function.cache = dict()
     return memoized_function
+
+
+def get_default_args(func):
+    """Get default parameter values of a function. Useful for testing
+    See https://stackoverflow.com/questions/12627118/get-a-function-arguments-default-value
+
+    :param func:
+    :return:
+    """
+    signature = inspect.signature(func)
+    return {
+        k: v.default
+        for k, v in signature.parameters.items()
+        if v.default is not inspect.Parameter.empty
+    }
 
 
 def generate_password_hash(password, salt_rounds=12):
@@ -834,87 +852,238 @@ def desi_dr8_url(ra, dec):
     )
 
 
-# dmdt v. 20200318: maximum baseline limited at 240 days
-dm_intervals = [
-    -8,
-    -4.5,
-    -3,
-    -2.5,
-    -2,
-    -1.5,
-    -1.25,
-    -0.75,
-    -0.5,
-    -0.3,
-    -0.2,
-    -0.1,
-    -0.05,
-    0,
-    0.05,
-    0.1,
-    0.2,
-    0.3,
-    0.5,
-    0.75,
-    1.25,
-    1.5,
-    2,
-    2.5,
-    3,
-    4.5,
-    8,
-]
-dt_intervals = [
-    0.0,
-    4.0 / 145,
-    1.0 / 25,
-    2.0 / 25,
-    3.0 / 25,
-    0.3,
-    0.5,
-    0.75,
-    1,
-    1.5,
-    2.5,
-    3.5,
-    4.5,
-    5.5,
-    7,
-    10,
-    20,
-    30,
-    45,
-    60,
-    75,
-    90,
-    120,
-    150,
-    180,
-    210,
-    240,
-]
+DMDT_INTERVALS = {
+    "crts": {
+        "dm_intervals": [
+            -8,
+            -5,
+            -3,
+            -2.5,
+            -2,
+            -1.5,
+            -1,
+            -0.5,
+            -0.3,
+            -0.2,
+            -0.1,
+            0,
+            0.1,
+            0.2,
+            0.3,
+            0.5,
+            1,
+            1.5,
+            2,
+            2.5,
+            3,
+            5,
+            8,
+        ],
+        "dt_intervals": [
+            0.0,
+            1.0 / 145,
+            2.0 / 145,
+            3.0 / 145,
+            4.0 / 145,
+            1.0 / 25,
+            2.0 / 25,
+            3.0 / 25,
+            1.5,
+            2.5,
+            3.5,
+            4.5,
+            5.5,
+            7,
+            10,
+            20,
+            30,
+            60,
+            90,
+            120,
+            240,
+            600,
+            960,
+            2000,
+            4000,
+        ],
+    },
+    "v20200205": {
+        "dm_intervals": [
+            -8,
+            -5,
+            -4,
+            -3,
+            -2.5,
+            -2,
+            -1.5,
+            -1,
+            -0.5,
+            -0.3,
+            -0.2,
+            -0.1,
+            -0.05,
+            0,
+            0.05,
+            0.1,
+            0.2,
+            0.3,
+            0.5,
+            1,
+            1.5,
+            2,
+            2.5,
+            3,
+            4,
+            5,
+            8,
+        ],
+        "dt_intervals": [
+            0.0,
+            4.0 / 145,
+            1.0 / 25,
+            2.0 / 25,
+            3.0 / 25,
+            0.3,
+            0.75,
+            1,
+            1.5,
+            2.5,
+            3.5,
+            4.5,
+            5.5,
+            7,
+            10,
+            20,
+            30,
+            45,
+            60,
+            90,
+            120,
+            180,
+            240,
+            360,
+            500,
+            650,
+            2000,
+        ],
+    },
+    "v20200318": {
+        "dm_intervals": [
+            -8,
+            -4.5,
+            -3,
+            -2.5,
+            -2,
+            -1.5,
+            -1.25,
+            -0.75,
+            -0.5,
+            -0.3,
+            -0.2,
+            -0.1,
+            -0.05,
+            0,
+            0.05,
+            0.1,
+            0.2,
+            0.3,
+            0.5,
+            0.75,
+            1.25,
+            1.5,
+            2,
+            2.5,
+            3,
+            4.5,
+            8,
+        ],
+        "dt_intervals": [
+            0.0,
+            4.0 / 145,
+            1.0 / 25,
+            2.0 / 25,
+            3.0 / 25,
+            0.3,
+            0.5,
+            0.75,
+            1,
+            1.5,
+            2.5,
+            3.5,
+            4.5,
+            5.5,
+            7,
+            10,
+            20,
+            30,
+            45,
+            60,
+            75,
+            90,
+            120,
+            150,
+            180,
+            210,
+            240,
+        ],
+    },
+}
 
 
 @jit
-def pwd_for(a):
+def pwd_for(a: Sequence):
     """
     Compute pairwise differences with for loops
     """
     return np.array([a[j] - a[i] for i in range(len(a)) for j in range(i + 1, len(a))])
 
 
-def compute_dmdt(jd, mag):
+def compute_dmdt(jd: Sequence, mag: Sequence, dmdt_ints_v: str = "v20200318"):
+    """Compute dmdt matrix for time series (jd, mag)
+    See arXiv:1709.06257
+
+    :param jd:
+    :param mag:
+    :param dmdt_ints_v:
+    :return:
+    """
     jd_diff = pwd_for(jd)
     mag_diff = pwd_for(mag)
 
-    hh, ex, ey = np.histogram2d(jd_diff, mag_diff, bins=[dm_intervals, dt_intervals])
-    # extent = [ex[0], ex[-1], ey[0], ey[-1]]
-    dmdt = hh
+    dmdt, ex, ey = np.histogram2d(
+        jd_diff,
+        mag_diff,
+        bins=[
+            DMDT_INTERVALS[dmdt_ints_v]["dt_intervals"],
+            DMDT_INTERVALS[dmdt_ints_v]["dm_intervals"],
+        ],
+    )
+
     dmdt = np.transpose(dmdt)
-    # dmdt = (maxval * dmdt / dmdt.shape[0])
-    dmdt /= np.linalg.norm(dmdt)
+    norm = np.linalg.norm(dmdt)
+    if norm != 0.0:
+        dmdt /= np.linalg.norm(dmdt)
+    else:
+        dmdt = np.zeros_like(dmdt)
 
     return dmdt
+
+
+@jit
+def ccd_quad_to_rc(ccd: int, quad: int) -> int:
+    """Convert ZTF CCD/QUADRANT to readout channel number
+
+    :param ccd:
+    :param quad:
+    :return:
+    """
+    if ccd not in range(1, 17):
+        raise ValueError("Bad CCD number")
+    if quad not in range(1, 5):
+        raise ValueError("Bad QUADRANT number")
+    b = (ccd - 1) * 4
+    rc = b + quad - 1
+    return rc
 
 
 class ZTFAlert:

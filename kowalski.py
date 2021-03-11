@@ -464,6 +464,39 @@ class Kowalski:
         except subprocess.CalledProcessError:
             sys.exit(1)
 
+        print("Testing tools")
+        # ZTF source features ingestion
+        path_ztf_source_feature = (
+            pathlib.Path(__file__).parent.absolute() / "data" / "ztf_source_features"
+        )
+        ztf_source_feature_files = list(map(str, path_ztf_source_feature.glob("*.h5")))
+        for ztf_source_feature_file in ztf_source_feature_files:
+            command = [
+                "docker",
+                "cp",
+                ztf_source_feature_file,
+                "kowalski_ingester_1:/data/",
+            ]
+            try:
+                subprocess.run(command, check=True)
+            except subprocess.CalledProcessError:
+                sys.exit(1)
+        command = [
+            "docker",
+            "exec",
+            "-i",
+            "kowalski_ingester_1",
+            "python",
+            "-m",
+            "pytest",
+            "-s",
+            "test_tools.py",
+        ]
+        try:
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError:
+            sys.exit(1)
+
     @staticmethod
     def develop():
         """
