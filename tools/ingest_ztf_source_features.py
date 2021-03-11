@@ -187,7 +187,6 @@ def get_mean_ztf_alert_braai(_mongo, ra, dec):
                 "$centerSphere": [[ra_geojson, dec_geojson], CONE_SEARCH_RADIUS]
             }
         }
-        # n = int(_db[catalog].count_documents(object_position_query))
         objects = list(
             _mongo.db[catalog].aggregate(
                 [
