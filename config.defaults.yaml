@@ -17,7 +17,8 @@ kowalski:
     fernet_key: "irjsxvfJdqSJ2fcnpPacbH972dt-RPMMLE48PQ8J5Hg="
 
   ztf:
-    mountain_ip: "http://host.docker.internal:9999"
+    # fixme: use the port-forwarded IP for the mountain
+    mountain_ip: "null"
 
   path:
     app: "/app"
