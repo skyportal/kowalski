@@ -2090,8 +2090,8 @@ class ZTFDelete(Model, ABC):
 class ZTFTriggerHandler(Handler):
     """Handlers to work with ZTF triggers"""
 
-    # @admin_required
-    async def post(self, request: web.Request) -> web.Response:
+    @admin_required
+    async def put(self, request: web.Request) -> web.Response:
         """Trigger ZTF
 
         :param request:
@@ -2109,7 +2109,7 @@ class ZTFTriggerHandler(Handler):
                 type: object
         responses:
           '200':
-            description: query result
+            description: queue submitted
             content:
               application/json:
                 schema:
@@ -2129,9 +2129,9 @@ class ZTFTriggerHandler(Handler):
 
         url = urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues")
         async with ClientSession() as c:
-            r = await c.post(url, json=_data, timeout=10)
+            r = await c.put(url, json=_data, timeout=10)
 
-        if r.status_code == 201:
+        if r.status == 201:
             return self.success(message="submitted", data=dict(r.headers))
         return self.error(message=f"rejected: {r.content}")
 
@@ -2154,7 +2154,7 @@ class ZTFTriggerHandler(Handler):
                 type: object
         responses:
           '200':
-            description: query result
+            description: queue removed
             content:
               application/json:
                 schema:
@@ -2176,9 +2176,91 @@ class ZTFTriggerHandler(Handler):
         async with ClientSession() as c:
             r = await c.delete(url, json=_data, timeout=10)
 
-        if r.status_code == 200:
-            return self.success(message="rejected", data=dict(r.headers))
+        if r.status == 200:
+            return self.success(message="deleted", data=dict(r.headers))
         return self.error(message=f"rejected: {r.content}")
+
+
+class ZTFTriggerHandlerTest(Handler):
+    """Handlers to work with ZTF triggers"""
+
+    @admin_required
+    async def put(self, request: web.Request) -> web.Response:
+        """Trigger ZTF
+
+        :param request:
+        :return:
+        ---
+        summary: Trigger ZTF
+        tags:
+          - triggers
+
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+        responses:
+          '200':
+            description: filter removed
+            content:
+              application/json:
+                schema:
+                  type: object
+          '400':
+            description: query parsing/execution error
+            content:
+              application/json:
+                schema:
+                  type: object
+        """
+
+        _data = await request.json()
+
+        # validate and preprocess
+        ZTFTrigger(**_data)
+
+        return self.success(message="submitted")
+
+    @admin_required
+    async def delete(self, request: web.Request) -> web.Response:
+        """Delete ZTF request
+
+        :param request:
+        :return:
+        ---
+        summary: Delete ZTF request
+        tags:
+          - triggers
+
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+        responses:
+          '200':
+            description: filter removed
+            content:
+              application/json:
+                schema:
+                  type: object
+          '400':
+            description: query parsing/execution error
+            content:
+              application/json:
+                schema:
+                  type: object
+        """
+
+        _data = await request.json()
+
+        # validate and preprocess
+        ZTFDelete(**_data)
+
+        return self.success(message="deleted")
 
 
 """ lab """
@@ -2677,6 +2759,7 @@ async def app_factory():
     query_handler = QueryHandler()
     filter_handler = FilterHandler()
     ztf_trigger_handler = ZTFTriggerHandler()
+    ztf_trigger_handler_test = ZTFTriggerHandlerTest()
 
     # add routes manually
     s.add_routes(
@@ -2698,8 +2781,10 @@ async def app_factory():
             web.patch("/api/filters", filter_handler.patch),
             web.delete("/api/filters/{filter_id:[0-9]+}", filter_handler.delete),
             # triggers
-            web.post("/api/triggers/ztf", ztf_trigger_handler.post),
+            web.put("/api/triggers/ztf", ztf_trigger_handler.put),
             web.delete("/api/triggers/ztf", ztf_trigger_handler.delete),
+            web.put("/api/triggers/ztf.test", ztf_trigger_handler_test.put),
+            web.delete("/api/triggers/ztf.test", ztf_trigger_handler_test.delete),
             # lab:
             web.get(
                 "/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}",
