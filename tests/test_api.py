@@ -836,7 +836,7 @@ class TestAPIs(object):
             "user": user,
         }
 
-    async def test_triggers_ztf(self, aiohttp_client, client_ztf_trigger):
+    async def test_triggers_ztf(self, aiohttp_client):
         """Test saving, testing, retrieving, modifying, and removing a ZTF trigger: /api/triggers/ztf
 
         :param aiohttp_client:
