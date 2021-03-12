@@ -1,5 +1,5 @@
 from abc import ABC
-from aiohttp import web
+from aiohttp import web, ClientSession
 from aiohttp_swagger3 import SwaggerDocs, ReDocUiSettings
 from astropy.io import fits
 from astropy.visualization import (
@@ -27,7 +27,6 @@ import numpy as np
 from odmantic import AIOEngine, EmbeddedModel, Field, Model
 import pathlib
 from pydantic import root_validator
-import requests
 import traceback
 from typing import List, Mapping, Optional, Sequence, Union
 from utils import (
@@ -2091,7 +2090,7 @@ class ZTFDelete(Model, ABC):
 class ZTFTriggerHandler(Handler):
     """Handlers to work with ZTF triggers"""
 
-    @admin_required
+    # @admin_required
     async def post(self, request: web.Request) -> web.Response:
         """Trigger ZTF
 
@@ -2128,13 +2127,14 @@ class ZTFTriggerHandler(Handler):
         # validate and preprocess
         ZTFTrigger(**_data)
 
-        r = requests.put(
-            urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues"), json=_data
-        )
+        url = urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues")
+        async with ClientSession() as c:
+            r = await c.post(url, json=_data, timeout=10)
 
-        return web.json_response(dict(r.headers), status=r.status_code)
+        if r.status_code == 201:
+            return self.success(message="submitted", data=dict(r.headers))
+        return self.error(message=f"rejected: {r.content}")
 
-    # @routes.post('/api/triggers/ztf.DELETE')
     @admin_required
     async def delete(self, request: web.Request) -> web.Response:
         """Delete ZTF request
@@ -2172,11 +2172,13 @@ class ZTFTriggerHandler(Handler):
         # validate and preprocess
         ZTFDelete(**_data)
 
-        r = requests.delete(
-            urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues"), json=_data
-        )
+        url = urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues")
+        async with ClientSession() as c:
+            r = await c.delete(url, json=_data, timeout=10)
 
-        return web.json_response(dict(r.headers), status=r.status_code)
+        if r.status_code == 200:
+            return self.success(message="rejected", data=dict(r.headers))
+        return self.error(message=f"rejected: {r.content}")
 
 
 """ lab """
