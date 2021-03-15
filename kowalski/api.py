@@ -2140,12 +2140,12 @@ class ZTFTriggerHandler(Handler):
             return self.success(message="submitted")
 
         url = urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues")
-        async with ClientSession() as c:
-            r = await c.put(url, json=_data, timeout=10)
+        async with ClientSession() as client_session:
+            response = await client_session.put(url, json=_data, timeout=10)
 
-        if r.status == 201:
-            return self.success(message="submitted", data=dict(r.headers))
-        return self.error(message=f"ZTF trigger attempt rejected: {r.content}")
+        if response.status == 201:
+            return self.success(message="submitted", data=dict(response.headers))
+        return self.error(message=f"ZTF trigger attempt rejected: {response.content}")
 
     @admin_required
     async def delete(self, request: web.Request) -> web.Response:
@@ -2188,12 +2188,12 @@ class ZTFTriggerHandler(Handler):
             return self.success(message="deleted")
 
         url = urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues")
-        async with ClientSession() as c:
-            r = await c.delete(url, json=_data, timeout=10)
+        async with ClientSession() as client_session:
+            response = await client_session.delete(url, json=_data, timeout=10)
 
-        if r.status == 200:
-            return self.success(message="deleted", data=dict(r.headers))
-        return self.error(message=f"ZTF delete attempt rejected: {r.content}")
+        if response.status == 200:
+            return self.success(message="deleted", data=dict(response.headers))
+        return self.error(message=f"ZTF delete attempt rejected: {response.content}")
 
 
 """ lab """
