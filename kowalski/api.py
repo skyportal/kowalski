@@ -2074,7 +2074,7 @@ class ZTFTrigger(Model, ABC):
     """Data model for ZTF trigger for streamlined validation"""
 
     queue_name: str
-    validity_window_mjd: list
+    validity_window_mjd: List[float]
     targets: List[dict]
     queue_type: str
     user: str
@@ -2089,6 +2089,15 @@ class ZTFDelete(Model, ABC):
 
 class ZTFTriggerHandler(Handler):
     """Handlers to work with ZTF triggers"""
+
+    def __init__(self, test: bool = False):
+        """Constructor for ZTF trigger class
+
+        :param test: is this a test trigger?
+        :return:
+        """
+
+        self.test = test
 
     @admin_required
     async def put(self, request: web.Request) -> web.Response:
@@ -2126,6 +2135,9 @@ class ZTFTriggerHandler(Handler):
 
         # validate and preprocess
         ZTFTrigger(**_data)
+
+        if self.test:
+            return self.success(message="submitted")
 
         url = urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues")
         async with ClientSession() as c:
@@ -2172,6 +2184,9 @@ class ZTFTriggerHandler(Handler):
         # validate and preprocess
         ZTFDelete(**_data)
 
+        if self.test:
+            return self.success(message="deleted")
+
         url = urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues")
         async with ClientSession() as c:
             r = await c.delete(url, json=_data, timeout=10)
@@ -2179,88 +2194,6 @@ class ZTFTriggerHandler(Handler):
         if r.status == 200:
             return self.success(message="deleted", data=dict(r.headers))
         return self.error(message=f"rejected: {r.content}")
-
-
-class ZTFTriggerHandlerTest(Handler):
-    """Handlers to work with ZTF triggers"""
-
-    @admin_required
-    async def put(self, request: web.Request) -> web.Response:
-        """Trigger ZTF
-
-        :param request:
-        :return:
-        ---
-        summary: Trigger ZTF
-        tags:
-          - triggers
-
-        requestBody:
-          required: true
-          content:
-            application/json:
-              schema:
-                type: object
-        responses:
-          '200':
-            description: filter removed
-            content:
-              application/json:
-                schema:
-                  type: object
-          '400':
-            description: query parsing/execution error
-            content:
-              application/json:
-                schema:
-                  type: object
-        """
-
-        _data = await request.json()
-
-        # validate and preprocess
-        ZTFTrigger(**_data)
-
-        return self.success(message="submitted")
-
-    @admin_required
-    async def delete(self, request: web.Request) -> web.Response:
-        """Delete ZTF request
-
-        :param request:
-        :return:
-        ---
-        summary: Delete ZTF request
-        tags:
-          - triggers
-
-        requestBody:
-          required: true
-          content:
-            application/json:
-              schema:
-                type: object
-        responses:
-          '200':
-            description: filter removed
-            content:
-              application/json:
-                schema:
-                  type: object
-          '400':
-            description: query parsing/execution error
-            content:
-              application/json:
-                schema:
-                  type: object
-        """
-
-        _data = await request.json()
-
-        # validate and preprocess
-        ZTFDelete(**_data)
-
-        return self.success(message="deleted")
 
 
 """ lab """
@@ -2759,7 +2692,7 @@ async def app_factory():
     query_handler = QueryHandler()
     filter_handler = FilterHandler()
     ztf_trigger_handler = ZTFTriggerHandler()
-    ztf_trigger_handler_test = ZTFTriggerHandlerTest()
+    ztf_trigger_handler_test = ZTFTriggerHandler(test=True)
 
     # add routes manually
     s.add_routes(
