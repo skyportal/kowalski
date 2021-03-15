@@ -18,7 +18,7 @@ kowalski:
 
   ztf:
     # fixme: use the port-forwarded IP for the mountain
-    mountain_ip: "null"
+    mountain_ip: null
 
   path:
     app: "/app"

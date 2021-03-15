@@ -2133,7 +2133,7 @@ class ZTFTriggerHandler(Handler):
 
         _data = await request.json()
 
-        # validate and preprocess
+        # validate
         ZTFTrigger(**_data)
 
         if self.test:
@@ -2145,7 +2145,7 @@ class ZTFTriggerHandler(Handler):
 
         if r.status == 201:
             return self.success(message="submitted", data=dict(r.headers))
-        return self.error(message=f"rejected: {r.content}")
+        return self.error(message=f"ZTF trigger attempt rejected: {r.content}")
 
     @admin_required
     async def delete(self, request: web.Request) -> web.Response:
@@ -2193,7 +2193,7 @@ class ZTFTriggerHandler(Handler):
 
         if r.status == 200:
             return self.success(message="deleted", data=dict(r.headers))
-        return self.error(message=f"rejected: {r.content}")
+        return self.error(message=f"ZTF delete attempt rejected: {r.content}")
 
 
 """ lab """
