@@ -33,6 +33,7 @@ import traceback
 from typing import Mapping, Optional, Sequence
 
 from utils import (
+    ccd_quad_to_rc,
     deg2dms,
     deg2hms,
     great_circle_distance,
@@ -88,12 +89,15 @@ class EopError(Exception):
         return self.message
 
 
-def make_photometry(alert: dict, jd_start: float = None):
+def make_photometry(
+    alert: dict, jd_start: float = None, include_reference_flux: bool = True, **kwargs
+):
     """
     Make a de-duplicated pandas.DataFrame with photometry of alert['objectId']
 
     :param alert: ZTF alert packet/dict
     :param jd_start:
+    :param include_reference_flux: correct for candidate.magnr?
     :return:
     """
     alert = deepcopy(alert)
@@ -121,6 +125,12 @@ def make_photometry(alert: dict, jd_start: float = None):
         .sort_values(by=["mjd"])
     )
 
+    match_radius_arcsec = kwargs.get("match_radius_arcsec", 1.5)
+    star_galaxy_threshold = kwargs.get("star_galaxy_threshold", 0.4)
+    is_star = (alert["candidate"]["distpsnr1"] < match_radius_arcsec) and (
+        alert["candidate"]["sgscore1"] > star_galaxy_threshold
+    )
+
     # filter out bad data:
     mask_good_diffmaglim = df_light_curve["diffmaglim"] > 0
     df_light_curve = df_light_curve.loc[mask_good_diffmaglim]
@@ -130,21 +140,67 @@ def make_photometry(alert: dict, jd_start: float = None):
     # step 1: calculate the coefficient that determines whether the
     # flux should be negative or positive
     coeff = df_light_curve["isdiffpos"].apply(
-        lambda x: 1.0 if x in [True, 1, "y", "Y"] else -1.0
+        lambda x: 1.0 if x in [True, 1, "y", "Y", "t", "1"] else -1.0
     )
 
     # step 2: calculate the flux normalized to an arbitrary AB zeropoint of
     # 23.9 (results in flux in uJy)
     df_light_curve["flux"] = coeff * 10 ** (-0.4 * (df_light_curve["magpsf"] - 23.9))
 
-    # step 3: separate detections from non detections
+    # step 3: compute corrections if flux is present in reference image
+    if include_reference_flux and is_star:
+        # fix very old alerts:
+        df_light_curve.replace("None", np.nan, inplace=True)
+
+        # prior to 2018-11-12, candidate.field and candidate.rcid were not reported for non-detections,
+        # which makes inferring upper limits more difficult.
+        # attempt fixing this using pdiffimfilename, e.g. ztf_20210309547431_000690_zr_c01_o_q4_scimrefdiffimg.fits:
+        mask_null_rcid = df_light_curve.rcid.isnull()
+        if any(mask_null_rcid):
+            df_light_curve.loc[mask_null_rcid, "rcid"] = df_light_curve.loc[
+                mask_null_rcid, "pdiffimfilename"
+            ].apply(
+                lambda x: ccd_quad_to_rc(
+                    ccd=int(os.path.basename(x).split("_")[4][1:]),
+                    quad=int(os.path.basename(x).split("_")[6][1:]),
+                )
+            )
+            df_light_curve.loc[mask_null_rcid, "field"] = df_light_curve.loc[
+                mask_null_rcid, "pdiffimfilename"
+            ].apply(lambda x: int(os.path.basename(x).split("_")[2][1:]))
+
+        grouped_light_curves = df_light_curve.groupby(["fid", "field", "rcid"])
+        impute_magnr = grouped_light_curves["magnr"].agg(
+            lambda x: np.median(x[np.isfinite(x)])
+        )
+        impute_sigmagnr = grouped_light_curves["sigmagnr"].agg(
+            lambda x: np.median(x[np.isfinite(x)])
+        )
+
+        for idx, light_curve_group in grouped_light_curves:
+            mask_nan_magnr_group = np.isnan(light_curve_group["magnr"])
+            mask_nan_magnr = light_curve_group[mask_nan_magnr_group].index
+            df_light_curve.loc[mask_nan_magnr, "magnr"] = impute_magnr[idx]
+            df_light_curve.loc[mask_nan_magnr, "sigmagnr"] = impute_sigmagnr[idx]
+
+        df_light_curve["reference_flux"] = 10 ** (
+            -0.4 * (df_light_curve["magnr"] - 23.9)
+        )
+        df_light_curve["reference_fluxerr"] = np.abs(
+            df_light_curve["sigmagnr"]
+            * df_light_curve["reference_flux"]
+            * np.log(10)
+            / 2.5
+        )
+
+    # step 4: separate detections from non-detections
     detected = np.isfinite(df_light_curve["magpsf"])
     undetected = ~detected
 
-    # step 4: calculate the flux error
+    # step 5: calculate the flux error
     df_light_curve["fluxerr"] = None  # initialize the column
 
-    # step 4a: calculate fluxerr for detections using sigmapsf
+    # step 5a: calculate fluxerr for detections using sigmapsf
     df_light_curve.loc[detected, "fluxerr"] = np.abs(
         df_light_curve.loc[detected, "sigmapsf"]
         * df_light_curve.loc[detected, "flux"]
@@ -152,12 +208,22 @@ def make_photometry(alert: dict, jd_start: float = None):
         / 2.5
     )
 
-    # step 4b: calculate fluxerr for non detections using diffmaglim
+    # step 5b: calculate fluxerr for non-detections using diffmaglim
     df_light_curve.loc[undetected, "fluxerr"] = (
         10 ** (-0.4 * (df_light_curve.loc[undetected, "diffmaglim"] - 23.9)) / 5.0
     )  # as diffmaglim is the 5-sigma depth
 
-    # step 5: set the zeropoint and magnitude system
+    # step 6: correct for reference flux
+    if include_reference_flux and is_star:
+        df_light_curve["flux"] = (
+            df_light_curve["flux"] + df_light_curve["reference_flux"]
+        )
+        df_light_curve.loc[detected, "fluxerr"] = np.sqrt(
+            df_light_curve.loc[detected, "fluxerr"] ** 2
+            + df_light_curve.loc[detected, "reference_flux"] ** 2
+        )
+
+    # step 7: set the zeropoint and magnitude system
     df_light_curve["zp"] = 23.9
     df_light_curve["zpsys"] = "ab"
 
