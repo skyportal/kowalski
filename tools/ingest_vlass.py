@@ -58,14 +58,11 @@ def process_file(args):
         "Min",
         "E_Min",
         "Duplicate_flag",
-        "Quality_flag"
+        "Quality_flag",
     ]
 
     for chunk_index, dataframe_chunk in enumerate(
-        pd.read_csv(
-            file,
-            chunksize=batch_size
-        )
+        pd.read_csv(file, chunksize=batch_size)
     ):
 
         if verbose:
@@ -149,7 +146,7 @@ if __name__ == "__main__":
 
     path = pathlib.Path(args.path)
 
-    files = ['CIRADA_VLASS1QL_table1_components_v1.csv']
+    files = ["CIRADA_VLASS1QL_table1_components_v1.csv"]
 
     catalog_name = "VLASS_DR1"
 
