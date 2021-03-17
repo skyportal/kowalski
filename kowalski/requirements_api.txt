@@ -18,5 +18,5 @@ pytest>=6.1.2
 pytest-aiohttp>=0.3.0
 pyyaml>=5.3.1
 requests>=2.25.0
-supervisor==4.2.1
+supervisor>=4.2.1
 uvloop==0.14.0

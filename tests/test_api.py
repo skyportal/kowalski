@@ -1,3 +1,4 @@
+import string
 import random
 from typing import List
 
@@ -788,3 +789,86 @@ class TestAPIs(object):
         # print(result)
         assert result["status"] == "error"
         assert result["message"] == "token is invalid"
+
+    # test ztf trigger api
+
+    @staticmethod
+    async def make_ztf_trigger(
+        queue_name: str = "".join(
+            random.choice(string.ascii_uppercase + string.digits) for _ in range(9)
+        ),
+        validity_window_mjd: List = [random.random(), random.random() + 1],
+        targets: List = [{}],
+        queue_type: str = "list",
+        user: str = "provisioned-admin",
+    ):
+
+        targets = [
+            {
+                "request_id": 1,
+                "program_id": 2,
+                "field_id": 699,
+                "ra": 322.718872,
+                "dec": 27.574113,
+                "filter_id": 1,
+                "exposure_time": 300.0,
+                "program_pi": "Kulkarni/provisioned-admin",
+                "subprogram_name": "ToO_GRB",
+            },
+            {
+                "request_id": 2,
+                "program_id": 2,
+                "field_id": 700,
+                "ra": 322.718872,
+                "dec": 27.574113,
+                "filter_id": 1,
+                "exposure_time": 300.0,
+                "program_pi": "Kulkarni/provisioned-admin",
+                "subprogram_name": "ToO_GRB",
+            },
+        ]
+
+        return {
+            "queue_name": queue_name,
+            "validity_window_mjd": validity_window_mjd,
+            "targets": targets,
+            "queue_type": queue_type,
+            "user": user,
+        }
+
+    async def test_triggers_ztf(self, aiohttp_client):
+        """Test saving, testing, retrieving, modifying, and removing a ZTF trigger: /api/triggers/ztf
+
+        :param aiohttp_client:
+        :return:
+        """
+
+        client = await aiohttp_client(await app_factory())
+
+        # authorize as admin, regular users cannot do this
+        credentials = await self.get_admin_credentials(aiohttp_client)
+        access_token = credentials["token"]
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        ztf_trigger = await self.make_ztf_trigger()
+
+        # put
+        resp = await client.put(
+            "/api/triggers/ztf.test", json=ztf_trigger, headers=headers, timeout=5
+        )
+
+        assert resp.status == 200
+        result = await resp.json()
+        assert result["status"] == "success"
+        assert "message" in result
+
+        # delete
+        resp = await client.delete(
+            "/api/triggers/ztf.test", json=ztf_trigger, headers=headers, timeout=5
+        )
+
+        assert resp.status == 200
+        result = await resp.json()
+        assert result["status"] == "success"
+        assert "message" in result
