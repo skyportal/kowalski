@@ -113,7 +113,7 @@ def process_file(file, collection, batch_size):
 
 def run(
     path: str = "./",
-    num_processes: int = mp.cpu_count(),
+    num_processes: int = 1,
     batch_size: int = 2048,
 ):
     """Pre-process and ingest VLASS catalog
