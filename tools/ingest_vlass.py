@@ -2,16 +2,18 @@
 This tool will digest untarred VLASS source data from https://cirada.ca/vlasscatalogueql0 and ingest the data into Kowalski.
 """
 
-import argparse
-from multiprocessing.pool import Pool
+import fire
+import glob
+import multiprocessing as mp
 import pandas as pd
-import pathlib
 import os
 from tqdm.auto import tqdm
 
+import istarmap  # noqa: F401
 from utils import (
     deg2dms,
     deg2hms,
+    init_db_sync,
     load_config,
     log,
     Mongo,
@@ -20,12 +22,14 @@ from utils import (
 """ load config and secrets """
 config = load_config(config_file="config.yaml")["kowalski"]
 
+# init db if necessary
+init_db_sync(config=config)
 
-def process_file(args):
-    file, collection, batch_size, rm, verbose = args
+
+def process_file(file, collection, batch_size):
+
     # connect to MongoDB:
-    if verbose:
-        log("Connecting to DB")
+    log("Connecting to DB")
     mongo = Mongo(
         host=config["database"]["host"],
         port=config["database"]["port"],
@@ -35,13 +39,11 @@ def process_file(args):
         db=config["database"]["db"],
         verbose=0,
     )
-    if verbose:
-        log("Successfully connected")
+    log("Successfully connected")
 
     collection = "VLASS_DR1"
 
-    if verbose:
-        log(f"Processing {file}")
+    log(f"Processing {file}")
 
     names = [
         "Component_name",
@@ -65,8 +67,7 @@ def process_file(args):
         pd.read_csv(file, chunksize=batch_size)
     ):
 
-        if verbose:
-            log(f"{file}: processing batch # {chunk_index + 1}")
+        log(f"{file}: processing batch # {chunk_index + 1}")
 
         dataframe_chunk = dataframe_chunk[names]
         dataframe_chunk = dataframe_chunk[dataframe_chunk["Duplicate_flag"] < 2]
@@ -92,13 +93,11 @@ def process_file(args):
                     "coordinates": _radec_geojson,
                 }
             except Exception as e:
-                if verbose:
-                    log(str(e))
+                log(str(e))
                 bad_document_indexes.append(document_index)
 
         if len(bad_document_indexes) > 0:
-            if verbose:
-                log("Removing bad docs")
+            log("Removing bad docs")
             for index in sorted(bad_document_indexes, reverse=True):
                 del batch[index]
 
@@ -109,44 +108,22 @@ def process_file(args):
     try:
         mongo.client.close()
     finally:
-        if verbose:
-            log("Successfully disconnected from db")
-
-    # clean up:
-    if rm:
-        os.remove(file)
-        if verbose:
-            log(f"Successfully removed {file}")
+        log("Successfully disconnected from db")
 
 
-if __name__ == "__main__":
-    # Note CSV data file comes from https://cirada.ca/vlasscatalogueql0
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--path",
-        type=str,
-        default=str(pathlib.Path(__file__).parent),
-        help="Local path to unzipped VLASS csv files",
-    )
-    parser.add_argument("-v", action="store_true", help="verbose?")
-    parser.add_argument(
-        "--rm", action="store_true", help="Remove CSV files after ingestion"
-    )
-    parser.add_argument(
-        "--n_processes",
-        type=int,
-        default=12,
-        help="Number of processes for parallel ingestion",
-    )
-    parser.add_argument(
-        "--batch_size", type=int, default=2048, help="batch size for ingestion"
-    )
+def run(
+    path: str = "./",
+    num_processes: int = mp.cpu_count(),
+    batch_size: int = 2048,
+):
+    """Pre-process and ingest VLASS catalog
+    :param path: path to CSV data file (~3.3 GB untarred)
+                 see https://cirada.ca/vlasscatalogueql0
+    :param num_processes:
+    :return:
+    """
 
-    args = parser.parse_args()
-
-    path = pathlib.Path(args.path)
-
-    files = ["CIRADA_VLASS1QL_table1_components_v1.csv"]
+    files = glob.glob(os.path.join(path, "CIRADA*.csv"))
 
     catalog_name = "VLASS_DR1"
 
@@ -158,7 +135,6 @@ if __name__ == "__main__":
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
-        verbose=args.v,
     )
     log("Successfully connected")
 
@@ -169,8 +145,12 @@ if __name__ == "__main__":
         [("coordinates.radec_geojson", "2dsphere"), ("_id", 1)], background=True
     )
 
-    params = [(f, catalog_name, args.batch_size, args.rm, args.v) for f in files]
+    input_list = [(f, catalog_name, batch_size) for f in files]
 
-    with Pool(processes=args.n_processes) as pool:
-        # list+pool.imap is a trick to make tqdm work here
-        list(tqdm(pool.imap(process_file, params), total=len(files)))
+    with mp.Pool(processes=num_processes) as p:
+        for _ in tqdm(p.istarmap(process_file, input_list), total=len(input_list)):
+            pass
+
+
+if __name__ == "__main__":
+    fire.Fire(run)
