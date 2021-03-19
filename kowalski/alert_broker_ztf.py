@@ -130,7 +130,7 @@ def make_photometry(alert: dict, jd_start: float = None):
     # step 1: calculate the coefficient that determines whether the
     # flux should be negative or positive
     coeff = df_light_curve["isdiffpos"].apply(
-        lambda x: 1.0 if x in [True, 1, "y", "Y"] else -1.0
+        lambda x: 1.0 if x in [True, 1, "y", "Y", "t", "1"] else -1.0
     )
 
     # step 2: calculate the flux normalized to an arbitrary AB zeropoint of
