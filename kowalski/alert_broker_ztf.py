@@ -1060,7 +1060,8 @@ class AlertWorker:
                 filter_templates.append(filter_template)
             except Exception as e:
                 log(
-                    f"Failed to generate filter template for group_id={active_filter['group_id']} filter_id={active_filter['filter_id']}: {e}"
+                    "Failed to generate filter template for "
+                    f"group_id={active_filter['group_id']} filter_id={active_filter['filter_id']}: {e}"
                 )
                 continue
 
