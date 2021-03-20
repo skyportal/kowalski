@@ -1009,9 +1009,7 @@ class AlertWorker:
                     f"Getting info on group id={active_filter['group_id']} from SkyPortal",
                     self.verbose > 1,
                 ):
-                    response = self.api_skyportal(
-                        "GET", f"/api/groups/{active_filter['group_id']}"
-                    )
+                    response = self.api_skyportal_get_group(active_filter["group_id"])
                 if self.verbose > 1:
                     log(response.json())
                 if response.json()["status"] == "success":
