@@ -1351,7 +1351,9 @@ class AlertWorker:
                     "dec": df_photometry.loc[pid_mask, "dec"].tolist(),
                 }
 
-                if len(photometry.get("mag", ())) > 0:
+                if (len(photometry.get("flux", ())) > 0) or (
+                    len(photometry.get("fluxerr", ())) > 0
+                ):
                     with timer(
                         f"Posting photometry of {alert['objectId']} {alert['candid']}, "
                         f"program_id={pid} to SkyPortal",
