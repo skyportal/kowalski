@@ -1003,60 +1003,67 @@ class AlertWorker:
         """
         filter_templates = []
         for active_filter in active_filters:
-            # collect additional info from SkyPortal
-            with timer(
-                f"Getting info on group id={active_filter['group_id']} from SkyPortal",
-                self.verbose > 1,
-            ):
-                response = self.api_skyportal(
-                    "GET", f"/api/groups/{active_filter['group_id']}"
+            try:
+                # collect additional info from SkyPortal
+                with timer(
+                    f"Getting info on group id={active_filter['group_id']} from SkyPortal",
+                    self.verbose > 1,
+                ):
+                    response = self.api_skyportal(
+                        "GET", f"/api/groups/{active_filter['group_id']}"
+                    )
+                if self.verbose > 1:
+                    log(response.json())
+                if response.json()["status"] == "success":
+                    group_name = (
+                        response.json()["data"]["nickname"]
+                        if response.json()["data"]["nickname"] is not None
+                        else response.json()["data"]["name"]
+                    )
+                    filter_name = [
+                        filtr["name"]
+                        for filtr in response.json()["data"]["filters"]
+                        if filtr["id"] == active_filter["filter_id"]
+                    ][0]
+                else:
+                    log(
+                        f"Failed to get info on group id={active_filter['group_id']} from SkyPortal"
+                    )
+                    group_name, filter_name = None, None
+                    # raise ValueError(f"Failed to get info on group id={active_filter['group_id']} from SkyPortal")
+                log(f"Group name: {group_name}, filter name: {filter_name}")
+
+                # prepend upstream aggregation stages:
+                pipeline = deepcopy(self.filter_pipeline_upstream) + loads(
+                    active_filter["fv"]["pipeline"]
                 )
-            if self.verbose > 1:
-                log(response.json())
-            if response.json()["status"] == "success":
-                group_name = (
-                    response.json()["data"]["nickname"]
-                    if response.json()["data"]["nickname"] is not None
-                    else response.json()["data"]["name"]
-                )
-                filter_name = [
-                    filtr["name"]
-                    for filtr in response.json()["data"]["filters"]
-                    if filtr["id"] == active_filter["filter_id"]
-                ][0]
-            else:
+                # set permissions
+                pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter[
+                    "permissions"
+                ]
+                pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0][
+                    "$in"
+                ][1] = active_filter["permissions"]
+
+                filter_template = {
+                    "group_id": active_filter["group_id"],
+                    "filter_id": active_filter["filter_id"],
+                    "group_name": group_name,
+                    "filter_name": filter_name,
+                    "fid": active_filter["fv"]["fid"],
+                    "permissions": active_filter["permissions"],
+                    "autosave": active_filter["autosave"],
+                    "update_annotations": active_filter["update_annotations"],
+                    "pipeline": deepcopy(pipeline),
+                }
+
+                filter_templates.append(filter_template)
+            except Exception as e:
                 log(
-                    f"Failed to get info on group id={active_filter['group_id']} from SkyPortal"
+                    f"Failed to generate filter template for group_id={active_filter['group_id']} filter_id={active_filter['filter_id']}: {e}"
                 )
-                group_name, filter_name = None, None
-                # raise ValueError(f"Failed to get info on group id={active_filter['group_id']} from SkyPortal")
-            log(f"Group name: {group_name}, filter name: {filter_name}")
+                continue
 
-            # prepend upstream aggregation stages:
-            pipeline = deepcopy(self.filter_pipeline_upstream) + loads(
-                active_filter["fv"]["pipeline"]
-            )
-            # set permissions
-            pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter[
-                "permissions"
-            ]
-            pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0][
-                "$in"
-            ][1] = active_filter["permissions"]
-
-            filter_template = {
-                "group_id": active_filter["group_id"],
-                "filter_id": active_filter["filter_id"],
-                "group_name": group_name,
-                "filter_name": filter_name,
-                "fid": active_filter["fv"]["fid"],
-                "permissions": active_filter["permissions"],
-                "autosave": active_filter["autosave"],
-                "update_annotations": active_filter["update_annotations"],
-                "pipeline": deepcopy(pipeline),
-            }
-
-            filter_templates.append(filter_template)
         return filter_templates
 
     def reload_filters(self):
