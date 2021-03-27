@@ -35,6 +35,7 @@ ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_b.$acai_b_vers
 
 # copy over the test alerts
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
+COPY data/catalogs/ /app/data/catalogs/
 
 # copy over the config and the code
 COPY ["config.yaml", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py",\
@@ -47,6 +48,7 @@ COPY ["config.yaml", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py
       "tests/test_ingester.py", "tests/test_tns_watcher.py", "tests/test_tools.py",\
       "tools/ingest_ztf_matchfiles.py", "tools/ingest_ztf_source_features.py",\
       "tools/istarmap.py",\
+      "tools/ingest_vlass.py",\
       "/app/"]
 
 # change working directory to /app
