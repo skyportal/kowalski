@@ -4,7 +4,7 @@ kowalski:
     version: "2.0.0"
     description: "Kowalski: a toolkit for Time-Domain Astronomy"
     host: "0.0.0.0"
-    port: "4000"
+    port: 4000
     admin_username: "admin"
     # fixme: use a strong password
     admin_password: "admin"

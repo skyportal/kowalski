@@ -2675,7 +2675,7 @@ async def app_factory():
     app["JWT"] = {
         "JWT_SECRET": config["server"]["JWT_SECRET_KEY"],
         "JWT_ALGORITHM": config["server"]["JWT_ALGORITHM"],
-        "JWT_EXP_DELTA_SECONDS": int(config["server"]["JWT_EXP_DELTA_SECONDS"]),
+        "JWT_EXP_DELTA_SECONDS": config["server"]["JWT_EXP_DELTA_SECONDS"],
     }
 
     # OpenAPI docs:
