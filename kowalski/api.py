@@ -214,13 +214,15 @@ async def auth_post(request: web.Request) -> web.Response:
             # user exists and passwords match?
             select = await request.app["mongo"].users.find_one({"_id": username})
             if select is not None and check_password_hash(select["password"], password):
-                payload = {
-                    "user_id": username,
-                    "exp": datetime.datetime.utcnow()
-                    + datetime.timedelta(
-                        seconds=request.app["JWT"]["JWT_EXP_DELTA_SECONDS"]
-                    ),
-                }
+                payload = {"user_id": username}
+                # optionally set expiration date
+                if request.app["JWT"]["JWT_EXP_DELTA_SECONDS"] is not None:
+                    payload["exp"] = (
+                        datetime.datetime.utcnow()
+                        + datetime.timedelta(
+                            seconds=request.app["JWT"]["JWT_EXP_DELTA_SECONDS"]
+                        ),
+                    )
                 jwt_token = jwt.encode(
                     payload,
                     request.app["JWT"]["JWT_SECRET"],
