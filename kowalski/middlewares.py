@@ -62,9 +62,13 @@ async def auth_middleware(request, handler) -> web.Response:
                 request.app["JWT"]["JWT_SECRET"],
                 algorithms=[request.app["JWT"]["JWT_ALGORITHM"]],
             )
-        except (jwt.DecodeError, jwt.ExpiredSignatureError):
+        except jwt.DecodeError:
             return web.json_response(
                 {"status": "error", "message": "token is invalid"}, status=400
+            )
+        except jwt.ExpiredSignatureError:
+            return web.json_response(
+                {"status": "error", "message": "token has expired"}, status=400
             )
 
         request.user = payload["user_id"]
