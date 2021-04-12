@@ -488,7 +488,7 @@ class TestIngester:
         log("Digested and ingested: all done!")
 
         # shut down Kafka server and ZooKeeper
-        time.sleep(20)
+        time.sleep(30)
 
         log("Shutting down Kafka Server at localhost:9092")
         # start the Kafka server:
@@ -533,10 +533,27 @@ class TestIngester:
         )
         collection_alerts = config["database"]["collections"]["alerts_ztf"]
         collection_alerts_aux = config["database"]["collections"]["alerts_ztf_aux"]
-        n_alerts = mongo.db[collection_alerts].count_documents({})
-        assert n_alerts == 313
-        n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
-        assert n_alerts_aux == 145
+
+        num_retries = 10
+        # alert processing takes time, which depends on the available resources
+        # so allow some additional time for the processing to finish
+        for i in range(num_retries):
+            if i == num_retries - 1:
+                raise RuntimeError("Alert ingestion failed")
+
+            n_alerts = mongo.db[collection_alerts].count_documents({})
+            n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
+
+            try:
+                assert n_alerts == 313
+                assert n_alerts_aux == 145
+                break
+            except AssertionError:
+                print(
+                    "Found an unexpected amount of alert/aux data, retrying in 5 seconds..."
+                )
+                time.sleep(5)
+                continue
 
         if config["misc"]["broker"]:
             log("Checking that posting to SkyPortal succeeded")
