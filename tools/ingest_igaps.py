@@ -1,5 +1,5 @@
 """
-This tool will digest untarred VLASS source data from https://cirada.ca/vlasscatalogueql0 and ingest the data into Kowalski.
+This tool will digest zipped IGAPS source data from http://www.star.ucl.ac.uk/IGAPS/catalogue/ and ingest the data into Kowalski.
 """
 
 import fire
@@ -277,7 +277,7 @@ def run(
     batch_size: int = 2048,
 ):
     """Pre-process and ingest IGAPS catalog
-    :param path: path to CSV data files (~2.0 GB untarred)
+    :param path: path to CSV data files (~98 GB tarred)
                  see http://www.star.ucl.ac.uk/IGAPS/catalogue/
     :param num_processes:
     :return:
