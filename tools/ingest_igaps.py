@@ -223,46 +223,46 @@ def process_file(file, collection, batch_size):
         "U2ErrBits",
         "errBits2",
     ]
-    hdulist = fits.open(file)
-    nhdu = 1
-    dataframe = pd.DataFrame(np.asarray(hdulist[nhdu].data), columns=names)
+    with fits.open(file) as hdulist:
+        nhdu = 1
+        dataframe = pd.DataFrame(np.asarray(hdulist[nhdu].data), columns=names)
 
-    for chunk_index, dataframe_chunk in dataframe.groupby(
-        np.arange(len(dataframe)) // batch_size
-    ):
+        for chunk_index, dataframe_chunk in dataframe.groupby(
+            np.arange(len(dataframe)) // batch_size
+        ):
 
-        log(f"{file}: processing batch # {chunk_index + 1}")
+            log(f"{file}: processing batch # {chunk_index + 1}")
 
-        batch = dataframe_chunk.to_dict(orient="records")
+            batch = dataframe_chunk.to_dict(orient="records")
 
-        bad_document_indexes = []
+            bad_document_indexes = []
 
-        for document_index, document in enumerate(batch):
-            try:
-                # GeoJSON for 2D indexing
-                document["coordinates"] = dict()
-                # string format: H:M:S, D:M:S
-                document["coordinates"]["radec_str"] = [
-                    deg2hms(document["RA"]),
-                    deg2dms(document["DEC"]),
-                ]
-                # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
-                _radec_geojson = [document["RA"] - 180.0, document["DEC"]]
-                document["coordinates"]["radec_geojson"] = {
-                    "type": "Point",
-                    "coordinates": _radec_geojson,
-                }
-            except Exception as e:
-                log(str(e))
-                bad_document_indexes.append(document_index)
+            for document_index, document in enumerate(batch):
+                try:
+                    # GeoJSON for 2D indexing
+                    document["coordinates"] = dict()
+                    # string format: H:M:S, D:M:S
+                    document["coordinates"]["radec_str"] = [
+                        deg2hms(document["RA"]),
+                        deg2dms(document["DEC"]),
+                    ]
+                    # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
+                    _radec_geojson = [document["RA"] - 180.0, document["DEC"]]
+                    document["coordinates"]["radec_geojson"] = {
+                        "type": "Point",
+                        "coordinates": _radec_geojson,
+                    }
+                except Exception as e:
+                    log(str(e))
+                    bad_document_indexes.append(document_index)
 
-        if len(bad_document_indexes) > 0:
-            log("Removing bad docs")
-            for index in sorted(bad_document_indexes, reverse=True):
-                del batch[index]
+            if len(bad_document_indexes) > 0:
+                log("Removing bad docs")
+                for index in sorted(bad_document_indexes, reverse=True):
+                    del batch[index]
 
-        # ingest batch
-        mongo.insert_many(collection=collection, documents=batch)
+            # ingest batch
+            mongo.insert_many(collection=collection, documents=batch)
 
     # disconnect from db:
     try:
