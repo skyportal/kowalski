@@ -49,6 +49,7 @@ COPY ["config.yaml", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py
       "tools/ingest_ztf_matchfiles.py", "tools/ingest_ztf_source_features.py",\
       "tools/istarmap.py",\
       "tools/ingest_vlass.py",\
+      "tools/ingest_igaps.py",\
       "/app/"]
 
 # change working directory to /app
