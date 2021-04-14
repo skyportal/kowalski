@@ -1,7 +1,8 @@
 import pytest
 
-from ingest_ztf_source_features import run
+from ingest_ztf_source_features import run as run_ztf_source_features
 from ingest_vlass import run as run_vlass
+from ingest_igaps import run as run_igaps
 from utils import get_default_args, load_config, log, Mongo
 
 
@@ -32,10 +33,10 @@ class TestTools:
     """
 
     def test_ingest_ztf_source_features(self):
-        tag = get_default_args(run).get("tag")
+        tag = get_default_args(run_ztf_source_features).get("tag")
         collection = f"ZTF_source_features_{tag}"
 
-        run(
+        run_ztf_source_features(
             path="/data",
             tag=tag,
             xmatch=False,
@@ -60,3 +61,17 @@ class TestTools:
         log(f"Ingested features of {len(ingested_entries)} sources")
 
         assert len(ingested_entries) == 27
+
+    def test_ingest_igaps(self):
+
+        collection = "IGAPS_DR2"
+
+        run_igaps(
+            path="/app/data/catalogs",
+            num_processes=1,
+        )
+
+        ingested_entries = list(self.mongo.db[collection].find({}, {"_id": 1}))
+        log(f"Ingested features of {len(ingested_entries)} sources")
+
+        assert len(ingested_entries) == 100
