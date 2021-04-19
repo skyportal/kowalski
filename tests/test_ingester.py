@@ -550,7 +550,9 @@ class TestIngester:
                 break
             except AssertionError:
                 print(
-                    "Found an unexpected amount of alert/aux data, retrying in 5 seconds..."
+                    "Found an unexpected amount of alert/aux data: "
+                    f"({n_alerts/n_alerts_aux}, expecting {313/145}). "
+                    "Retrying in 5 seconds..."
                 )
                 time.sleep(5)
                 continue
