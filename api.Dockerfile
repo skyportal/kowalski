@@ -7,7 +7,7 @@ RUN apt-get update
 RUN mkdir -p /app /data /data/logs /_tmp
 
 # copy over the config and the code
-COPY ["config.yaml", "kowalski/generate_supervisord_conf.py",\
+COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py",\
       "kowalski/middlewares.py", "kowalski/utils.py",\
       "kowalski/components_api.yaml", "kowalski/api.py", "kowalski/requirements_api.txt", "tests/test_api.py",\
       "/app/"]

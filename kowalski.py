@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import bz2
 from contextlib import contextmanager
+import datetime
 from deepdiff import DeepDiff
 from distutils.version import LooseVersion as Version
 import fire
@@ -157,6 +158,40 @@ def check_configs(
                 raise KeyError("Fix config.yaml before proceeding")
 
 
+def get_git_hash_date():
+    """Get git date and hash
+
+    Borrowed from SkyPortal https://skyportal.io
+
+    :return:
+    """
+    hash_date = dict()
+    try:
+        p = subprocess.Popen(
+            ["git", "log", "-1", '--format="%h %aI"'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=pathlib.Path(__file__).parent.absolute(),
+        )
+    except FileNotFoundError:
+        pass
+    else:
+        out, err = p.communicate()
+        if p.returncode == 0:
+            git_hash, git_date = (
+                out.decode("utf-8")
+                .strip()
+                .replace('"', "")
+                .split("T")[0]
+                .replace("-", "")
+                .split()
+            )
+            hash_date["hash"] = git_hash
+            hash_date["date"] = git_date
+
+    return hash_date
+
+
 class Kowalski:
     def __init__(self, yes=False):
         """
@@ -252,10 +287,10 @@ class Kowalski:
 
         cls.check_keyfile()
 
-        command = ["docker-compose", "-f", "docker-compose.yaml", "up", "-d"]
-
         if build:
-            command += ["--build"]
+            cls.build()
+
+        command = ["docker-compose", "-f", "docker-compose.yaml", "up", "-d"]
 
         # start up Kowalski
         print("Starting up")
@@ -291,6 +326,25 @@ class Kowalski:
         with status("Checking configuration"):
             check_configs(config_wildcards=config_wildcards)
 
+        # load config
+        with open(
+            pathlib.Path(__file__).parent.absolute() / "config.yaml"
+        ) as config_yaml:
+            config = yaml.load(config_yaml, Loader=yaml.FullLoader)["kowalski"]
+
+        # get git version:
+        git_hash_date = get_git_hash_date()
+        version = (
+            f"v{config['server']['version']}"
+            f"+git{git_hash_date.get('date', datetime.datetime.utcnow().strftime('%Y%m%d'))}"
+            f".{git_hash_date.get('hash', 'unknown')}"
+        )
+        with open(
+            pathlib.Path(__file__).parent.absolute() / "version.txt", "w"
+        ) as version_file:
+            version_file.write(f"{version}\n")
+
+        # check MongoDB keyfile
         cls.check_keyfile()
 
         subprocess.run(command)

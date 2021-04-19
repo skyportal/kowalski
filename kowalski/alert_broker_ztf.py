@@ -21,6 +21,7 @@ import multiprocessing
 import numpy as np
 import os
 import pandas as pd
+import pathlib
 import requests
 from requests.packages.urllib3.util.retry import Retry
 import subprocess
@@ -807,6 +808,15 @@ class AlertWorker:
         self.verbose = kwargs.get("verbose", 2)
         self.config = config
 
+        # Kowalski version
+        path_version_file = pathlib.Path(__file__).parent.absolute() / "version.txt"
+        version = f"v{self.config['server']['version']}"
+        if path_version_file.exists():
+            with open(
+                pathlib.Path(__file__).parent.absolute() / "version.txt", "r"
+            ) as version_file:
+                version = version_file.read().strip()
+
         # MongoDB collections to store the alerts:
         self.collection_alerts = self.config["database"]["collections"]["alerts_ztf"]
         self.collection_alerts_aux = self.config["database"]["collections"][
@@ -852,7 +862,8 @@ class AlertWorker:
         # session to talk to SkyPortal
         self.session = requests.Session()
         self.session_headers = {
-            "Authorization": f"token {config['skyportal']['token']}"
+            "Authorization": f"token {config['skyportal']['token']}",
+            "User-Agent": f"Kowalski {version}",
         }
 
         retries = Retry(
