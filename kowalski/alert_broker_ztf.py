@@ -852,7 +852,8 @@ class AlertWorker:
         # session to talk to SkyPortal
         self.session = requests.Session()
         self.session_headers = {
-            "Authorization": f"token {config['skyportal']['token']}"
+            "Authorization": f"token {config['skyportal']['token']}",
+            "User-Agent": "Kowalski",
         }
 
         retries = Retry(
