@@ -1,131 +1,135 @@
-import argparse
 from bs4 import BeautifulSoup
+import fire
 import multiprocessing as mp
-from multiprocessing.pool import ThreadPool
-import os
+import os.path
 import pandas as pd
 import pathlib
 import requests
 import subprocess
-from tqdm.auto import tqdm
-
+from tqdm import tqdm
+from urllib.parse import urljoin
 
 from utils import load_config
 
 
-""" load config and secrets """
-# config = load_config(path='../', config_file='config.yaml')['kowalski']
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(
+    path=pathlib.Path(__file__).parent.absolute(),
+    config_file="config.yaml",
+)["kowalski"]
 
 
-def collect_urls(rc):
-    bu = os.path.join(base_url, f"rc{rc:02d}")
+def collect_urls(readout_channel: int) -> list:
+    """Collect URLs of individual matchfiles from IPAC's depo
+
+    Format as of April 2021:
+    https://ztfweb.ipac.caltech.edu/ztf/ops/srcmatch/rc00/fr000201-000250/ztf_000245_zg_c01_q1_match.pytable
+
+    :param readout_channel: int c [0, 63]
+    :return:
+    """
+    base_url: str = "https://ztfweb.ipac.caltech.edu/ztf/ops/srcmatch/"
+
+    base_url_readout_channel = urljoin(base_url, f"rc{readout_channel:02d}")
 
     response = requests.get(
-        bu, auth=(config["ztf_depot"]["username"], config["ztf_depot"]["password"])
+        base_url_readout_channel,
+        auth=(config["ztf_depot"]["username"], config["ztf_depot"]["password"]),
     )
     html = response.text
 
-    # link_list = []
     soup = BeautifulSoup(html, "html.parser")
     links = soup.findAll("a")
 
+    link_list = []
+
     for link in links:
         txt = link.getText()
-        if "fr" in txt:
-            bu_fr = os.path.join(bu, txt)
+        if "fr" not in txt:
+            continue
 
-            response_fr = requests.get(
-                bu_fr,
-                auth=(config["ztf_depot"]["username"], config["ztf_depot"]["password"]),
-            )
-            html_fr = response_fr.text
+        bu_fr = os.path.join(base_url_readout_channel, txt)
 
-            soup_fr = BeautifulSoup(html_fr, "html.parser")
-            links_fr = soup_fr.findAll("a")
+        response_fr = requests.get(
+            bu_fr,
+            auth=(config["ztf_depot"]["username"], config["ztf_depot"]["password"]),
+        )
+        html_fr = response_fr.text
 
-            for link_fr in links_fr:
-                txt_fr = link_fr.getText()
-                if txt_fr.endswith(".pytable"):
-                    # print('\t', txt_fr)
-                    urls.append(
-                        {"rc": rc, "name": txt_fr, "url": os.path.join(bu_fr, txt_fr)}
-                    )
-                    # fixme:
-                    # break
+        soup_fr = BeautifulSoup(html_fr, "html.parser")
+        links_fr = soup_fr.findAll("a")
 
+        for link_fr in links_fr:
+            txt_fr = link_fr.getText()
+            if txt_fr.endswith(".pytable"):
+                link_list.append(
+                    {
+                        "rc": readout_channel,
+                        "name": txt_fr,
+                        "url": urljoin(bu_fr, txt_fr),
+                    }
+                )
 
-def fetch_url(urlrc, source="ipac"):
-    url, _rc = urlrc
-
-    p = os.path.join(str(path), str(_rc), os.path.basename(url))
-    if not os.path.exists(p):
-        if source == "ipac":
-            subprocess.run(
-                [
-                    "wget",
-                    f"--http-user={config['ztf_depot']['username']}",
-                    f"--http-passwd={config['ztf_depot']['password']}",
-                    "-q",
-                    "--timeout=600",
-                    "--waitretry=10",
-                    "--tries=5",
-                    "-O",
-                    p,
-                    url,
-                ]
-            )
-        elif source == "supernova":
-            _url = url.replace("https://", "/media/Data2/Matchfiles/")
-            subprocess.run(["scp", f"duev@supernova.caltech.edu:{_url}", path])
-
-        # time.sleep(0.5)
+    return link_list
 
 
-def gunzip(f):
-    subprocess.run(["gunzip", f])
+def fetch_url(argument_list):
+    """Download matchfile from IPAC's depo given its url, save to base_path"""
+    # unpack arguments
+    base_path, url = argument_list
+
+    path = base_path / pathlib.Path(url).name
+    if not path.exists():
+        subprocess.run(
+            [
+                "wget",
+                f"--http-user={config['ztf_depot']['username']}",
+                f"--http-passwd={config['ztf_depot']['password']}",
+                "-q",
+                "--timeout=600",
+                "--waitretry=10",
+                "--tries=5",
+                "-O",
+                str(path),
+                url,
+            ]
+        )
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+def run(
+    tag: str = "20210401",
+    path_out: str = "./",
+    force: bool = False,
+    upload_to_gcp: bool = False,
+    remove_upon_upload_to_gcp: bool = False,
+):
+    """Collect urls of matchfiles from IPAC's depo, download them, and optionally move to GCS
 
-    parser.add_argument(
-        "--tag", type=str, default="20201201", help="matchfile release time tag"
-    )
+    :param tag: matchfiles release time tag
+    :param path_out: output path for fetched data
+    :param force: forcefully reload url list and re-try fetching everything
+    :param upload_to_gcp: upload to Google Cloud Storage?
+    :param remove_upon_upload_to_gcp: remove afterwards?
+    :return:
+    """
 
-    args = parser.parse_args()
-
-    t_tag = args.tag
-
-    path_base = pathlib.Path("./")
-    # path_base = pathlib.Path('/_tmp/')
-
-    path = path_base / f"ztf_matchfiles_{t_tag}/"
+    path = pathlib.Path(path_out) / f"ztf_matchfiles_{tag}/"
     if not path.exists():
         path.mkdir(exist_ok=True, parents=True)
 
-    for rc in range(0, 64):
-        path_rc = path / str(rc)
-        if not path_rc.exists():
-            path_rc.mkdir(exist_ok=True, parents=True)
-
-    path_urls = path_base / f"ztf_matchfiles_{t_tag}.csv"
-
-    # n_rc = 1
     n_rc = 64
 
-    if not path_urls.exists():
+    path_urls = pathlib.Path(path_out) / f"ztf_matchfiles_{tag}.csv"
 
-        base_url = "https://ztfweb.ipac.caltech.edu/ztf/ops/srcmatch/"
-
+    if not path_urls.exists() or force:
         # store urls
         urls = []
 
         print("Collecting urls of matchfiles to download:")
 
         # collect urls of matchfiles to download
-        with ThreadPool(processes=20) as pool:
-            list(tqdm(pool.imap(collect_urls, range(0, n_rc)), total=n_rc))
+        with mp.Pool(processes=min(mp.cpu_count(), 20)) as pool:
+            for url_list in tqdm(pool.imap(collect_urls, range(0, n_rc)), total=n_rc):
+                urls.extend(url_list)
 
         df_mf = pd.DataFrame.from_records(urls)
         print(df_mf)
@@ -136,48 +140,59 @@ if __name__ == "__main__":
         print(df_mf)
 
     # check what's (already) on GCS:
-    ongs = []
-    for rc in tqdm(range(0, n_rc), total=n_rc):
-        ongs_rc = (
-            subprocess.check_output(
+    on_cloud = []
+    if upload_to_gcp:
+        for readout_channel in tqdm(range(0, n_rc), total=n_rc):
+            on_cloud_readout_channel = (
+                subprocess.check_output(
+                    [
+                        "gsutil",
+                        "ls",
+                        f"gs://ztf-matchfiles-{tag}/{readout_channel}/",
+                    ]
+                )
+                .decode("utf-8")
+                .strip()
+                .split("\n")
+            )
+            on_cloud.extend(
                 [
-                    "gsutil",
-                    "ls",
-                    f"gs://ztf-matchfiles-{t_tag}/{rc}/",
+                    pathlib.Path(table).name
+                    for table in on_cloud_readout_channel
+                    if table.endswith("pytable")
                 ]
             )
-            .decode("utf-8")
-            .strip()
-            .split("\n")
-        )
-        ongs += [pathlib.Path(ong).name for ong in ongs_rc if ong.endswith("pytable")]
-    # print(ongs)
 
     # matchfiles that are not on GCS:
-    # print(df_mf['name'].isin(ongs))
-    w = ~(df_mf["name"].isin(ongs))
+    mask_to_be_fetched = ~(df_mf["name"].isin(on_cloud))
 
-    # print(pd.unique(df_mf.loc[w, 'rc']))
+    print(f"Downloading {mask_to_be_fetched.sum()} matchfiles:")
 
-    print(f"Downloading {w.sum()} matchfiles:")
-
-    url_list = [(r.url, r.rc) for r in df_mf.loc[w].itertuples()]
+    argument_lists = [
+        (path, row.url) for row in df_mf.loc[mask_to_be_fetched].itertuples()
+    ]
 
     # download
     with mp.Pool(processes=4) as pool:
-        list(tqdm(pool.imap(fetch_url, url_list), total=len(url_list)))
+        for _ in tqdm(pool.imap(fetch_url, argument_lists), total=len(argument_lists)):
+            pass
 
     # move to GCS:
-    for rc in tqdm(range(0, n_rc), total=n_rc):
+    if upload_to_gcp:
         # move to gs
         subprocess.run(
             [
-                "/usr/local/bin/gsutil",
+                "gsutil",
                 "-m",
                 "mv",
-                str(path / f"{rc}/*.pytable"),
-                f"gs://ztf-matchfiles-{t_tag}/{rc}/",
+                str(path / "*.pytable"),
+                f"gs://ztf-matchfiles-{tag}/",
             ]
         )
         # remove locally
-        # subprocess.run(["rm", "rf", f"/_tmp/ztf_matchfiles_{t_tag}/{rc}/"])
+        if remove_upon_upload_to_gcp:
+            subprocess.run(["rm", "rf", f"/_tmp/ztf_matchfiles_{tag}/"])
+
+
+if __name__ == "__main__":
+    fire.Fire(run)

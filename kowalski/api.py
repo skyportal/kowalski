@@ -224,9 +224,9 @@ async def auth_post(request: web.Request) -> web.Response:
                         ),
                     )
                 jwt_token = jwt.encode(
-                    payload,
-                    request.app["JWT"]["JWT_SECRET"],
-                    request.app["JWT"]["JWT_ALGORITHM"],
+                    payload=payload,
+                    key=request.app["JWT"]["JWT_SECRET"],
+                    algorithm=request.app["JWT"]["JWT_ALGORITHM"],
                 )
 
                 return web.json_response({"status": "success", "token": jwt_token})
