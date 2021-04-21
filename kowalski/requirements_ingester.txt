@@ -2,6 +2,7 @@ aiofiles>=0.6.0
 aiohttp>=3.7.3
 astropy>=4.2
 bcrypt>=3.2.0
+beautifulsoup4>=4.9.3
 bokeh>=2.2.3
 confluent_kafka>=1.5.0
 cryptography>=3.2.1
