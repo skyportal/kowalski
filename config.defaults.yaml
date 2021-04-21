@@ -17,12 +17,12 @@ kowalski:
     fernet_key: "irjsxvfJdqSJ2fcnpPacbH972dt-RPMMLE48PQ8J5Hg="
 
   ztf:
-    mountain_ip:
-    mountain_port:
-    mountain_username:
-    mountain_password:
-    mountain_bind_ip:
-    mountain_bind_port:
+    mountain_ip: null
+    mountain_port: null
+    mountain_username: null
+    mountain_password: null
+    mountain_bind_ip: null
+    mountain_bind_port: null
 
   path:
     app: "/app"
