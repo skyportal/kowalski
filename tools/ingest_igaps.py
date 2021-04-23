@@ -233,7 +233,20 @@ def process_file(file, collection, batch_size):
 
         log(f"{file}: processing batch # {chunk_index + 1}")
 
+        for col, dtype in dataframe_chunk.dtypes.items():
+            if dtype == np.object:
+                dataframe_chunk[col] = dataframe_chunk[col].apply(
+                    lambda x: x.decode("utf-8")
+                )
+
         batch = dataframe_chunk.to_dict(orient="records")
+        batch = dataframe_chunk.fillna("DROPMEPLEASE").to_dict(orient="records")
+
+        # pop nulls - save space
+        batch = [
+            {key: value for key, value in document.items() if value != "DROPMEPLEASE"}
+            for document in batch
+        ]
 
         bad_document_indexes = []
 
