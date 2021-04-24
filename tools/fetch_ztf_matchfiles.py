@@ -7,6 +7,7 @@ import pathlib
 import requests
 import subprocess
 from tqdm import tqdm
+from typing import Sequence
 from urllib.parse import urljoin
 
 from utils import load_config
@@ -72,7 +73,7 @@ def collect_urls(readout_channel: int) -> list:
     return link_list
 
 
-def fetch_url(argument_list):
+def fetch_url(argument_list: Sequence):
     """Download matchfile from IPAC's depo given its url, save to base_path"""
     # unpack arguments
     base_path, url = argument_list
