@@ -1,8 +1,6 @@
 import datetime
-import multiprocessing
-
 import fire
-import multiprocessing as mp
+import multiprocessing
 import numpy as np
 import os
 import pandas as pd
@@ -393,7 +391,7 @@ def run(
     # for a more even job distribution:
     random.shuffle(input_list)
 
-    with mp.Pool(processes=num_proc) as pool:
+    with multiprocessing.Pool(processes=num_proc) as pool:
         for _ in tqdm(pool.imap(process_file, input_list), total=len(files)):
             pass
 
