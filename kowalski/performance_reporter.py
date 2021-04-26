@@ -18,12 +18,6 @@ from utils import load_config, log
 """ load config and secrets """
 config = load_config(config_file="config.yaml")["kowalski"]
 
-p_base = config["path"]["logs"]
-
-log_dir = pathlib.Path(p_base)
-log_files = list(log_dir.glob("dask_cluster*"))
-actions = defaultdict(list)
-
 action_patterns = {
     "Mongification": "mongification",
     "ML": "MLing",
@@ -76,6 +70,11 @@ skyportal_actions = [
 
 
 def generate_report(output_path, start_date, end_date):
+    p_base = config["path"]["logs"]
+
+    log_dir = pathlib.Path(p_base)
+    log_files = list(log_dir.glob("dask_cluster*"))
+    actions = defaultdict(list)
 
     for log_file in log_files:
         with open(log_file) as f_l:
@@ -221,7 +220,7 @@ def generate_report(output_path, start_date, end_date):
         d = pdf.infodict()
         d["Title"] = "Kowalski Daily Performance Summary"
         d["Author"] = "kowalski-bot"
-        d["ModDate"] = datetime.datetime.today()
+        d["ModDate"] = datetime.datetime.utcnow()
 
 
 def send_report(report_path):
@@ -245,13 +244,16 @@ def main(days_ago, send_to_slack=False):
 
     while True:
         try:
+            p_base = config["path"]["logs"]
+            log_dir = pathlib.Path(p_base)
+
             # Delete any old reports to save space
             old_reports = list(log_dir.glob("kowalski_perf_report_*"))
             for report in old_reports:
                 pathlib.Path.unlink(report)
 
             # Set up new run
-            end_date = datetime.datetime.today()
+            end_date = datetime.datetime.utcnow()
             start_date = end_date - datetime.timedelta(days=days_ago)
             today = end_date.strftime("%Y%m%d")
             output_file = f"kowalski_perf_report_{today}.pdf"
