@@ -894,7 +894,7 @@ class AlertWorker:
             log(e)
 
         # get ZTF alert stream ids to program ids mapping
-        self.ztf_program_id_to_stream_id = {1: 1, 2: 2, 3: 3}
+        self.ztf_program_id_to_stream_id = {0: 3, 1: 1, 2: 2, 3: 3}
         try:
             with timer("Getting ZTF alert stream ids from SkyPortal", self.verbose > 1):
                 response = self.api_skyportal("GET", "/api/streams")
@@ -908,6 +908,8 @@ class AlertWorker:
                     if stream.get("name") == "ZTF Public+Partnership":
                         self.ztf_program_id_to_stream_id[2] = stream.get("id", 2)
                     if stream.get("name") == "ZTF Public+Partnership+Caltech":
+                        # programid=0 is engineering data
+                        self.ztf_program_id_to_stream_id[0] = stream.get("id", 3)
                         self.ztf_program_id_to_stream_id[3] = stream.get("id", 3)
                 log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
             else:
