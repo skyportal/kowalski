@@ -892,7 +892,29 @@ class AlertWorker:
                 raise ValueError("Failed to get ZTF instrument_id from SkyPortal")
         except Exception as e:
             log(e)
-            # config['misc']['broker'] = False
+
+        # get ZTF alert stream ids to program ids mapping
+        self.ztf_program_id_to_stream_id = {1: 1, 2: 2, 3: 3}
+        try:
+            with timer("Getting ZTF alert stream ids from SkyPortal", self.verbose > 1):
+                response = self.api_skyportal("GET", "/api/streams")
+            if (
+                response.json()["status"] == "success"
+                and len(response.json()["data"]) > 0
+            ):
+                for stream in response.json()["data"]:
+                    if stream.get("name") == "ZTF Public":
+                        self.ztf_program_id_to_stream_id[1] = stream.get("id", 1)
+                    if stream.get("name") == "ZTF Public+Partnership":
+                        self.ztf_program_id_to_stream_id[2] = stream.get("id", 2)
+                    if stream.get("name") == "ZTF Public+Partnership+Caltech":
+                        self.ztf_program_id_to_stream_id[3] = stream.get("id", 3)
+                log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
+            else:
+                log("Failed to get ZTF instrument_id from SkyPortal")
+                raise ValueError("Failed to get ZTF alert stream ids from SkyPortal")
+        except Exception as e:
+            log(e)
 
         # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
         # including archival photometry and cross-matches:
@@ -1337,9 +1359,13 @@ class AlertWorker:
         ):
             df_photometry = make_photometry(alert)
 
+            df_photometry["stream_ids"] = df_photometry["programid"].apply(
+                lambda programid: self.ztf_program_id_to_stream_id[programid]
+            )
+
             photometry = {
                 "obj_id": alert["objectId"],
-                "stream_ids": df_photometry["programid"].tolist(),
+                "stream_ids": df_photometry["stream_ids"].tolist(),
                 "instrument_id": self.instrument_id,
                 "mjd": df_photometry["mjd"].tolist(),
                 "flux": df_photometry["flux"].tolist(),
