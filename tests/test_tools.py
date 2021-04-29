@@ -86,4 +86,4 @@ class TestTools:
         ingested_entries = list(self.mongo.db[collection].find({}, {"_id": 1}))
         log(f"Ingested features of {len(ingested_entries)} sources")
 
-        assert len(ingested_entries) == 100
+        assert len(ingested_entries) == 5449
