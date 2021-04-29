@@ -81,10 +81,7 @@ class TestTools:
         tag = get_default_args(run_ztf_public).get("tag")
         collection = f"ZTF_public_sources_{tag}"
 
-        run_ztf_public(
-            path="/app/data/catalogs",
-            num_processes=1,
-        )
+        run_ztf_public(path="/app/data/catalogs", num_proc=1)
 
         ingested_entries = list(self.mongo.db[collection].find({}, {"_id": 1}))
         log(f"Ingested features of {len(ingested_entries)} sources")
