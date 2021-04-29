@@ -3,6 +3,7 @@ import pytest
 from ingest_ztf_source_features import run as run_ztf_source_features
 from ingest_vlass import run as run_vlass
 from ingest_igaps import run as run_igaps
+from ingest_ztf_public import run as run_ztf_public
 from utils import get_default_args, load_config, log, Mongo
 
 
@@ -67,6 +68,20 @@ class TestTools:
         collection = "IGAPS_DR2"
 
         run_igaps(
+            path="/app/data/catalogs",
+            num_processes=1,
+        )
+
+        ingested_entries = list(self.mongo.db[collection].find({}, {"_id": 1}))
+        log(f"Ingested features of {len(ingested_entries)} sources")
+
+        assert len(ingested_entries) == 100
+
+    def test_ingest_ztf_public(self):
+        tag = get_default_args(run_ztf_public).get("tag")
+        collection = f"ZTF_public_sources_{tag}"
+
+        run_ztf_public(
             path="/app/data/catalogs",
             num_processes=1,
         )
