@@ -878,47 +878,35 @@ class AlertWorker:
 
         # get ZTF instrument id
         self.instrument_id = 1
-        try:
-            with timer("Getting ZTF instrument_id from SkyPortal", self.verbose > 1):
-                response = self.api_skyportal("GET", "/api/instrument", {"name": "ZTF"})
-            if (
-                response.json()["status"] == "success"
-                and len(response.json()["data"]) > 0
-            ):
-                self.instrument_id = response.json()["data"][0]["id"]
-                log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
-            else:
-                log("Failed to get ZTF instrument_id from SkyPortal")
-                raise ValueError("Failed to get ZTF instrument_id from SkyPortal")
-        except Exception as e:
-            log(e)
+        with timer("Getting ZTF instrument_id from SkyPortal", self.verbose > 1):
+            response = self.api_skyportal("GET", "/api/instrument", {"name": "ZTF"})
+        if response.json()["status"] == "success" and len(response.json()["data"]) > 0:
+            self.instrument_id = response.json()["data"][0]["id"]
+            log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
+        else:
+            log("Failed to get ZTF instrument_id from SkyPortal")
+            raise ValueError("Failed to get ZTF instrument_id from SkyPortal")
 
         # get ZTF alert stream ids to program ids mapping
-        self.ztf_program_id_to_stream_id = {0: 3, 1: 1, 2: 2, 3: 3}
-        try:
-            with timer("Getting ZTF alert stream ids from SkyPortal", self.verbose > 1):
-                response = self.api_skyportal("GET", "/api/streams")
-            if (
-                response.json()["status"] == "success"
-                and len(response.json()["data"]) > 0
-            ):
-                for stream in response.json()["data"]:
-                    if stream.get("name") == "ZTF Public":
-                        self.ztf_program_id_to_stream_id[1] = stream["id"]
-                    if stream.get("name") == "ZTF Public+Partnership":
-                        self.ztf_program_id_to_stream_id[2] = stream["id"]
-                    if stream.get("name") == "ZTF Public+Partnership+Caltech":
-                        # programid=0 is engineering data
-                        self.ztf_program_id_to_stream_id[0] = stream["id"]
-                        self.ztf_program_id_to_stream_id[3] = stream["id"]
-                log(
-                    f"Got ZTF program id to SP stream id mapping: {self.ztf_program_id_to_stream_id}"
-                )
-            else:
-                log("Failed to get ZTF alert stream ids from SkyPortal")
-                raise ValueError("Failed to get ZTF alert stream ids from SkyPortal")
-        except Exception as e:
-            log(e)
+        self.ztf_program_id_to_stream_id = dict()
+        with timer("Getting ZTF alert stream ids from SkyPortal", self.verbose > 1):
+            response = self.api_skyportal("GET", "/api/streams")
+        if response.json()["status"] == "success" and len(response.json()["data"]) > 0:
+            for stream in response.json()["data"]:
+                if stream.get("name") == "ZTF Public":
+                    self.ztf_program_id_to_stream_id[1] = stream["id"]
+                if stream.get("name") == "ZTF Public+Partnership":
+                    self.ztf_program_id_to_stream_id[2] = stream["id"]
+                if stream.get("name") == "ZTF Public+Partnership+Caltech":
+                    # programid=0 is engineering data
+                    self.ztf_program_id_to_stream_id[0] = stream["id"]
+                    self.ztf_program_id_to_stream_id[3] = stream["id"]
+            log(
+                f"Got ZTF program id to SP stream id mapping: {self.ztf_program_id_to_stream_id}"
+            )
+        else:
+            log("Failed to get ZTF alert stream ids from SkyPortal")
+            raise ValueError("Failed to get ZTF alert stream ids from SkyPortal")
 
         # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
         # including archival photometry and cross-matches:
