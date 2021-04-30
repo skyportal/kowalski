@@ -878,21 +878,40 @@ class AlertWorker:
 
         # get ZTF instrument id
         self.instrument_id = 1
-        try:
-            with timer("Getting ZTF instrument_id from SkyPortal", self.verbose > 1):
-                response = self.api_skyportal("GET", "/api/instrument", {"name": "ZTF"})
-            if (
-                response.json()["status"] == "success"
-                and len(response.json()["data"]) > 0
-            ):
-                self.instrument_id = response.json()["data"][0]["id"]
-                log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
-            else:
-                log("Failed to get ZTF instrument_id from SkyPortal")
-                raise ValueError("Failed to get ZTF instrument_id from SkyPortal")
-        except Exception as e:
-            log(e)
-            # config['misc']['broker'] = False
+        with timer("Getting ZTF instrument_id from SkyPortal", self.verbose > 1):
+            response = self.api_skyportal("GET", "/api/instrument", {"name": "ZTF"})
+        if response.json()["status"] == "success" and len(response.json()["data"]) > 0:
+            self.instrument_id = response.json()["data"][0]["id"]
+            log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
+        else:
+            log("Failed to get ZTF instrument_id from SkyPortal")
+            raise ValueError("Failed to get ZTF instrument_id from SkyPortal")
+
+        # get ZTF alert stream ids to program ids mapping
+        self.ztf_program_id_to_stream_id = dict()
+        with timer("Getting ZTF alert stream ids from SkyPortal", self.verbose > 1):
+            response = self.api_skyportal("GET", "/api/streams")
+        if response.json()["status"] == "success" and len(response.json()["data"]) > 0:
+            for stream in response.json()["data"]:
+                if stream.get("name") == "ZTF Public":
+                    self.ztf_program_id_to_stream_id[1] = stream["id"]
+                if stream.get("name") == "ZTF Public+Partnership":
+                    self.ztf_program_id_to_stream_id[2] = stream["id"]
+                if stream.get("name") == "ZTF Public+Partnership+Caltech":
+                    # programid=0 is engineering data
+                    self.ztf_program_id_to_stream_id[0] = stream["id"]
+                    self.ztf_program_id_to_stream_id[3] = stream["id"]
+            if len(self.ztf_program_id_to_stream_id) != 4:
+                log("Failed to map ZTF alert stream ids from SkyPortal to program ids")
+                raise ValueError(
+                    "Failed to map ZTF alert stream ids from SkyPortal to program ids"
+                )
+            log(
+                f"Got ZTF program id to SP stream id mapping: {self.ztf_program_id_to_stream_id}"
+            )
+        else:
+            log("Failed to get ZTF alert stream ids from SkyPortal")
+            raise ValueError("Failed to get ZTF alert stream ids from SkyPortal")
 
         # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
         # including archival photometry and cross-matches:
@@ -1325,12 +1344,10 @@ class AlertWorker:
                 )
                 log(response.json())
 
-    def alert_put_photometry(self, alert, groups):
+    def alert_put_photometry(self, alert):
         """PUT photometry to SkyPortal
 
         :param alert:
-        :param groups: array of dicts containing at least
-                       [{"group_id": <group_id>, "permissions": <list of program ids the group has access to>}]
         :return:
         """
         with timer(
@@ -1339,49 +1356,37 @@ class AlertWorker:
         ):
             df_photometry = make_photometry(alert)
 
-        # post data from different program_id's
-        for pid in set(df_photometry.programid.unique()):
-            group_ids = [
-                f.get("group_id") for f in groups if pid in f.get("permissions", [1])
-            ]
+            df_photometry["stream_ids"] = df_photometry["programid"].apply(
+                lambda programid: self.ztf_program_id_to_stream_id[programid]
+            )
 
-            if len(group_ids) > 0:
-                pid_mask = df_photometry.programid == int(pid)
+            photometry = {
+                "obj_id": alert["objectId"],
+                "stream_ids": df_photometry["stream_ids"].tolist(),
+                "instrument_id": self.instrument_id,
+                "mjd": df_photometry["mjd"].tolist(),
+                "flux": df_photometry["flux"].tolist(),
+                "fluxerr": df_photometry["fluxerr"].tolist(),
+                "zp": df_photometry["zp"].tolist(),
+                "magsys": df_photometry["zpsys"].tolist(),
+                "filter": df_photometry["ztf_filter"].tolist(),
+                "ra": df_photometry["ra"].tolist(),
+                "dec": df_photometry["dec"].tolist(),
+            }
 
-                photometry = {
-                    "obj_id": alert["objectId"],
-                    "group_ids": group_ids,
-                    "instrument_id": self.instrument_id,
-                    "mjd": df_photometry.loc[pid_mask, "mjd"].tolist(),
-                    "flux": df_photometry.loc[pid_mask, "flux"].tolist(),
-                    "fluxerr": df_photometry.loc[pid_mask, "fluxerr"].tolist(),
-                    "zp": df_photometry.loc[pid_mask, "zp"].tolist(),
-                    "magsys": df_photometry.loc[pid_mask, "zpsys"].tolist(),
-                    "filter": df_photometry.loc[pid_mask, "ztf_filter"].tolist(),
-                    "ra": df_photometry.loc[pid_mask, "ra"].tolist(),
-                    "dec": df_photometry.loc[pid_mask, "dec"].tolist(),
-                }
-
-                if (len(photometry.get("flux", ())) > 0) or (
-                    len(photometry.get("fluxerr", ())) > 0
+            if (len(photometry.get("flux", ())) > 0) or (
+                len(photometry.get("fluxerr", ())) > 0
+            ):
+                with timer(
+                    f"Posting photometry of {alert['objectId']} {alert['candid']} to SkyPortal",
+                    self.verbose > 1,
                 ):
-                    with timer(
-                        f"Posting photometry of {alert['objectId']} {alert['candid']}, "
-                        f"program_id={pid} to SkyPortal",
-                        self.verbose > 1,
-                    ):
-                        response = self.api_skyportal(
-                            "PUT", "/api/photometry", photometry
-                        )
-                    if response.json()["status"] == "success":
-                        log(
-                            f"Posted {alert['objectId']} program_id={pid} photometry to SkyPortal"
-                        )
-                    else:
-                        log(
-                            f"Failed to post {alert['objectId']} program_id={pid} photometry to SkyPortal"
-                        )
-                    log(response.json())
+                    response = self.api_skyportal("PUT", "/api/photometry", photometry)
+                if response.json()["status"] == "success":
+                    log(f"Posted {alert['objectId']} photometry to SkyPortal")
+                else:
+                    log(f"Failed to post {alert['objectId']} photometry to SkyPortal")
+                log(response.json())
 
     def alert_sentinel_skyportal(self, alert, prv_candidates, passed_filters):
         """
@@ -1451,7 +1456,7 @@ class AlertWorker:
                 log(e)
                 alert["prv_candidates"] = prv_candidates
 
-            self.alert_put_photometry(alert, passed_filters)
+            self.alert_put_photometry(alert)
 
             # post thumbnails
             self.alert_post_thumbnails(alert)
@@ -1542,7 +1547,7 @@ class AlertWorker:
             # post alert photometry with all group_ids in single call to /api/photometry
             alert["prv_candidates"] = prv_candidates
 
-            self.alert_put_photometry(alert, groups)
+            self.alert_put_photometry(alert)
 
 
 class WorkerInitializer(dask.distributed.WorkerPlugin):
