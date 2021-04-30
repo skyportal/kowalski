@@ -901,7 +901,7 @@ class AlertWorker:
                     # programid=0 is engineering data
                     self.ztf_program_id_to_stream_id[0] = stream["id"]
                     self.ztf_program_id_to_stream_id[3] = stream["id"]
-            if len(self.ztf_program_id_to_stream_id) == 0:
+            if len(self.ztf_program_id_to_stream_id) != 4:
                 log("Failed to map ZTF alert stream ids from SkyPortal to program ids")
                 raise ValueError(
                     "Failed to map ZTF alert stream ids from SkyPortal to program ids"
