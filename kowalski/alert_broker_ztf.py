@@ -904,13 +904,13 @@ class AlertWorker:
             ):
                 for stream in response.json()["data"]:
                     if stream.get("name") == "ZTF Public":
-                        self.ztf_program_id_to_stream_id[1] = stream.get("id", 1)
+                        self.ztf_program_id_to_stream_id[1] = stream["id"]
                     if stream.get("name") == "ZTF Public+Partnership":
-                        self.ztf_program_id_to_stream_id[2] = stream.get("id", 2)
+                        self.ztf_program_id_to_stream_id[2] = stream["id"]
                     if stream.get("name") == "ZTF Public+Partnership+Caltech":
                         # programid=0 is engineering data
-                        self.ztf_program_id_to_stream_id[0] = stream.get("id", 3)
-                        self.ztf_program_id_to_stream_id[3] = stream.get("id", 3)
+                        self.ztf_program_id_to_stream_id[0] = stream["id"]
+                        self.ztf_program_id_to_stream_id[3] = stream["id"]
                 log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
             else:
                 log("Failed to get ZTF instrument_id from SkyPortal")
