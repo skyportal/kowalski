@@ -911,9 +911,11 @@ class AlertWorker:
                         # programid=0 is engineering data
                         self.ztf_program_id_to_stream_id[0] = stream["id"]
                         self.ztf_program_id_to_stream_id[3] = stream["id"]
-                log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
+                log(
+                    f"Got ZTF program id to SP stream id mapping: {self.ztf_program_id_to_stream_id}"
+                )
             else:
-                log("Failed to get ZTF instrument_id from SkyPortal")
+                log("Failed to get ZTF alert stream ids from SkyPortal")
                 raise ValueError("Failed to get ZTF alert stream ids from SkyPortal")
         except Exception as e:
             log(e)
