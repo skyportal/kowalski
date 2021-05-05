@@ -54,7 +54,7 @@ class TestTools:
         sources_collection = f"ZTF_sources_{tag}"
         exposures_collection = f"ZTF_exposures_{tag}"
         run_ztf_matchfiles(
-            path="/data/ztf_matchfiles",
+            path="/app/data/ztf_matchfiles",
             tag=tag,
             num_proc=1,
         )
