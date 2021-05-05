@@ -50,7 +50,7 @@ class TestTools:
         assert len(ingested_entries) == 123
 
     def test_ingest_ztf_matchfiles(self):
-        tag = "20201201"
+        tag = "test"
         sources_collection = f"ZTF_sources_{tag}"
         exposures_collection = f"ZTF_exposures_{tag}"
         run_ztf_matchfiles(
