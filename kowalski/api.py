@@ -216,7 +216,9 @@ async def auth_post(request: web.Request) -> web.Response:
             if select is not None and check_password_hash(select["password"], password):
                 payload = {
                     "user_id": username,
-                    "created_at": datetime.datetime.utcnow(),
+                    "created_at": datetime.datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S+00:00"
+                    ),
                 }
                 # optionally set expiration date
                 if request.app["JWT"]["JWT_EXP_DELTA_SECONDS"] is not None:
