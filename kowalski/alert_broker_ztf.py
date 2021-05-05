@@ -1376,19 +1376,19 @@ class AlertWorker:
                 "dec": df_photometry["dec"].tolist(),
             }
 
-            if (len(photometry.get("flux", ())) > 0) or (
-                len(photometry.get("fluxerr", ())) > 0
+        if (len(photometry.get("flux", ())) > 0) or (
+            len(photometry.get("fluxerr", ())) > 0
+        ):
+            with timer(
+                f"Posting photometry of {alert['objectId']} {alert['candid']} to SkyPortal",
+                self.verbose > 1,
             ):
-                with timer(
-                    f"Posting photometry of {alert['objectId']} {alert['candid']} to SkyPortal",
-                    self.verbose > 1,
-                ):
-                    response = self.api_skyportal("PUT", "/api/photometry", photometry)
-                if response.json()["status"] == "success":
-                    log(f"Posted {alert['objectId']} photometry to SkyPortal")
-                else:
-                    log(f"Failed to post {alert['objectId']} photometry to SkyPortal")
-                log(response.json())
+                response = self.api_skyportal("PUT", "/api/photometry", photometry)
+            if response.json()["status"] == "success":
+                log(f"Posted {alert['objectId']} photometry to SkyPortal")
+            else:
+                log(f"Failed to post {alert['objectId']} photometry to SkyPortal")
+            log(response.json())
 
     def alert_sentinel_skyportal(self, alert, prv_candidates, passed_filters):
         """
