@@ -54,8 +54,8 @@ class TestTools:
         sources_collection = f"ZTF_sources_{tag}"
         exposures_collection = f"ZTF_exposures_{tag}"
         run_ztf_matchfiles(
-            path="/data",
-            tag="20201201",
+            path="/data/ztf_matchfiles",
+            tag=tag,
             num_proc=1,
         )
 
