@@ -217,7 +217,7 @@ async def auth_post(request: web.Request) -> web.Response:
                 payload = {
                     "user_id": username,
                     "created_at": datetime.datetime.utcnow().strftime(
-                        "%Y-%m-%dT%H:%M:%S+00:00"
+                        "%Y-%m-%dT%H:%M:%S.%f+00:00"
                     ),
                 }
                 # optionally set expiration date
