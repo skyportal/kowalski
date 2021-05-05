@@ -56,7 +56,7 @@ class TestTools:
         run_ztf_matchfiles(
             path="/data",
             tag="20201201",
-            num_processes=1,
+            num_proc=1,
         )
 
         ingested_sources = list(self.mongo.db[sources_collection].find({}, {"_id": 1}))
