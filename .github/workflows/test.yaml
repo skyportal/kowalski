@@ -2,9 +2,7 @@ name: test
 
 on:
   push:
-    branches:
-      - master
-      - test-matchfiles
+    branches: [master]
   pull_request:
 
 jobs:
