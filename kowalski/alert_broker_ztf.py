@@ -646,6 +646,8 @@ def process_alert(record, topic):
             passed_filters = alert_filter__user_defined(
                 alert_worker.mongo.db, alert_worker.filter_templates, alert
             )
+        if alert_worker.verbose > 1:
+            log(f"{objectId} {candid} number of filters passed: {len(passed_filters)}")
 
         # post to SkyPortal
         alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
@@ -1374,19 +1376,19 @@ class AlertWorker:
                 "dec": df_photometry["dec"].tolist(),
             }
 
-            if (len(photometry.get("flux", ())) > 0) or (
-                len(photometry.get("fluxerr", ())) > 0
+        if (len(photometry.get("flux", ())) > 0) or (
+            len(photometry.get("fluxerr", ())) > 0
+        ):
+            with timer(
+                f"Posting photometry of {alert['objectId']} {alert['candid']} to SkyPortal",
+                self.verbose > 1,
             ):
-                with timer(
-                    f"Posting photometry of {alert['objectId']} {alert['candid']} to SkyPortal",
-                    self.verbose > 1,
-                ):
-                    response = self.api_skyportal("PUT", "/api/photometry", photometry)
-                if response.json()["status"] == "success":
-                    log(f"Posted {alert['objectId']} photometry to SkyPortal")
-                else:
-                    log(f"Failed to post {alert['objectId']} photometry to SkyPortal")
-                log(response.json())
+                response = self.api_skyportal("PUT", "/api/photometry", photometry)
+            if response.json()["status"] == "success":
+                log(f"Posted {alert['objectId']} photometry to SkyPortal")
+            else:
+                log(f"Failed to post {alert['objectId']} photometry to SkyPortal")
+            log(response.json())
 
     def alert_sentinel_skyportal(self, alert, prv_candidates, passed_filters):
         """
@@ -1401,11 +1403,11 @@ class AlertWorker:
         - if candidate exists:
           - get filter_ids of saved candidate from SP
           - post to /api/candidates with new_filter_ids, if any
-          - post alert curve with group_ids of corresponding filters in single call to /api/photometry
+          - post alert light curve in single PUT call to /api/photometry specifying stream_ids
         - if source exists:
           - get groups and check stream access
           - decide which points to post to what groups based on permissions
-          - post alert curve with all group_ids in single call to /api/photometry
+          - post alert light curve in single PUT call to /api/photometry specifying stream_ids
 
         :param alert: ZTF_alert with a stripped-off prv_candidates section
         :param prv_candidates: could be plain prv_candidates section of an alert, or extended alert history
@@ -1435,38 +1437,42 @@ class AlertWorker:
                 f"{alert['objectId']} {'is' if is_source else 'is not'} Source in SkyPortal"
             )
 
-        # obj does not exit in SP and passed at least one filter:
-        if (not is_candidate) and (not is_source) and (len(passed_filters) > 0):
-            # post candidate
-            filter_ids = [f.get("filter_id") for f in passed_filters]
-            self.alert_post_candidate(alert, filter_ids)
+        # obj does not exit in SP:
+        if (not is_candidate) and (not is_source):
+            # passed at least one filter?
+            if len(passed_filters) > 0:
+                # post candidate
+                filter_ids = [f.get("filter_id") for f in passed_filters]
+                self.alert_post_candidate(alert, filter_ids)
 
-            # post annotations
-            self.alert_post_annotations(alert, passed_filters)
+                # post annotations
+                self.alert_post_annotations(alert, passed_filters)
 
-            # post full light curve
-            try:
-                alert["prv_candidates"] = list(
-                    self.mongo.db[self.collection_alerts_aux].find(
-                        {"_id": alert["objectId"]}, {"prv_candidates": 1}, limit=1
-                    )
-                )[0]["prv_candidates"]
-            except Exception as e:
-                # this should never happen, but just in case
-                log(e)
-                alert["prv_candidates"] = prv_candidates
+                # post full light curve
+                try:
+                    alert["prv_candidates"] = list(
+                        self.mongo.db[self.collection_alerts_aux].find(
+                            {"_id": alert["objectId"]}, {"prv_candidates": 1}, limit=1
+                        )
+                    )[0]["prv_candidates"]
+                except Exception as e:
+                    # this should never happen, but just in case
+                    log(e)
+                    alert["prv_candidates"] = prv_candidates
 
-            self.alert_put_photometry(alert)
+                self.alert_put_photometry(alert)
 
-            # post thumbnails
-            self.alert_post_thumbnails(alert)
+                # post thumbnails
+                self.alert_post_thumbnails(alert)
 
-            # post source if autosave=True
-            autosave_group_ids = [
-                f.get("group_id") for f in passed_filters if f.get("autosave", False)
-            ]
-            if len(autosave_group_ids) > 0:
-                self.alert_post_source(alert, autosave_group_ids)
+                # post source if autosave=True
+                autosave_group_ids = [
+                    f.get("group_id")
+                    for f in passed_filters
+                    if f.get("autosave", False)
+                ]
+                if len(autosave_group_ids) > 0:
+                    self.alert_post_source(alert, autosave_group_ids)
 
         # obj exists in SP:
         else:
@@ -1479,8 +1485,6 @@ class AlertWorker:
                 # put annotations
                 self.alert_put_annotations(alert, passed_filters)
 
-            groups = deepcopy(passed_filters)
-            group_ids = [f.get("group_id") for f in groups]
             # already saved as a source?
             if is_source:
                 # get info on the corresponding groups:
@@ -1494,34 +1498,6 @@ class AlertWorker:
                 if response.json()["status"] == "success":
                     existing_groups = response.json()["data"]
                     existing_group_ids = [g["id"] for g in existing_groups]
-                    # get group permissions for alert photometry access
-                    for group_id in set(existing_group_ids) - set(group_ids):
-                        with timer(
-                            f"Getting info on group id={group_id} from SkyPortal",
-                            self.verbose > 1,
-                        ):
-                            # memoize under the assumption that permissions change extremely rarely
-                            response = self.api_skyportal_get_group(group_id)
-                        if self.verbose > 1:
-                            log(response.json())
-                        if response.json()["status"] == "success":
-                            # only public data (programid=1) by default:
-                            selector = {1}
-                            for stream in response.json()["data"]["streams"]:
-                                if "ztf" in stream["name"].lower():
-                                    selector.update(
-                                        set(stream["altdata"].get("selector", []))
-                                    )
-
-                            selector = list(selector)
-
-                            groups.append(
-                                {"group_id": group_id, "permissions": selector}
-                            )
-                        else:
-                            log(
-                                f"Failed to get info on group id={group_id} from SkyPortal"
-                            )
 
                     # post source if autosave=True and not already saved
                     autosave_group_ids = [
@@ -1535,7 +1511,7 @@ class AlertWorker:
                 else:
                     log(f"Failed to get source groups info on {alert['objectId']}")
             else:
-                # post source if autosave=True
+                # post source if autosave=True and not is_source
                 autosave_group_ids = [
                     f.get("group_id")
                     for f in passed_filters
@@ -1544,7 +1520,7 @@ class AlertWorker:
                 if len(autosave_group_ids) > 0:
                     self.alert_post_source(alert, autosave_group_ids)
 
-            # post alert photometry with all group_ids in single call to /api/photometry
+            # post alert photometry in single call to /api/photometry
             alert["prv_candidates"] = prv_candidates
 
             self.alert_put_photometry(alert)
