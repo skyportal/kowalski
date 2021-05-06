@@ -1,5 +1,5 @@
 import pytest
-import uuid
+from random import randrange
 
 from ingest_ztf_source_features import run as run_ztf_source_features
 from ingest_vlass import run as run_vlass
@@ -51,7 +51,7 @@ class TestTools:
         assert len(ingested_entries) == 123
 
     def test_ingest_ztf_matchfiles(self):
-        tag = str(uuid.uuid4())
+        tag = str(randrange(10000000, 99999999, 1))
         sources_collection = f"ZTF_sources_{tag}"
         exposures_collection = f"ZTF_exposures_{tag}"
         run_ztf_matchfiles(
