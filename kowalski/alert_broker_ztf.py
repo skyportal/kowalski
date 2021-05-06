@@ -1365,10 +1365,9 @@ class AlertWorker:
         # post photometry by stream_id
         for stream_id in set(df_photometry.stream_id.unique()):
             stream_id_mask = df_photometry.stream_id == int(stream_id)
-
             photometry = {
                 "obj_id": alert["objectId"],
-                "stream_ids": [stream_id],
+                "stream_ids": [int(stream_id)],
                 "instrument_id": self.instrument_id,
                 "mjd": df_photometry.loc[stream_id_mask, "mjd"].tolist(),
                 "flux": df_photometry.loc[stream_id_mask, "flux"].tolist(),
