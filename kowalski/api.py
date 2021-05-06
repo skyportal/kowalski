@@ -2153,7 +2153,7 @@ class ZTFTriggerHandler(Handler):
             ssh_password=config["ztf"]["mountain_password"],
             remote_bind_address=(
                 config["ztf"]["mountain_bind_ip"],
-                config["ztf"]["mountain_bind_host"],
+                config["ztf"]["mountain_bind_port"],
             ),
         )
 
@@ -2213,7 +2213,7 @@ class ZTFTriggerHandler(Handler):
             ssh_password=config["ztf"]["mountain_password"],
             remote_bind_address=(
                 config["ztf"]["mountain_bind_ip"],
-                config["ztf"]["mountain_bind_host"],
+                config["ztf"]["mountain_bind_port"],
             ),
         )
 
