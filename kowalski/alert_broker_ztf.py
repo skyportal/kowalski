@@ -1358,37 +1358,46 @@ class AlertWorker:
         ):
             df_photometry = make_photometry(alert)
 
-            df_photometry["stream_ids"] = df_photometry["programid"].apply(
+            df_photometry["stream_id"] = df_photometry["programid"].apply(
                 lambda programid: self.ztf_program_id_to_stream_id[programid]
             )
 
+        # post photometry by stream_id
+        for stream_id in set(df_photometry.stream_id.unique()):
+            stream_id_mask = df_photometry.stream_id == int(stream_id)
+
             photometry = {
                 "obj_id": alert["objectId"],
-                "stream_ids": df_photometry["stream_ids"].tolist(),
+                "stream_ids": [stream_id],
                 "instrument_id": self.instrument_id,
-                "mjd": df_photometry["mjd"].tolist(),
-                "flux": df_photometry["flux"].tolist(),
-                "fluxerr": df_photometry["fluxerr"].tolist(),
-                "zp": df_photometry["zp"].tolist(),
-                "magsys": df_photometry["zpsys"].tolist(),
-                "filter": df_photometry["ztf_filter"].tolist(),
-                "ra": df_photometry["ra"].tolist(),
-                "dec": df_photometry["dec"].tolist(),
+                "mjd": df_photometry.loc[stream_id_mask, "mjd"].tolist(),
+                "flux": df_photometry.loc[stream_id_mask, "flux"].tolist(),
+                "fluxerr": df_photometry.loc[stream_id_mask, "fluxerr"].tolist(),
+                "zp": df_photometry.loc[stream_id_mask, "zp"].tolist(),
+                "magsys": df_photometry.loc[stream_id_mask, "zpsys"].tolist(),
+                "filter": df_photometry.loc[stream_id_mask, "ztf_filter"].tolist(),
+                "ra": df_photometry.loc[stream_id_mask, "ra"].tolist(),
+                "dec": df_photometry.loc[stream_id_mask, "dec"].tolist(),
             }
 
-        if (len(photometry.get("flux", ())) > 0) or (
-            len(photometry.get("fluxerr", ())) > 0
-        ):
-            with timer(
-                f"Posting photometry of {alert['objectId']} {alert['candid']} to SkyPortal",
-                self.verbose > 1,
+            if (len(photometry.get("flux", ())) > 0) or (
+                len(photometry.get("fluxerr", ())) > 0
             ):
-                response = self.api_skyportal("PUT", "/api/photometry", photometry)
-            if response.json()["status"] == "success":
-                log(f"Posted {alert['objectId']} photometry to SkyPortal")
-            else:
-                log(f"Failed to post {alert['objectId']} photometry to SkyPortal")
-            log(response.json())
+                with timer(
+                    f"Posting photometry of {alert['objectId']} {alert['candid']}, "
+                    f"stream_id={stream_id} to SkyPortal",
+                    self.verbose > 1,
+                ):
+                    response = self.api_skyportal("PUT", "/api/photometry", photometry)
+                if response.json()["status"] == "success":
+                    log(
+                        f"Posted {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
+                    )
+                else:
+                    log(
+                        f"Failed to post {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
+                    )
+                log(response.json())
 
     def alert_sentinel_skyportal(self, alert, prv_candidates, passed_filters):
         """
