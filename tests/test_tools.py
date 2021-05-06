@@ -115,5 +115,5 @@ class TestTools:
         log(f"Ingested lightcurves for {len(ingested_sources)} sources")
         log(f"Ingested {len(ingested_exposures)} exposures")
 
-        print(len(ingested_sources), len(ingested_exposures))
-        assert len(ingested_sources) == 100
+        assert len(ingested_sources) == 1145
+        assert len(ingested_exposures) == 2
