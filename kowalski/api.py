@@ -27,6 +27,7 @@ import numpy as np
 from odmantic import AIOEngine, EmbeddedModel, Field, Model
 import pathlib
 from pydantic import root_validator
+from sshtunnel import SSHTunnelForwarder
 import traceback
 from typing import List, Mapping, Optional, Sequence, Union
 from utils import (
@@ -2146,9 +2147,21 @@ class ZTFTriggerHandler(Handler):
         if self.test:
             return self.success(message="submitted")
 
-        url = urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues")
+        server = SSHTunnelForwarder(
+            (config["ztf"]["mountain_ip"], config["ztf"]["mountain_port"]),
+            ssh_username=config["ztf"]["mountain_username"],
+            ssh_password=config["ztf"]["mountain_password"],
+            remote_bind_address=(
+                config["ztf"]["mountain_bind_ip"],
+                config["ztf"]["mountain_bind_host"],
+            ),
+        )
+
+        server.start()
+        url = urllib.parse.urljoin(server.local_bind_port, "queues")
         async with ClientSession() as client_session:
             response = await client_session.put(url, json=_data, timeout=10)
+        server.stop()
 
         if response.status == 201:
             return self.success(message="submitted", data=dict(response.headers))
@@ -2194,9 +2207,21 @@ class ZTFTriggerHandler(Handler):
         if self.test:
             return self.success(message="deleted")
 
-        url = urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues")
+        server = SSHTunnelForwarder(
+            (config["ztf"]["mountain_ip"], config["ztf"]["mountain_port"]),
+            ssh_username=config["ztf"]["mountain_username"],
+            ssh_password=config["ztf"]["mountain_password"],
+            remote_bind_address=(
+                config["ztf"]["mountain_bind_ip"],
+                config["ztf"]["mountain_bind_host"],
+            ),
+        )
+
+        server.start()
+        url = urllib.parse.urljoin(server.local_bind_port, "queues")
         async with ClientSession() as client_session:
             response = await client_session.delete(url, json=_data, timeout=10)
+        server.stop()
 
         if response.status == 200:
             return self.success(message="deleted", data=dict(response.headers))
