@@ -36,6 +36,7 @@ ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_b.$acai_b_vers
 # copy over the test alerts
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
 COPY data/catalogs/ /app/data/catalogs/
+COPY data/ztf_matchfiles/ /app/data/ztf_matchfiles/
 
 # copy over the config and the code
 COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py",\
