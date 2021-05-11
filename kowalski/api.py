@@ -40,7 +40,6 @@ from utils import (
     radec_str2geojson,
     uid,
 )
-import urllib
 import uvloop
 
 
@@ -2158,7 +2157,7 @@ class ZTFTriggerHandler(Handler):
         )
 
         server.start()
-        url = urllib.parse.urljoin(server.local_bind_port, "queues")
+        url = f"http://{server.local_bind_address[0]}:{server.local_bind_address[1]}/queues"
         async with ClientSession() as client_session:
             response = await client_session.put(url, json=_data, timeout=10)
         server.stop()
@@ -2218,7 +2217,7 @@ class ZTFTriggerHandler(Handler):
         )
 
         server.start()
-        url = urllib.parse.urljoin(server.local_bind_port, "queues")
+        url = f"http://{server.local_bind_address[0]}:{server.local_bind_address[1]}/queues"
         async with ClientSession() as client_session:
             response = await client_session.delete(url, json=_data, timeout=10)
         server.stop()
