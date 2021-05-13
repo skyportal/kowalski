@@ -404,7 +404,7 @@ kowalski:
     password: "password"
 
   tns:
-    url: https://wis-tns.org
+    url: https://www.wis-tns.org
 
   dask:
     host: 127.0.0.1
