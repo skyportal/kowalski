@@ -552,9 +552,9 @@ class TestIngester:
                 print(
                     "Found an unexpected amount of alert/aux data: "
                     f"({n_alerts}/{n_alerts_aux}, expecting 313/145). "
-                    "Retrying in 5 seconds..."
+                    "Retrying in 30 seconds..."
                 )
-                time.sleep(5)
+                time.sleep(30)
                 continue
 
         if config["misc"]["broker"]:
