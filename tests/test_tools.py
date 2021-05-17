@@ -39,7 +39,7 @@ class TestTools:
         collection = f"ZTF_source_features_{tag}"
 
         run_ztf_source_features(
-            path="/data",
+            path="/app/data/ztf_source_feaftures",
             tag=tag,
             xmatch=False,
             num_processes=1,

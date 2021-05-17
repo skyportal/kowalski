@@ -157,9 +157,9 @@ def generate_report(output_path, start_date, end_date):
             ha="center",
         )
         for action in skyportal_actions:
-            # Put "Is Candidate" and "Is Source" in their
+            # Put "Is Candidate", "Is Source", and "Get Group Info" in their
             # own graphs as they have drastically more calls
-            if action in ["Is Candidate", "Is Source"]:
+            if action in ["Is Candidate", "Is Source", "Get Group Info"]:
                 ax = axs[0]
             else:
                 ax = axs[1]
