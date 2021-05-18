@@ -203,7 +203,14 @@ def process_file(argument_list: Sequence):
                     document["magErr"],
                     document["ipacFlags"],
                 ):
-                    data_point = {"mjd": t, "mag": m, "magerr": e, "ipacflags": f}
+                    data_point = {
+                        "mjd": t,
+                        "mag": m,
+                        "magerr": e,
+                        "ipacflags": f,
+                        "ra": document["ra"],
+                        "dec": document["dec"],
+                    }
                     # convert types for pymongo:
                     for k, v in data_point.items():
                         if k in sourcedata_int_fields:
