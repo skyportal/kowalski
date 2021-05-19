@@ -176,8 +176,8 @@ def process_file(argument_list: Sequence):
                             float(group[k][key2]) for key2 in group[k].keys()
                         ]
 
-                document["ra"] = document["ra"][0]
-                document["dec"] = document["dec"][0]
+                # document["ra"] = document["ra"][0]
+                # document["dec"] = document["dec"][0]
 
                 # generate unique _id:
                 document["_id"] = baseid + document["matchedSourceID"]
@@ -187,8 +187,8 @@ def process_file(argument_list: Sequence):
 
                 # GeoJSON for 2D indexing
                 document["coordinates"] = dict()
-                _ra = document["ra"]
-                _dec = document["dec"]
+                _ra = document["ra"][0]
+                _dec = document["dec"][0]
                 _radec_str = [deg2hms(_ra), deg2dms(_dec)]
                 document["coordinates"]["radec_str"] = _radec_str
                 # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
