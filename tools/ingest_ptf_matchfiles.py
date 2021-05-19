@@ -111,6 +111,7 @@ sourcedata_to_exclude = [
     "absphotzp",
     "b_world",
     "background",
+    "dec",
     "errx2_image",
     "erry2_image",
     "fwhm_image",
@@ -119,6 +120,7 @@ sourcedata_to_exclude = [
     "mu_max",
     "pid",
     "sid",
+    "ra",
     "relPhotFlags",
     "sextractorFlags",
     "x",
@@ -267,9 +269,6 @@ def process_file(argument_list: Sequence):
                 group["sourcedata"].read(),
                 index="matchedSourceID",
                 exclude=sourcedata_to_exclude,
-            )
-            sourcedatas.rename(
-                columns={"ra": "ra_data", "dec": "dec_data"}, inplace=True
             )
 
             merged = sources.merge(sourcedatas, left_index=True, right_index=True)
