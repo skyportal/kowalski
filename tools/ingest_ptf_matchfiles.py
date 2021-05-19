@@ -197,19 +197,21 @@ def process_file(argument_list: Sequence):
                 }
 
                 document["data"] = []
-                for t, m, e, f in zip(
+                for t, m, e, f, _ra, _dec in zip(
                     document["mjd"],
                     document["mag"],
                     document["magErr"],
                     document["ipacFlags"],
+                    document["ra"],
+                    document["dec"],
                 ):
                     data_point = {
                         "mjd": t,
                         "mag": m,
                         "magerr": e,
                         "ipacflags": f,
-                        "ra": document["ra"],
-                        "dec": document["dec"],
+                        "ra": _ra,
+                        "dec": _dec,
                     }
                     # convert types for pymongo:
                     for k, v in data_point.items():
