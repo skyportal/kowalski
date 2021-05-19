@@ -229,6 +229,8 @@ def process_file(argument_list: Sequence):
                     document["mag"],
                     document["magErr"],
                     document["ipacFlags"],
+                    document["ra"],
+                    document["dec"],
                 )
                 document["data"].sort(key=lambda x: x["mjd"])
 
