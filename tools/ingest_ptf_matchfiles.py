@@ -1,6 +1,7 @@
 import datetime
 import fire
 import multiprocessing
+import numpy as np
 import os
 import pandas as pd
 import pathlib
@@ -187,8 +188,8 @@ def process_file(argument_list: Sequence):
 
                 # GeoJSON for 2D indexing
                 document["coordinates"] = dict()
-                _ra = document["ra"][0]
-                _dec = document["dec"][0]
+                _ra = np.median(document["ra"])
+                _dec = np.median(document["dec"])
                 _radec_str = [deg2hms(_ra), deg2dms(_dec)]
                 document["coordinates"]["radec_str"] = _radec_str
                 # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
