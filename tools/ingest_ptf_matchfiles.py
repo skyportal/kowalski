@@ -221,7 +221,7 @@ def process_file(argument_list: Sequence):
                             data_point[k] = float(data_point[k])
                             if k == "mjd":
                                 data_point[k] = round(data_point[k], 5)
-                            else:
+                            elif k not in ("ra", "dec"):
                                 data_point[k] = round(data_point[k], 3)
                     document["data"].append(data_point)
                 del (
