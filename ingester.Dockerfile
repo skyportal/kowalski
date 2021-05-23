@@ -53,6 +53,7 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
       "tools/istarmap.py",\
       "tools/ingest_vlass.py",\
       "tools/ingest_igaps.py",\
+      "tools/ingest_ptf_matchfiles.py",\
       "/app/"]
 
 # change working directory to /app
