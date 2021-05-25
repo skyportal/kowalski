@@ -72,8 +72,9 @@ kowalski:
       alerts_zuds: "ZUDS_alerts"
       alerts_zuds_aux: "ZUDS_alerts_aux"
       tns: "TNS"
-      alerts_PGIR: "PGIR_alerts"
-      alerts_PGIR_aux: "PGIR_alerts_aux"
+      alerts_pgir: "PGIR_alerts"
+      alerts_pgir_aux: "PGIR_alerts_aux"
+      alerts_pgir_filter: "PGIR_alerts_filter"
 
     indexes:
       ZTF_alerts:
@@ -168,7 +169,7 @@ kowalski:
           fields:
             - ["discovery_date", -1]
           unique: false
-        
+
       PGIR_alerts:
         - name: radec_candid
           fields:
@@ -214,14 +215,14 @@ kowalski:
             - ["candidate.dmag2mass", -1]
             - ["candidate.isstar", -1]
             - ["candidate.distnearbrstar", 1]
-            unique: false
+          unique: false
         - name: jd_scorr_dmag2mass
           fields:
             - ["candidate.jd", -1]
             - ["candidate.scorr", -1]
             - ["candidate.dmag2mass", -1]
-            unique: false
-            
+          unique: false
+
     filters:
       ZTF_alerts:
         # default upstream aggregation pipeline stages for filtering ZTF alerts:
@@ -284,7 +285,7 @@ kowalski:
                 "coordinates": 1,
               },
           }
-          
+
       PGIR_alerts:
         # default upstream aggregation pipeline stages for filtering PGIR alerts:
         - {
@@ -346,7 +347,7 @@ kowalski:
                 "coordinates": 1,
               },
           }
-          
+
     xmatch:
       cone_search_radius: 2
       cone_search_unit: "arcsec"
@@ -488,6 +489,136 @@ kowalski:
             yMeanPSFMag: 1
             yMeanPSFMagErr: 1
 
+    xmatch_pgir:
+      cone_search_radius: 8
+      cone_search_unit: "arcsec"
+      catalogs:
+        2MASS_PSC:
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            j_m: 1
+            h_m: 1
+            k_m: 1
+
+        AllWISE:
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            w1mpro: 1
+            w1sigmpro: 1
+            w2mpro: 1
+            w2sigmpro: 1
+            w3mpro: 1
+            w3sigmpro: 1
+            w4mpro: 1
+            w4sigmpro: 1
+            ph_qual: 1
+
+        Gaia_DR2:
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            parallax: 1
+            parallax_error: 1
+            phot_g_mean_mag: 1
+            phot_bp_mean_mag: 1
+            phot_rp_mean_mag: 1
+
+        Gaia_EDR3:
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            parallax: 1
+            parallax_error: 1
+            phot_g_mean_mag: 1
+            phot_bp_mean_mag: 1
+            phot_rp_mean_mag: 1
+
+        PS1_STRM:
+          filter: {}
+          projection:
+            _id: 1
+            objID: 1
+            coordinates.radec_str: 1
+            class: 1
+            prob_Galaxy: 1
+            prob_Star: 1
+            prob_QSO: 1
+            z_phot: 1
+            z_phot_err: 1
+
+        galaxy_redshifts_20200522:
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            z: 1
+            l: 1
+            b: 1
+
+        GALEX:
+          filter: {}
+          projection:
+            _id: 0
+            name: 1
+            coordinates.radec_str: 1
+            FUVmag: 1
+            e_FUVmag: 1
+            NUVmag: 1
+            e_NUVmag: 1
+
+        IGAPS_DR2:
+          filter: {}
+          projection:
+            _id: 0
+            name: 1
+            coordinates.radec_str: 1
+            r: 1
+            rErr: 1
+            i: 1
+            iErr: 1
+            ha: 1
+            haErr: 1
+            U_RGO: 1
+            UErr: 1
+
+        LAMOST_DR5_v3:
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            mjd: 1
+            snru: 1
+            snrg: 1
+            snrr: 1
+            snri: 1
+            snrz: 1
+            objtype: 1
+            class: 1
+            subclass: 1
+
+        PS1_DR1:
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            gMeanPSFMag: 1
+            gMeanPSFMagErr: 1
+            rMeanPSFMag: 1
+            rMeanPSFMagErr: 1
+            iMeanPSFMag: 1
+            iMeanPSFMagErr: 1
+            zMeanPSFMag: 1
+            zMeanPSFMagErr: 1
+            yMeanPSFMag: 1
+            yMeanPSFMagErr: 1
+
+
   ml_models:
     braai:
       version: "d6_m9"
@@ -501,6 +632,9 @@ kowalski:
       version: "d1_dnn_20201130"
     acai_b:
       version: "d1_dnn_20201130"
+
+  ml_models_pgir:
+
 
   skyportal:
     protocol: "http"
@@ -531,7 +665,7 @@ kowalski:
     lifetime: 24 hours
     lifetime_stagger: 1 hours
     lifetime_restart: true
-    
+
   dask_pgir:
     host: 127.0.0.1
     scheduler_port: 8787
@@ -652,7 +786,7 @@ kowalski:
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: "PRODUCTION=1"
-        
+
       "program:alert-broker-pgir":
         command: /usr/local/bin/python alert_broker_pgir.py
         directory: /app
