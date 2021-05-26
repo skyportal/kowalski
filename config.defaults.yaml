@@ -65,6 +65,7 @@ kowalski:
     collections:
       users: "users"
       filters: "filters"
+      filters_pgir: "filters_pgir"
       queries: "queries"
       alerts_ztf: "ZTF_alerts"
       alerts_ztf_aux: "ZTF_alerts_aux"
@@ -74,7 +75,6 @@ kowalski:
       tns: "TNS"
       alerts_pgir: "PGIR_alerts"
       alerts_pgir_aux: "PGIR_alerts_aux"
-      alerts_pgir_filter: "PGIR_alerts_filter"
 
     indexes:
       ZTF_alerts:
