@@ -462,8 +462,8 @@ def alert_filter__xmatch_clu(
             alpha1, delta01 = galaxy["ra"], galaxy["dec"]
 
             redshift = galaxy["z"]
-            # By default, set the cross-match radius to 50 kpc at the redshift of the host galaxy
-            cm_radius = 50.0 * (0.05 / redshift) / 3600
+            # By default, set the cross-match radius to 30 kpc at the redshift of the host galaxy
+            cm_radius = 30.0 * (0.05 / redshift) / 3600
             if redshift < 0.01:
                 # for nearby galaxies and galaxies with negative redshifts, do a 5 arc-minute cross-match
                 # (cross-match radius would otherwise get un-physically large for nearby galaxies)
