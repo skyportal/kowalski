@@ -462,8 +462,8 @@ def alert_filter__xmatch_clu(
             alpha1, delta01 = galaxy["ra"], galaxy["dec"]
 
             redshift = galaxy["z"]
-            # By default, set the cross-match radius to 50 kpc at the redshift of the host galaxy
-            cm_radius = 50.0 * (0.05 / redshift) / 3600
+            # By default, set the cross-match radius to 30 kpc at the redshift of the host galaxy
+            cm_radius = 30.0 * (0.05 / redshift) / 3600
             if redshift < 0.01:
                 # for nearby galaxies and galaxies with negative redshifts, do a 5 arc-minute cross-match
                 # (cross-match radius would otherwise get un-physically large for nearby galaxies)
@@ -646,6 +646,8 @@ def process_alert(record, topic):
             passed_filters = alert_filter__user_defined(
                 alert_worker.mongo.db, alert_worker.filter_templates, alert
             )
+        if alert_worker.verbose > 1:
+            log(f"{objectId} {candid} number of filters passed: {len(passed_filters)}")
 
         # post to SkyPortal
         alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
@@ -878,21 +880,40 @@ class AlertWorker:
 
         # get ZTF instrument id
         self.instrument_id = 1
-        try:
-            with timer("Getting ZTF instrument_id from SkyPortal", self.verbose > 1):
-                response = self.api_skyportal("GET", "/api/instrument", {"name": "ZTF"})
-            if (
-                response.json()["status"] == "success"
-                and len(response.json()["data"]) > 0
-            ):
-                self.instrument_id = response.json()["data"][0]["id"]
-                log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
-            else:
-                log("Failed to get ZTF instrument_id from SkyPortal")
-                raise ValueError("Failed to get ZTF instrument_id from SkyPortal")
-        except Exception as e:
-            log(e)
-            # config['misc']['broker'] = False
+        with timer("Getting ZTF instrument_id from SkyPortal", self.verbose > 1):
+            response = self.api_skyportal("GET", "/api/instrument", {"name": "ZTF"})
+        if response.json()["status"] == "success" and len(response.json()["data"]) > 0:
+            self.instrument_id = response.json()["data"][0]["id"]
+            log(f"Got ZTF instrument_id from SkyPortal: {self.instrument_id}")
+        else:
+            log("Failed to get ZTF instrument_id from SkyPortal")
+            raise ValueError("Failed to get ZTF instrument_id from SkyPortal")
+
+        # get ZTF alert stream ids to program ids mapping
+        self.ztf_program_id_to_stream_id = dict()
+        with timer("Getting ZTF alert stream ids from SkyPortal", self.verbose > 1):
+            response = self.api_skyportal("GET", "/api/streams")
+        if response.json()["status"] == "success" and len(response.json()["data"]) > 0:
+            for stream in response.json()["data"]:
+                if stream.get("name") == "ZTF Public":
+                    self.ztf_program_id_to_stream_id[1] = stream["id"]
+                if stream.get("name") == "ZTF Public+Partnership":
+                    self.ztf_program_id_to_stream_id[2] = stream["id"]
+                if stream.get("name") == "ZTF Public+Partnership+Caltech":
+                    # programid=0 is engineering data
+                    self.ztf_program_id_to_stream_id[0] = stream["id"]
+                    self.ztf_program_id_to_stream_id[3] = stream["id"]
+            if len(self.ztf_program_id_to_stream_id) != 4:
+                log("Failed to map ZTF alert stream ids from SkyPortal to program ids")
+                raise ValueError(
+                    "Failed to map ZTF alert stream ids from SkyPortal to program ids"
+                )
+            log(
+                f"Got ZTF program id to SP stream id mapping: {self.ztf_program_id_to_stream_id}"
+            )
+        else:
+            log("Failed to get ZTF alert stream ids from SkyPortal")
+            raise ValueError("Failed to get ZTF alert stream ids from SkyPortal")
 
         # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
         # including archival photometry and cross-matches:
@@ -1325,12 +1346,10 @@ class AlertWorker:
                 )
                 log(response.json())
 
-    def alert_put_photometry(self, alert, groups):
+    def alert_put_photometry(self, alert):
         """PUT photometry to SkyPortal
 
         :param alert:
-        :param groups: array of dicts containing at least
-                       [{"group_id": <group_id>, "permissions": <list of program ids the group has access to>}]
         :return:
         """
         with timer(
@@ -1339,49 +1358,45 @@ class AlertWorker:
         ):
             df_photometry = make_photometry(alert)
 
-        # post data from different program_id's
-        for pid in set(df_photometry.programid.unique()):
-            group_ids = [
-                f.get("group_id") for f in groups if pid in f.get("permissions", [1])
-            ]
+            df_photometry["stream_id"] = df_photometry["programid"].apply(
+                lambda programid: self.ztf_program_id_to_stream_id[programid]
+            )
 
-            if len(group_ids) > 0:
-                pid_mask = df_photometry.programid == int(pid)
+        # post photometry by stream_id
+        for stream_id in set(df_photometry.stream_id.unique()):
+            stream_id_mask = df_photometry.stream_id == int(stream_id)
+            photometry = {
+                "obj_id": alert["objectId"],
+                "stream_ids": [int(stream_id)],
+                "instrument_id": self.instrument_id,
+                "mjd": df_photometry.loc[stream_id_mask, "mjd"].tolist(),
+                "flux": df_photometry.loc[stream_id_mask, "flux"].tolist(),
+                "fluxerr": df_photometry.loc[stream_id_mask, "fluxerr"].tolist(),
+                "zp": df_photometry.loc[stream_id_mask, "zp"].tolist(),
+                "magsys": df_photometry.loc[stream_id_mask, "zpsys"].tolist(),
+                "filter": df_photometry.loc[stream_id_mask, "ztf_filter"].tolist(),
+                "ra": df_photometry.loc[stream_id_mask, "ra"].tolist(),
+                "dec": df_photometry.loc[stream_id_mask, "dec"].tolist(),
+            }
 
-                photometry = {
-                    "obj_id": alert["objectId"],
-                    "group_ids": group_ids,
-                    "instrument_id": self.instrument_id,
-                    "mjd": df_photometry.loc[pid_mask, "mjd"].tolist(),
-                    "flux": df_photometry.loc[pid_mask, "flux"].tolist(),
-                    "fluxerr": df_photometry.loc[pid_mask, "fluxerr"].tolist(),
-                    "zp": df_photometry.loc[pid_mask, "zp"].tolist(),
-                    "magsys": df_photometry.loc[pid_mask, "zpsys"].tolist(),
-                    "filter": df_photometry.loc[pid_mask, "ztf_filter"].tolist(),
-                    "ra": df_photometry.loc[pid_mask, "ra"].tolist(),
-                    "dec": df_photometry.loc[pid_mask, "dec"].tolist(),
-                }
-
-                if (len(photometry.get("flux", ())) > 0) or (
-                    len(photometry.get("fluxerr", ())) > 0
+            if (len(photometry.get("flux", ())) > 0) or (
+                len(photometry.get("fluxerr", ())) > 0
+            ):
+                with timer(
+                    f"Posting photometry of {alert['objectId']} {alert['candid']}, "
+                    f"stream_id={stream_id} to SkyPortal",
+                    self.verbose > 1,
                 ):
-                    with timer(
-                        f"Posting photometry of {alert['objectId']} {alert['candid']}, "
-                        f"program_id={pid} to SkyPortal",
-                        self.verbose > 1,
-                    ):
-                        response = self.api_skyportal(
-                            "PUT", "/api/photometry", photometry
-                        )
-                    if response.json()["status"] == "success":
-                        log(
-                            f"Posted {alert['objectId']} program_id={pid} photometry to SkyPortal"
-                        )
-                    else:
-                        log(
-                            f"Failed to post {alert['objectId']} program_id={pid} photometry to SkyPortal"
-                        )
-                    log(response.json())
+                    response = self.api_skyportal("PUT", "/api/photometry", photometry)
+                if response.json()["status"] == "success":
+                    log(
+                        f"Posted {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
+                    )
+                else:
+                    log(
+                        f"Failed to post {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
+                    )
+                log(response.json())
 
     def alert_sentinel_skyportal(self, alert, prv_candidates, passed_filters):
         """
@@ -1396,11 +1411,11 @@ class AlertWorker:
         - if candidate exists:
           - get filter_ids of saved candidate from SP
           - post to /api/candidates with new_filter_ids, if any
-          - post alert curve with group_ids of corresponding filters in single call to /api/photometry
+          - post alert light curve in single PUT call to /api/photometry specifying stream_ids
         - if source exists:
           - get groups and check stream access
           - decide which points to post to what groups based on permissions
-          - post alert curve with all group_ids in single call to /api/photometry
+          - post alert light curve in single PUT call to /api/photometry specifying stream_ids
 
         :param alert: ZTF_alert with a stripped-off prv_candidates section
         :param prv_candidates: could be plain prv_candidates section of an alert, or extended alert history
@@ -1430,38 +1445,42 @@ class AlertWorker:
                 f"{alert['objectId']} {'is' if is_source else 'is not'} Source in SkyPortal"
             )
 
-        # obj does not exit in SP and passed at least one filter:
-        if (not is_candidate) and (not is_source) and (len(passed_filters) > 0):
-            # post candidate
-            filter_ids = [f.get("filter_id") for f in passed_filters]
-            self.alert_post_candidate(alert, filter_ids)
+        # obj does not exit in SP:
+        if (not is_candidate) and (not is_source):
+            # passed at least one filter?
+            if len(passed_filters) > 0:
+                # post candidate
+                filter_ids = [f.get("filter_id") for f in passed_filters]
+                self.alert_post_candidate(alert, filter_ids)
 
-            # post annotations
-            self.alert_post_annotations(alert, passed_filters)
+                # post annotations
+                self.alert_post_annotations(alert, passed_filters)
 
-            # post full light curve
-            try:
-                alert["prv_candidates"] = list(
-                    self.mongo.db[self.collection_alerts_aux].find(
-                        {"_id": alert["objectId"]}, {"prv_candidates": 1}, limit=1
-                    )
-                )[0]["prv_candidates"]
-            except Exception as e:
-                # this should never happen, but just in case
-                log(e)
-                alert["prv_candidates"] = prv_candidates
+                # post full light curve
+                try:
+                    alert["prv_candidates"] = list(
+                        self.mongo.db[self.collection_alerts_aux].find(
+                            {"_id": alert["objectId"]}, {"prv_candidates": 1}, limit=1
+                        )
+                    )[0]["prv_candidates"]
+                except Exception as e:
+                    # this should never happen, but just in case
+                    log(e)
+                    alert["prv_candidates"] = prv_candidates
 
-            self.alert_put_photometry(alert, passed_filters)
+                self.alert_put_photometry(alert)
 
-            # post thumbnails
-            self.alert_post_thumbnails(alert)
+                # post thumbnails
+                self.alert_post_thumbnails(alert)
 
-            # post source if autosave=True
-            autosave_group_ids = [
-                f.get("group_id") for f in passed_filters if f.get("autosave", False)
-            ]
-            if len(autosave_group_ids) > 0:
-                self.alert_post_source(alert, autosave_group_ids)
+                # post source if autosave=True
+                autosave_group_ids = [
+                    f.get("group_id")
+                    for f in passed_filters
+                    if f.get("autosave", False)
+                ]
+                if len(autosave_group_ids) > 0:
+                    self.alert_post_source(alert, autosave_group_ids)
 
         # obj exists in SP:
         else:
@@ -1474,8 +1493,6 @@ class AlertWorker:
                 # put annotations
                 self.alert_put_annotations(alert, passed_filters)
 
-            groups = deepcopy(passed_filters)
-            group_ids = [f.get("group_id") for f in groups]
             # already saved as a source?
             if is_source:
                 # get info on the corresponding groups:
@@ -1489,34 +1506,6 @@ class AlertWorker:
                 if response.json()["status"] == "success":
                     existing_groups = response.json()["data"]
                     existing_group_ids = [g["id"] for g in existing_groups]
-                    # get group permissions for alert photometry access
-                    for group_id in set(existing_group_ids) - set(group_ids):
-                        with timer(
-                            f"Getting info on group id={group_id} from SkyPortal",
-                            self.verbose > 1,
-                        ):
-                            # memoize under the assumption that permissions change extremely rarely
-                            response = self.api_skyportal_get_group(group_id)
-                        if self.verbose > 1:
-                            log(response.json())
-                        if response.json()["status"] == "success":
-                            # only public data (programid=1) by default:
-                            selector = {1}
-                            for stream in response.json()["data"]["streams"]:
-                                if "ztf" in stream["name"].lower():
-                                    selector.update(
-                                        set(stream["altdata"].get("selector", []))
-                                    )
-
-                            selector = list(selector)
-
-                            groups.append(
-                                {"group_id": group_id, "permissions": selector}
-                            )
-                        else:
-                            log(
-                                f"Failed to get info on group id={group_id} from SkyPortal"
-                            )
 
                     # post source if autosave=True and not already saved
                     autosave_group_ids = [
@@ -1530,7 +1519,7 @@ class AlertWorker:
                 else:
                     log(f"Failed to get source groups info on {alert['objectId']}")
             else:
-                # post source if autosave=True
+                # post source if autosave=True and not is_source
                 autosave_group_ids = [
                     f.get("group_id")
                     for f in passed_filters
@@ -1539,10 +1528,10 @@ class AlertWorker:
                 if len(autosave_group_ids) > 0:
                     self.alert_post_source(alert, autosave_group_ids)
 
-            # post alert photometry with all group_ids in single call to /api/photometry
+            # post alert photometry in single call to /api/photometry
             alert["prv_candidates"] = prv_candidates
 
-            self.alert_put_photometry(alert, groups)
+            self.alert_put_photometry(alert)
 
 
 class WorkerInitializer(dask.distributed.WorkerPlugin):

@@ -27,6 +27,7 @@ import numpy as np
 from odmantic import AIOEngine, EmbeddedModel, Field, Model
 import pathlib
 from pydantic import root_validator
+from sshtunnel import SSHTunnelForwarder
 import traceback
 from typing import List, Mapping, Optional, Sequence, Union
 from utils import (
@@ -39,7 +40,6 @@ from utils import (
     radec_str2geojson,
     uid,
 )
-import urllib
 import uvloop
 
 
@@ -214,15 +214,20 @@ async def auth_post(request: web.Request) -> web.Response:
             # user exists and passwords match?
             select = await request.app["mongo"].users.find_one({"_id": username})
             if select is not None and check_password_hash(select["password"], password):
-                payload = {"user_id": username}
+                payload = {
+                    "user_id": username,
+                    "created_at": datetime.datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S.%f+00:00"
+                    ),
+                }
                 # optionally set expiration date
                 if request.app["JWT"]["JWT_EXP_DELTA_SECONDS"] is not None:
                     payload["exp"] = (
                         datetime.datetime.utcnow()
                         + datetime.timedelta(
                             seconds=request.app["JWT"]["JWT_EXP_DELTA_SECONDS"]
-                        ),
-                    )
+                        )
+                    ).strftime("%Y-%m-%dT%H:%M:%S.%f+00:00")
                 jwt_token = jwt.encode(
                     payload=payload,
                     key=request.app["JWT"]["JWT_SECRET"],
@@ -2141,9 +2146,21 @@ class ZTFTriggerHandler(Handler):
         if self.test:
             return self.success(message="submitted")
 
-        url = urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues")
+        server = SSHTunnelForwarder(
+            (config["ztf"]["mountain_ip"], config["ztf"]["mountain_port"]),
+            ssh_username=config["ztf"]["mountain_username"],
+            ssh_password=config["ztf"]["mountain_password"],
+            remote_bind_address=(
+                config["ztf"]["mountain_bind_ip"],
+                config["ztf"]["mountain_bind_port"],
+            ),
+        )
+
+        server.start()
+        url = f"http://{server.local_bind_address[0]}:{server.local_bind_address[1]}/queues"
         async with ClientSession() as client_session:
             response = await client_session.put(url, json=_data, timeout=10)
+        server.stop()
 
         if response.status == 201:
             return self.success(message="submitted", data=dict(response.headers))
@@ -2189,9 +2206,21 @@ class ZTFTriggerHandler(Handler):
         if self.test:
             return self.success(message="deleted")
 
-        url = urllib.parse.urljoin(config["ztf"]["mountain_ip"], "queues")
+        server = SSHTunnelForwarder(
+            (config["ztf"]["mountain_ip"], config["ztf"]["mountain_port"]),
+            ssh_username=config["ztf"]["mountain_username"],
+            ssh_password=config["ztf"]["mountain_password"],
+            remote_bind_address=(
+                config["ztf"]["mountain_bind_ip"],
+                config["ztf"]["mountain_bind_port"],
+            ),
+        )
+
+        server.start()
+        url = f"http://{server.local_bind_address[0]}:{server.local_bind_address[1]}/queues"
         async with ClientSession() as client_session:
             response = await client_session.delete(url, json=_data, timeout=10)
+        server.stop()
 
         if response.status == 200:
             return self.success(message="deleted", data=dict(response.headers))

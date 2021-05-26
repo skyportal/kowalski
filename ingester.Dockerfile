@@ -33,9 +33,11 @@ ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_o.$acai_o_vers
 ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_n.$acai_n_version.h5 /app/models/
 ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_b.$acai_b_version.h5 /app/models/
 
-# copy over the test alerts
+# copy over the test data
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
 COPY data/catalogs/ /app/data/catalogs/
+COPY data/ztf_matchfiles/ /app/data/ztf_matchfiles/
+COPY data/ztf_source_features/ /app/data/ztf_source_features/
 
 # copy over the config and the code
 COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py",\
@@ -52,6 +54,7 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
       "tools/ingest_vlass.py",\
       "tools/ingest_igaps.py",\
       "tools/ingest_ztf_public.py",\
+      "tools/ingest_ptf_matchfiles.py",\
       "/app/"]
 
 # change working directory to /app
