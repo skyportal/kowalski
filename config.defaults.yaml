@@ -28,6 +28,7 @@ kowalski:
     app: "/app"
     docs: "/app/docs"
     ml_models: "/app/models/"
+    ml_models_pgir: "/app/models_pgir/"
     logs: "/data/logs/"
     data: "/data"
     alerts: "/data/alerts"
