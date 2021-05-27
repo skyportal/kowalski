@@ -5,6 +5,7 @@ from ingest_ztf_source_features import run as run_ztf_source_features
 from ingest_vlass import run as run_vlass
 from ingest_igaps import run as run_igaps
 from ingest_ztf_matchfiles import run as run_ztf_matchfiles
+from ingest_ptf_matchfiles import run as run_ptf_matchfiles
 from utils import get_default_args, load_config, log, Mongo
 
 
@@ -97,3 +98,22 @@ class TestTools:
         log(f"Ingested features of {len(ingested_entries)} sources")
 
         assert len(ingested_entries) == 100
+
+    def test_ingest_ptf(self):
+
+        sources_collection = "PTF_sources"
+        exposures_collection = "PTF_exposures"
+        run_ptf_matchfiles(
+            path="/app/data/catalogs",
+            num_proc=1,
+        )
+
+        ingested_sources = list(self.mongo.db[sources_collection].find({}, {"_id": 1}))
+        ingested_exposures = list(
+            self.mongo.db[exposures_collection].find({}, {"_id": 1})
+        )
+        log(f"Ingested lightcurves for {len(ingested_sources)} sources")
+        log(f"Ingested {len(ingested_exposures)} exposures")
+
+        assert len(ingested_sources) == 1145
+        assert len(ingested_exposures) == 2
