@@ -112,12 +112,22 @@ def get_tns(grab_all: bool = False, num_pages: int = 10, entries_per_page: int =
             except Exception as e:
                 log(e)
 
-    log("Fetching data...")
+    bot_id = config["tns"]["bot_id"]
+    bot_name = config["tns"]["bot_name"]
+    headers = {
+        "User-Agent": f"tns_marker{{'tns_id': {bot_id}, 'type': 'bot', 'name': '{bot_name}'}}",
+    }
 
     if grab_all:
         # grab the latest data (5 is the minimum):
         url = os.path.join(config["tns"]["url"], "search?format=csv&num_page=5&page=0")
-        data = pd.read_csv(url)
+        csv_data = requests.get(
+            url,
+            headers=headers,
+            allow_redirects=False,
+            timeout=60,
+        ).content
+        data = pd.read_csv(io.StringIO(csv_data.decode("utf-8")))
         num_pages = data["ID"].max() // entries_per_page
 
     for num_page in range(num_pages):
@@ -127,8 +137,12 @@ def get_tns(grab_all: bool = False, num_pages: int = 10, entries_per_page: int =
             f"search?format=csv&num_page={entries_per_page}&page={num_page}",
         )
 
-        # 20210114: wis-tns.org has issues with their certificate
-        csv_data = requests.get(url, allow_redirects=False, timeout=60).content
+        csv_data = requests.get(
+            url,
+            headers=headers,
+            allow_redirects=False,
+            timeout=60,
+        ).content
         data = pd.read_csv(io.StringIO(csv_data.decode("utf-8")))
 
         for index, row in data.iterrows():
