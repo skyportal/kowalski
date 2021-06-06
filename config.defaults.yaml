@@ -405,6 +405,8 @@ kowalski:
 
   tns:
     url: https://www.wis-tns.org
+    bot_id:
+    bot_name:
 
   dask:
     host: 127.0.0.1
