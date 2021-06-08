@@ -154,9 +154,9 @@ def process_file(argument_list: Sequence):
                             data_point[k] = int(data_point[k])
                         else:
                             data_point[k] = float(data_point[k])
-                            if k not in ("ra", "dec", "hjd"):
+                            if k not in ("ra", "dec", "hjd", "mag", "magerr"):
                                 data_point[k] = round(data_point[k], 3)
-                            elif k == "hjd":
+                            elif k in ("hjd", "mag", "magerr"):
                                 data_point[k] = round(data_point[k], 5)
                     # generate unique exposure id's that match _id's in exposures collection
                     data_point["uexpid"] = exposure_baseid + data_point["expid"]
