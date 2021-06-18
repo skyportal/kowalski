@@ -226,8 +226,8 @@ async def auth_post(request: web.Request) -> web.Response:
                         datetime.datetime.utcnow()
                         + datetime.timedelta(
                             seconds=request.app["JWT"]["JWT_EXP_DELTA_SECONDS"]
-                        ),
-                    )
+                        )
+                    ).strftime("%Y-%m-%dT%H:%M:%S.%f+00:00")
                 jwt_token = jwt.encode(
                     payload=payload,
                     key=request.app["JWT"]["JWT_SECRET"],

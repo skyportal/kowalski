@@ -6,8 +6,8 @@ volumes:
 
 networks:
   default:
-    external:
-      name: fritz_net
+    external: true
+    name: fritz_net
 
 services:
 
