@@ -267,7 +267,7 @@ class Mongo:
     def __init__(
         self,
         host: str = "127.0.0.1",
-        port: str = 27017,
+        port: int = 27017,
         replica_set: Optional[str] = None,
         username: str = None,
         password: str = None,
