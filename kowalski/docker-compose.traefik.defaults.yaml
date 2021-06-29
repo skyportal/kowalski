@@ -1,0 +1,113 @@
+version: "3.7"
+
+volumes:
+  mongodb:
+  data:
+
+services:
+
+  traefik:
+    image: "traefik:2.1"
+    container_name: "traefik"
+    command:
+      # fixme: comment out if do not want the traefik dashboard on port 8081
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Enable a http challenge named "myhttpchallenge"
+      - "--certificatesresolvers.myhttpchallenge.acme.httpchallenge=true"
+      # Tell it to use our predefined entrypoint named "web"
+      - "--certificatesresolvers.myhttpchallenge.acme.httpchallenge.entrypoint=web"
+      # The email to provide to let's encrypt
+      - "--certificatesresolvers.myhttpchallenge.acme.email=kowalski@caltech.edu"
+      # Tell to store the certificate on a path under our volume
+      - "--certificatesresolvers.myhttpchallenge.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+      # fixme: traefik dashboard
+      - "8081:8080"
+    volumes:
+      # Create a letsencrypt dir within the folder where the docker-compose file is
+      - "./letsencrypt:/letsencrypt"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  api:
+    build:
+      context: .
+      dockerfile: api.Dockerfile
+    #    entrypoint: python -m pytest -s test_api.py
+    image: dmitryduev/kowalski_api:latest
+    volumes:
+      - data:/data
+    expose:
+      - "4000"
+    # fixme: comment out ports if deploying behind traefik
+#    ports:
+#      - "4000:4000"
+    labels:
+      # middleware redirect
+      - "traefik.http.middlewares.https_redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.https_redirect.redirectscheme.permanent=true"
+      # global redirect to https
+      - "traefik.http.routers.http_catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http_catchall.entrypoints=web"
+      - "traefik.http.routers.http_catchall.middlewares=https_redirect"
+      # Explicitly tell Traefik to expose this container
+      - "traefik.enable=true"
+      # The domain the service will respond to
+      - "traefik.http.routers.kowalski.rule=Host(`private.caltech.edu`)"
+      - "traefik.http.services.kowalski.loadbalancer.server.port=4000"
+      # Allow request only from the predefined entry point named "websecure"
+      - "traefik.http.routers.kowalski.entrypoints=websecure"
+      # Uses the Host rule to define which certificate to issue
+      - "traefik.http.routers.kowalski.tls.certresolver=myhttpchallenge"
+    links:
+      - mongo:kowalski-mongo
+    restart: always
+    depends_on:
+      - mongo
+
+  ingester:
+    build:
+      context: .
+      dockerfile: ingester.Dockerfile
+    image: dmitryduev/kowalski_ingester:latest
+    ports:
+      - "8787:8787"
+    volumes:
+      - data:/data
+    links:
+      - mongo:kowalski-mongo
+    restart: always
+    depends_on:
+      - mongo
+
+  mongo:
+#    image: mongo:latest
+    build:
+      context: .
+      dockerfile: mongo.Dockerfile
+    hostname: mongo
+    expose:
+      - "27017"
+    # fixme:
+    ports:
+      - "27017:27017"
+    depends_on:
+      - traefik
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=mongoadmin
+      - MONGO_INITDB_ROOT_PASSWORD=mongoadminsecret
+      - MONGO_REPLICA_SET_NAME=rs0
+    volumes:
+      - mongodb:/data/db
+    restart: always
+    healthcheck:
+      test: test $$(echo "rs.initiate().ok || rs.status().ok" | mongo -u $${MONGO_INITDB_ROOT_USERNAME} -p $${MONGO_INITDB_ROOT_PASSWORD} --quiet) -eq 1
+      interval: 10s
+      start_period: 20s
+    # run as a replica set of size 1 called rs0 using keyfile for internal authorization
+    command: [ "--keyFile", "/opt/keyfile", "--replSet", "rs0", "--bind_ip_all" ]
