@@ -840,6 +840,7 @@ class AlertWorker:
             verbose=self.verbose,
         )
 
+        '''
         # ML models
         self.ml_models = dict()
         for model in config["ml_models_pgir"]:
@@ -858,7 +859,7 @@ class AlertWorker:
                 _err = traceback.format_exc()
                 log(_err)
                 continue
-
+        '''
         # talking to SkyPortal?
         if not config["misc"]["broker"]:
             return
@@ -1561,6 +1562,7 @@ def topic_listener(
         address=f"{config['dask_pgir']['host']}:{config['dask_pgir']['scheduler_port']}"
     )
 
+    print(f"{config['dask_pgir']['host']}:{config['dask_pgir']['scheduler_port']}")
     # init each worker with AlertWorker instance
     worker_initializer = WorkerInitializer()
     dask_client.register_worker_plugin(worker_initializer, name="worker-init")

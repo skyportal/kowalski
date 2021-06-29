@@ -661,7 +661,7 @@ kowalski:
 
   dask:
     host: 127.0.0.1
-    scheduler_port: 8786
+    scheduler_port: 8787
     n_workers: 4
     threads_per_worker: 1
     lifetime: 24 hours

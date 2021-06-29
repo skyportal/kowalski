@@ -32,7 +32,7 @@ ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_v.$acai_v_vers
 ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_o.$acai_o_version.h5 /app/models/
 ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_n.$acai_n_version.h5 /app/models/
 ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_b.$acai_b_version.h5 /app/models/
-RUN mkdir /app/models_pgir
+RUN mkdir /app/models
 
 # copy over the test data
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
