@@ -292,7 +292,7 @@ kowalski:
         # default upstream aggregation pipeline stages for filtering PGIR alerts:
         - {
             "$match":
-              { "candid": null, "candidate.programid": { "$in": null } },
+              { "candid": null},
           }
         - {
             "$project":
@@ -323,19 +323,13 @@ kowalski:
                         "as": "item",
                         "cond":
                           {
-                            "$and":
+                            "$lt":
                               [
-                                { "$in": ["$$item.programid", null] },
                                 {
-                                  "$lt":
-                                    [
-                                      {
-                                        "$subtract":
-                                          ["$candidate.jd", "$$item.jd"],
-                                      },
-                                      1000,
-                                    ],
+                                  "$subtract":
+                                    ["$candidate.jd", "$$item.jd"],
                                 },
+                                1000,
                               ],
                           },
                       },
@@ -658,6 +652,8 @@ kowalski:
 
   tns:
     url: https://www.wis-tns.org
+    bot_id:
+    bot_name:
 
   dask:
     host: 127.0.0.1
