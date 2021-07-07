@@ -1557,12 +1557,15 @@ def topic_listener(
     :return:
     """
 
+    print(f"{config['dask_pgir']['host']}:{config['dask_pgir']['scheduler_port']}")
+
     # Configure dask client
     dask_client = dask.distributed.Client(
         address=f"{config['dask_pgir']['host']}:{config['dask_pgir']['scheduler_port']}"
     )
-
-    print(f"{config['dask_pgir']['host']}:{config['dask_pgir']['scheduler_port']}")
+    
+    print(dask_client)
+    
     # init each worker with AlertWorker instance
     worker_initializer = WorkerInitializer()
     dask_client.register_worker_plugin(worker_initializer, name="worker-init")
@@ -1581,7 +1584,7 @@ def topic_listener(
     conf[
         "group.id"
     ] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
-
+    
     # Start alert stream consumer
     stream_reader = AlertConsumer(topic, dask_client, **conf)
 
@@ -1670,14 +1673,17 @@ def watchdog(obs_date: str = None, test: bool = False):
                     else:
                         bootstrap_servers = config["kafka"]["bootstrap.test.servers"]
                     group = config["kafka"]["group"]
+                    
+                    print(t, bootstrap_servers, offset_reset, group, test)
 
                     topics_on_watch[t] = multiprocessing.Process(
                         target=topic_listener,
                         args=(t, bootstrap_servers, offset_reset, group, test),
                     )
+                
                     topics_on_watch[t].daemon = True
                     topics_on_watch[t].start()
-
+                    
                 else:
                     log(f"Performing thread health check for {t}")
                     try:
