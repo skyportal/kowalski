@@ -69,7 +69,7 @@ class Program:
     def create(self):
         user_groups = self.get_groups()
 
-        stream_ids = [1, 2]
+        stream_ids = [4]
 
         if self.group_name in user_groups.keys():
             # already exists? grab its id then:
@@ -162,7 +162,7 @@ class Program:
 class Filter:
     def __init__(
         self,
-        collection: str = "ZTF_alerts",
+        collection: str = "PGIR_alerts",
         group_id=None,
         filter_id=None,
         permissions=None,
@@ -193,7 +193,7 @@ class Filter:
                 {
                     "$addFields": {
                         "annotations.author": "dd",
-                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
+                        "annotations.mean_rb": {"$avg": "$prv_candidates.drb"},
                     }
                 },
                 {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
@@ -311,7 +311,7 @@ class TestIngester:
                 group_id=program2.group_id,
                 filter_id=program2.filter_id,
                 autosave=True,
-                pipeline=[{"$match": {"objectId": "PGIR20abcdef"}}],##Need to change this name
+                pipeline=[{"$match": {"objectId": "PGIR19aacbvv"}}],
             )
 
             program3 = Program(
@@ -323,7 +323,7 @@ class TestIngester:
                 filter_id=program3.filter_id,
                 update_annotations=True,
                 pipeline=[
-                    {"$match": {"objectId": "PGIR20uvwxyz"}} ###Need to change this name
+                    {"$match": {"objectId": "PGIR21aeiljk"}}
                 ],  # there are 3 alerts in the test set for this oid
             )
 
@@ -440,7 +440,10 @@ class TestIngester:
         )
 
         # small number of alerts that come with kowalski
-        path_alerts = pathlib.Path("/app/data/pgir_alerts/20200202/") ####Need to change this
+        path_alerts = pathlib.Path("/app/data/pgir_alerts/20210629/")
+        
+        #ONLY USING THE ARCHIVAL PGIR ALERTS FOR NOW
+        '''
         # grab some more alerts from gs://ztf-fritz/sample-public-alerts
         try:
             log("Grabbing more alerts from gs://ztf-fritz/sample-public-alerts")
@@ -464,6 +467,8 @@ class TestIngester:
             ]
         )
         log(f"Fetched {len(ids)} alerts from gs://pgir-fritz/sample-public-alerts")
+        '''
+        
         # push!
         for p in path_alerts.glob("*.avro"):
             with open(str(p), "rb") as data:
@@ -543,7 +548,9 @@ class TestIngester:
 
             n_alerts = mongo.db[collection_alerts].count_documents({})
             n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
-
+            
+            #REMOVE THIS
+            print('Testing n_alerts and n_alerts_aux', n_alerts, n_alerts_aux)
             try:
                 assert n_alerts == 313 #Need to change
                 assert n_alerts_aux == 145 #Need to change
@@ -572,6 +579,8 @@ class TestIngester:
             assert result["status"] == "success"
             assert "data" in result
             assert "totalMatches" in result["data"]
+            #REMOVE THIS
+            print('totalMatches', result["data"]["totalMatches"])
             assert result["data"]["totalMatches"] == 88
 
             # check that the only candidate that passed the second filter (ZTF20aaelulu) got saved as Source
@@ -588,4 +597,4 @@ class TestIngester:
             assert "totalMatches" in result["data"]
             assert result["data"]["totalMatches"] == 1
             assert "sources" in result["data"]
-            assert result["data"]["sources"][0]["id"] == "ZTF20aaelulu"
+            assert result["data"]["sources"][0]["id"] == "PGIR19aacbvv"

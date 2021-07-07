@@ -40,7 +40,7 @@ class TestAPIs(object):
     def make_filter(
         filter_id: int = random.randint(1, 1000),
         group_id: int = random.randint(1, 1000),
-        collection: str = "ZTF_alerts",
+        collection: str = "PGIR_alerts",
         permissions: List = None,
         pipeline: List = None,
     ):
@@ -365,7 +365,7 @@ class TestAPIs(object):
             },
             {
                 "$lookup": {  # <- $lookup is not allowed
-                    "from": "ZTF_alerts_aux",
+                    "from": "PGIR_alerts_aux",
                     "localField": "objectId",
                     "foreignField": "_id",
                     "as": "aux",
@@ -501,7 +501,7 @@ class TestAPIs(object):
 
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        collection = "ZTF_alerts"
+        collection = "PGIR_alerts"
 
         # check query without book-keeping
         qu = {
@@ -545,7 +545,7 @@ class TestAPIs(object):
 
         headers = {"Authorization": access_token}
 
-        collection = "ZTF_alerts"
+        collection = "PGIR_alerts"
 
         # check query without book-keeping
         qu = {
@@ -579,7 +579,7 @@ class TestAPIs(object):
 
         headers = {"Authorization": access_token}
 
-        collection = "ZTF_alerts"
+        collection = "PGIR_alerts"
 
         # check query without book-keeping
         qu = {
@@ -616,7 +616,7 @@ class TestAPIs(object):
 
         headers = {"Authorization": access_token}
 
-        collection = "ZTF_alerts"
+        collection = "PGIR_alerts"
 
         # check query without book-keeping
         qu = {
@@ -678,7 +678,7 @@ class TestAPIs(object):
 
         headers = {"Authorization": access_token}
 
-        collection = "ZTF_alerts"
+        collection = "PGIR_alerts"
 
         # check catalog_names info
         qu = {
@@ -709,7 +709,7 @@ class TestAPIs(object):
 
         headers = {"Authorization": access_token}
 
-        collection = "ZTF_alerts"
+        collection = "PGIR_alerts"
 
         # check catalog_names info
         qu = {
@@ -739,7 +739,7 @@ class TestAPIs(object):
 
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        collection = "ZTF_alerts"
+        collection = "PGIR_alerts"
 
         # check query without book-keeping
         qu = {
@@ -790,10 +790,10 @@ class TestAPIs(object):
         assert result["status"] == "error"
         assert result["message"] == "token is invalid"
 
-    # test ztf trigger api
+    # test PGIR trigger api
 
     @staticmethod
-    async def make_ztf_trigger(
+    async def make_pgir_trigger(
         queue_name: str = "".join(
             random.choice(string.ascii_uppercase + string.digits) for _ in range(9)
         ),
@@ -836,8 +836,8 @@ class TestAPIs(object):
             "user": user,
         }
 
-    async def test_triggers_ztf(self, aiohttp_client):
-        """Test saving, testing, retrieving, modifying, and removing a ZTF trigger: /api/triggers/ztf
+    async def test_triggers_pgir(self, aiohttp_client):
+        """Test saving, testing, retrieving, modifying, and removing a PGIR trigger: /api/triggers/pgir
 
         :param aiohttp_client:
         :return:
@@ -851,11 +851,11 @@ class TestAPIs(object):
 
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        ztf_trigger = await self.make_ztf_trigger()
+        pgir_trigger = await self.make_pgir_trigger()
 
         # put
         resp = await client.put(
-            "/api/triggers/ztf.test", json=ztf_trigger, headers=headers, timeout=5
+            "/api/triggers/pgir.test", json=pgir_trigger, headers=headers, timeout=5
         )
 
         assert resp.status == 200
@@ -865,7 +865,7 @@ class TestAPIs(object):
 
         # delete
         resp = await client.delete(
-            "/api/triggers/ztf.test", json=ztf_trigger, headers=headers, timeout=5
+            "/api/triggers/pgir.test", json=pgir_trigger, headers=headers, timeout=5
         )
 
         assert resp.status == 200
