@@ -27,7 +27,7 @@ kowalski:
   path:
     app: "/app"
     docs: "/app/docs"
-    ml_models: "/app/models/"
+    ml_models_ztf: "/app/models/"
     ml_models_pgir: "/app/models_pgir/"
     logs: "/data/logs/"
     data: "/data"
@@ -345,10 +345,10 @@ kowalski:
           }
 
     xmatch:
-      cone_search_radius: 2
-      cone_search_unit: "arcsec"
-      catalogs:
+      ZTF:
         2MASS_PSC:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -358,6 +358,8 @@ kowalski:
             k_m: 1
 
         AllWISE:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -373,6 +375,8 @@ kowalski:
             ph_qual: 1
 
         Gaia_DR2:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -384,6 +388,8 @@ kowalski:
             phot_rp_mean_mag: 1
 
         Gaia_EDR3:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -395,6 +401,8 @@ kowalski:
             phot_rp_mean_mag: 1
 
         Gaia_DR2_WD:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -407,6 +415,8 @@ kowalski:
             eTeff: 1
 
         PS1_STRM:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -420,6 +430,8 @@ kowalski:
             z_phot_err: 1
 
         galaxy_redshifts_20200522:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -429,6 +441,8 @@ kowalski:
             b: 1
 
         GALEX:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 0
@@ -440,6 +454,8 @@ kowalski:
             e_NUVmag: 1
 
         IGAPS_DR2:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 0
@@ -455,6 +471,8 @@ kowalski:
             UErr: 1
 
         LAMOST_DR5_v3:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -470,6 +488,8 @@ kowalski:
             subclass: 1
 
         PS1_DR1:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -485,11 +505,10 @@ kowalski:
             yMeanPSFMag: 1
             yMeanPSFMagErr: 1
 
-    xmatch_pgir:
-      cone_search_radius: 8
-      cone_search_unit: "arcsec"
-      catalogs:
+      PGIR:
         2MASS_PSC:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -499,6 +518,8 @@ kowalski:
             k_m: 1
 
         AllWISE:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -514,6 +535,8 @@ kowalski:
             ph_qual: 1
 
         Gaia_DR2:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -525,6 +548,8 @@ kowalski:
             phot_rp_mean_mag: 1
 
         Gaia_EDR3:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -536,6 +561,8 @@ kowalski:
             phot_rp_mean_mag: 1
 
         PS1_STRM:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -549,6 +576,8 @@ kowalski:
             z_phot_err: 1
 
         galaxy_redshifts_20200522:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -558,6 +587,8 @@ kowalski:
             b: 1
 
         GALEX:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 0
@@ -569,6 +600,8 @@ kowalski:
             e_NUVmag: 1
 
         IGAPS_DR2:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 0
@@ -584,6 +617,8 @@ kowalski:
             UErr: 1
 
         LAMOST_DR5_v3:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -599,6 +634,8 @@ kowalski:
             subclass: 1
 
         PS1_DR1:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
           filter: {}
           projection:
             _id: 1
@@ -616,20 +653,21 @@ kowalski:
 
 
   ml_models:
-    braai:
-      version: "d6_m9"
-    acai_h:
-      version: "d1_dnn_20201130"
-    acai_v:
-      version: "d1_dnn_20201130"
-    acai_o:
-      version: "d1_dnn_20201130"
-    acai_n:
-      version: "d1_dnn_20201130"
-    acai_b:
-      version: "d1_dnn_20201130"
+    ZTF:
+      braai:
+        version: "d6_m9"
+      acai_h:
+        version: "d1_dnn_20201130"
+      acai_v:
+        version: "d1_dnn_20201130"
+      acai_o:
+        version: "d1_dnn_20201130"
+      acai_n:
+        version: "d1_dnn_20201130"
+      acai_b:
+        version: "d1_dnn_20201130"
+    PGIR:
 
-  ml_models_pgir:
 
   skyportal:
     protocol: "http"
