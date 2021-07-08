@@ -31,8 +31,6 @@ kowalski:
     ml_models_pgir: "/app/models_pgir/"
     logs: "/data/logs/"
     data: "/data"
-    alerts: "/data/alerts"
-    alerts_pgir: "/data/alerts_pgir"
     queries: "/data/queries"
     tess: "/data/tess"
     tmp: "/_tmp"
