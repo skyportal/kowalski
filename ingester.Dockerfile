@@ -14,7 +14,7 @@ ARG acai_b_version=d1_dnn_20201130
 
 # Install jdk, mkdirs, fetch and install Kafka
 RUN apt-get update && apt-get install -y default-jdk && \
-    mkdir -p /app /data /data/logs /_tmp /kafka && \
+    mkdir -p /app /app/models_pgir /data /data/logs /_tmp /kafka && \
     wget https://storage.googleapis.com/ztf-fritz/kafka_$kafka_version.tgz -O /kafka/kafka_$kafka_version.tgz && \
     tar -xzf /kafka/kafka_$kafka_version.tgz
 
@@ -32,7 +32,6 @@ ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_v.$acai_v_vers
 ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_o.$acai_o_version.h5 /app/models/
 ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_n.$acai_n_version.h5 /app/models/
 ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_b.$acai_b_version.h5 /app/models/
-RUN mkdir /app/models_pgir
 
 # copy over the test data
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
