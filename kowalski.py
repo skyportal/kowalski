@@ -465,8 +465,7 @@ class Kowalski:
             containers=("kowalski_ingester_1", "kowalski_api_1", "kowalski_mongo_1"),
             sleep_for_seconds=10,
         )
-        
-        
+
         print("Testing PGIR alert ingestion")
         command = [
             "docker",
@@ -483,7 +482,6 @@ class Kowalski:
             subprocess.run(command, check=True)
         except subprocess.CalledProcessError:
             sys.exit(1)
-        
 
         print("Testing ZTF alert ingestion")
 

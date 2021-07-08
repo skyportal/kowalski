@@ -11,7 +11,7 @@ import sys
 import time
 import traceback
 import threading
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from alert_broker import (
     AlertConsumer,
@@ -25,9 +25,126 @@ from utils import init_db_sync, load_config, log, timer
 config = load_config(config_file="config.yaml")["kowalski"]
 
 
+class ZTFAlertConsumer(AlertConsumer, ABC):
+    """
+    Creates an alert stream Kafka consumer for a given topic.
+    """
+
+    def __init__(self, topic: str, dask_client: dask.distributed.Client, **kwargs):
+        super().__init__(topic, dask_client, **kwargs)
+
+    @staticmethod
+    def process_alert(alert: Mapping, topic: str):
+        """Alert brokering task run by dask.distributed workers
+
+        :param alert: decoded alert from Kafka stream
+        :param topic: Kafka stream topic name for bookkeeping
+        :return:
+        """
+        candid = alert["candid"]
+        object_id = alert["objectId"]
+
+        # get worker running current task
+        worker = dask.distributed.get_worker()
+        alert_worker = worker.plugins["worker-init"].alert_worker
+
+        log(f"{topic} {object_id} {candid} {worker.address}")
+
+        # return if this alert packet has already been processed and ingested into collection_alerts:
+        if (
+            alert_worker.mongo.db[alert_worker.collection_alerts].count_documents(
+                {"candid": candid}, limit=1
+            )
+            == 1
+        ):
+            return
+
+        # candid not in db, ingest decoded avro packet into db
+        with timer(f"Mongification of {object_id} {candid}", alert_worker.verbose > 1):
+            alert, prv_candidates = alert_worker.alert_mongify(alert)
+
+        # ML models:
+        with timer(f"MLing of {object_id} {candid}", alert_worker.verbose > 1):
+            scores = alert_worker.alert_filter__ml(alert)
+            alert["classifications"] = scores
+
+        with timer(f"Ingesting {object_id} {candid}", alert_worker.verbose > 1):
+            alert_worker.mongo.insert_one(
+                collection=alert_worker.collection_alerts, document=alert
+            )
+
+        # prv_candidates: pop nulls - save space
+        prv_candidates = [
+            {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
+            for prv_candidate in prv_candidates
+        ]
+
+        # cross-match with external catalogs if objectId not in collection_alerts_aux:
+        if (
+            alert_worker.mongo.db[alert_worker.collection_alerts_aux].count_documents(
+                {"_id": object_id}, limit=1
+            )
+            == 0
+        ):
+            with timer(
+                f"Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+            ):
+                xmatches = alert_worker.alert_filter__xmatch(alert)
+            # CLU cross-match:
+            with timer(
+                f"CLU cross-match {object_id} {candid}", alert_worker.verbose > 1
+            ):
+                xmatches = {
+                    **xmatches,
+                    **alert_worker.alert_filter__xmatch_clu(alert),
+                }
+
+            alert_aux = {
+                "_id": object_id,
+                "cross_matches": xmatches,
+                "prv_candidates": prv_candidates,
+            }
+
+            with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
+                alert_worker.mongo.insert_one(
+                    collection=alert_worker.collection_alerts_aux, document=alert_aux
+                )
+
+        else:
+            with timer(
+                f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1
+            ):
+                alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
+                    {"_id": object_id},
+                    {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
+                    upsert=True,
+                )
+
+        if config["misc"]["broker"]:
+            # execute user-defined alert filters
+            with timer(f"Filtering of {object_id} {candid}", alert_worker.verbose > 1):
+                passed_filters = alert_worker.alert_filter__user_defined(
+                    alert_worker.filter_templates, alert
+                )
+            if alert_worker.verbose > 1:
+                log(
+                    f"{object_id} {candid} number of filters passed: {len(passed_filters)}"
+                )
+
+            # post to SkyPortal
+            alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+
+        # clean up after thyself
+        del alert, prv_candidates
+
+
 class ZTFAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        # talking to SkyPortal?
+        if not config["misc"]["broker"]:
+            return
 
         # get ZTF alert stream ids to program ids mapping
         self.ztf_program_id_to_stream_id = dict()
@@ -300,7 +417,7 @@ def topic_listener(
     ] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
 
     # Start alert stream consumer
-    stream_reader = AlertConsumer(topic, dask_client, instrument="ZTF", **conf)
+    stream_reader = ZTFAlertConsumer(topic, dask_client, instrument="ZTF", **conf)
 
     while True:
         try:

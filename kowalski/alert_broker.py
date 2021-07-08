@@ -1,4 +1,4 @@
-__all__ = ["process_alert", "AlertConsumer", "AlertWorker", "EopError"]
+__all__ = ["AlertConsumer", "AlertWorker", "EopError"]
 
 from ast import literal_eval
 from astropy.io import fits
@@ -72,108 +72,12 @@ class EopError(Exception):
         return self.message
 
 
-def process_alert(alert, topic):
-    """Alert brokering task run by dask.distributed workers
-
-    :param alert: decoded alert from Kafka stream
-    :param topic: Kafka stream topic name for bookkeeping
-    :return:
-    """
-    candid = alert["candid"]
-    object_id = alert["objectId"]
-
-    # get worker running current task
-    worker = dask.distributed.get_worker()
-    alert_worker = worker.plugins["worker-init"].alert_worker
-
-    log(f"{topic} {object_id} {candid} {worker.address}")
-
-    # return if this alert packet has already been processed and ingested into collection_alerts:
-    if (
-        alert_worker.mongo.db[alert_worker.collection_alerts].count_documents(
-            {"candid": candid}, limit=1
-        )
-        == 1
-    ):
-        return
-
-    # candid not in db, ingest decoded avro packet into db
-    with timer(f"Mongification of {object_id} {candid}", alert_worker.verbose > 1):
-        alert, prv_candidates = alert_worker.alert_mongify(alert)
-
-    # ML models:
-    with timer(f"MLing of {object_id} {candid}", alert_worker.verbose > 1):
-        scores = alert_worker.alert_filter__ml(alert, ml_models=alert_worker.ml_models)
-        alert["classifications"] = scores
-
-    with timer(f"Ingesting {object_id} {candid}", alert_worker.verbose > 1):
-        alert_worker.mongo.insert_one(
-            collection=alert_worker.collection_alerts, document=alert
-        )
-
-    # prv_candidates: pop nulls - save space
-    prv_candidates = [
-        {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
-        for prv_candidate in prv_candidates
-    ]
-
-    # cross-match with external catalogs if objectId not in collection_alerts_aux:
-    if (
-        alert_worker.mongo.db[alert_worker.collection_alerts_aux].count_documents(
-            {"_id": object_id}, limit=1
-        )
-        == 0
-    ):
-        with timer(f"Cross-match of {object_id} {candid}", alert_worker.verbose > 1):
-            xmatches = alert_worker.alert_filter__xmatch(alert_worker.mongo.db, alert)
-        # CLU cross-match:
-        with timer(f"CLU cross-match {object_id} {candid}", alert_worker.verbose > 1):
-            xmatches = {
-                **xmatches,
-                **alert_worker.alert_filter__xmatch_clu(alert_worker.mongo.db, alert),
-            }
-
-        alert_aux = {
-            "_id": object_id,
-            "cross_matches": xmatches,
-            "prv_candidates": prv_candidates,
-        }
-
-        with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
-            alert_worker.mongo.insert_one(
-                collection=alert_worker.collection_alerts_aux, document=alert_aux
-            )
-
-    else:
-        with timer(f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1):
-            alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
-                {"_id": object_id},
-                {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
-                upsert=True,
-            )
-
-    if config["misc"]["broker"]:
-        # execute user-defined alert filters
-        with timer(f"Filtering of {object_id} {candid}", alert_worker.verbose > 1):
-            passed_filters = alert_worker.alert_filter__user_defined(
-                alert_worker.mongo.db, alert_worker.filter_templates, alert
-            )
-        if alert_worker.verbose > 1:
-            log(f"{object_id} {candid} number of filters passed: {len(passed_filters)}")
-
-        # post to SkyPortal
-        alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
-
-    # clean up after thyself
-    del alert, prv_candidates
-
-
 class AlertConsumer:
     """
     Creates an alert stream Kafka consumer for a given topic.
     """
 
-    def __init__(self, topic, dask_client, **kwargs):
+    def __init__(self, topic: str, dask_client: dask.distributed.Client, **kwargs):
 
         self.verbose = kwargs.get("verbose", 2)
 
@@ -283,6 +187,16 @@ class AlertConsumer:
         finally:
             return decoded_msg
 
+    @staticmethod
+    def process_alert(alert: Mapping, topic: str):
+        """Alert brokering task run by dask.distributed workers
+
+        :param alert: decoded alert from Kafka stream
+        :param topic: Kafka stream topic name for bookkeeping
+        :return:
+        """
+        raise NotImplementedError("Must be implemented in subclass")
+
     def poll(self):
         """Polls Kafka broker to consume a topic."""
         msg = self.consumer.poll()
@@ -314,7 +228,7 @@ class AlertConsumer:
                             self.verbose > 1,
                         ):
                             future = self.dask_client.submit(
-                                process_alert, record, self.topic, pure=True
+                                self.process_alert, record, self.topic, pure=True
                             )
                             dask.distributed.fire_and_forget(future)
                             future.release()
@@ -348,13 +262,13 @@ class AlertWorker:
 
         # MongoDB collections to store the alerts:
         self.collection_alerts = self.config["database"]["collections"][
-            f"alerts_{self.instrument}"
+            f"alerts_{self.instrument.lower()}"
         ]
         self.collection_alerts_aux = self.config["database"]["collections"][
-            f"alerts_{self.instrument}_aux"
+            f"alerts_{self.instrument.lower()}_aux"
         ]
         self.collection_alerts_filter = self.config["database"]["collections"][
-            f"alerts_{self.instrument}_filter"
+            f"alerts_{self.instrument.lower()}_filter"
         ]
 
         self.mongo = Mongo(
