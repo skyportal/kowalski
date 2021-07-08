@@ -140,6 +140,20 @@ def cross_match(_mongo, ra, dec):
     return features
 
 
+def get_field_ccd_quad(_mongo, doc_id: int, catalog: str):
+    cursor = _mongo.db[catalog].find(
+        {"_id": doc_id},
+        {
+            "_id": 0,
+            "field": 1,
+            "ccd": 1,
+            "quad": 1,
+        },
+    )
+    result = list(cursor)
+    return result[0] if len(result) > 0 else dict()
+
+
 def get_n_ztf_alerts(_mongo, ra, dec):
     """
     Cross-match by position
@@ -365,6 +379,13 @@ def process_file(_file, _collections, _xmatch):
                 features = cross_match(mongo, doc["ra"], doc["dec"])
                 for feature in features:
                     doc[feature] = features[feature]
+
+            # Field, ccd, quad data:
+            field_ccd_quad = get_field_ccd_quad(
+                mongo, doc["_id"], _collections["sources"]
+            )
+            for feature in field_ccd_quad:
+                doc[feature] = field_ccd_quad[feature]
 
             # GeoJSON for 2D indexing
             doc["coordinates"] = {}
