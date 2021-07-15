@@ -181,12 +181,19 @@ def main(
     for candidate in candidates:
         oid = candidate["id"]
         thumbnail_types = [t["type"] for t in candidate["thumbnails"]]
-        if "new" not in thumbnail_types and oid not in processed:
-            log(oid)
-            alert = get_alert_by_object_id(oid=oid)
-            alert_post_thumbnails(alert)
-            processed.add(oid)
-            break
+        if (
+            "new" not in thumbnail_types
+            and oid not in processed
+            and oid.startswith("ZTF")
+        ):
+            try:
+                log(oid)
+                alert = get_alert_by_object_id(oid=oid)
+                alert_post_thumbnails(alert)
+                processed.add(oid)
+            except Exception as e:
+                log(f"Got error: {e}")
+                continue
 
 
 if __name__ == "__main__":
