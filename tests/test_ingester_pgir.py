@@ -349,7 +349,9 @@ class TestIngester:
         # take a nap while it fires up
         time.sleep(3)
 
-        log("Starting up Kafka Server at localhost:9092") #should I be using a different port??????? Probably not. ZTF tests will shut it down
+        log(
+            "Starting up Kafka Server at localhost:9092"
+        )  # should I be using a different port??????? Probably not. ZTF tests will shut it down
 
         # start the Kafka server:
         cmd_kafka_server = [
@@ -441,9 +443,9 @@ class TestIngester:
 
         # small number of alerts that come with kowalski
         path_alerts = pathlib.Path("/app/data/pgir_alerts/20210629/")
-        
-        #ONLY USING THE ARCHIVAL PGIR ALERTS FOR NOW
-        '''
+
+        # ONLY USING THE ARCHIVAL PGIR ALERTS FOR NOW
+        """
         # grab some more alerts from gs://ztf-fritz/sample-public-alerts
         try:
             log("Grabbing more alerts from gs://ztf-fritz/sample-public-alerts")
@@ -467,8 +469,8 @@ class TestIngester:
             ]
         )
         log(f"Fetched {len(ids)} alerts from gs://pgir-fritz/sample-public-alerts")
-        '''
-        
+        """
+
         # push!
         for p in path_alerts.glob("*.avro"):
             with open(str(p), "rb") as data:
@@ -548,12 +550,12 @@ class TestIngester:
 
             n_alerts = mongo.db[collection_alerts].count_documents({})
             n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
-            
-            #REMOVE THIS
-            print('Testing n_alerts and n_alerts_aux', n_alerts, n_alerts_aux)
+
+            # REMOVE THIS
+            print("Testing n_alerts and n_alerts_aux", n_alerts, n_alerts_aux)
             try:
-                assert n_alerts == 313 #Need to change
-                assert n_alerts_aux == 145 #Need to change
+                assert n_alerts == 313  # Need to change
+                assert n_alerts_aux == 145  # Need to change
                 break
             except AssertionError:
                 print(
@@ -579,8 +581,8 @@ class TestIngester:
             assert result["status"] == "success"
             assert "data" in result
             assert "totalMatches" in result["data"]
-            #REMOVE THIS
-            print('totalMatches', result["data"]["totalMatches"])
+            # REMOVE THIS
+            print("totalMatches", result["data"]["totalMatches"])
             assert result["data"]["totalMatches"] == 88
 
             # check that the only candidate that passed the second filter (ZTF20aaelulu) got saved as Source
