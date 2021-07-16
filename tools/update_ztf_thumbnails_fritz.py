@@ -160,6 +160,9 @@ def main(
     total_matches = data["totalMatches"]
     candidates = data["candidates"]
     log(f"Found objects: {total_matches}")
+    if total_matches == 0:
+        return
+
     num_batches = total_matches // len(candidates)
     log(f"Fetched batch #1 of {num_batches + 1}")
 
