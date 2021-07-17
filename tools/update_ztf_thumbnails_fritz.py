@@ -16,6 +16,7 @@ import pathlib
 from penquins import Kowalski
 import requests
 import sys
+from typing import Optional, Union
 
 parent_dir = pathlib.Path(__file__).parent.absolute().parent
 sys.path.append(str(parent_dir / "kowalski"))
@@ -139,11 +140,24 @@ def get_alert_by_object_id(oid: str):
 
 
 def main(
-    start_date: datetime.datetime = datetime.datetime.utcnow(),
-    end_date: datetime.datetime = datetime.datetime.utcnow()
-    + datetime.timedelta(days=1),
+    start_date: Optional[Union[datetime.datetime, str, int]] = None,
+    end_date: Optional[Union[datetime.datetime, str, int]] = None,
     num_per_page: int = 100,
 ):
+    if isinstance(start_date, str) or isinstance(start_date, int):
+        start_date = datetime.datetime.strptime(str(start_date), "%Y%m%d")
+    if isinstance(end_date, str) or isinstance(end_date, int):
+        end_date = datetime.datetime.strptime(str(end_date), "%Y%m%d")
+
+    if start_date is None:
+        start_date = datetime.datetime.utcnow()
+    if end_date is None:
+        end_date = datetime.datetime.utcnow() + datetime.timedelta(days=1)
+    print(start_date, end_date)
+
+    if end_date < start_date:
+        raise ValueError("End date must be before start date.")
+
     # print(get_alert_by_object_id(oid="ZTF21abiuvdk"))
     log(f"Start date: {start_date.strftime('%Y-%m-%d')}")
     log(f"End date: {end_date.strftime('%Y-%m-%d')}")
@@ -187,7 +201,7 @@ def main(
         if (
             "new" not in thumbnail_types
             and oid not in processed
-            and oid.startswith("ZTF")
+            and (oid.startswith("ZTF1") or oid.startswith("ZTF2"))
         ):
             try:
                 log(oid)
