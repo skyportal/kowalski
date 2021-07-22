@@ -5,6 +5,7 @@ import pathlib
 import requests
 import subprocess
 import time
+from typing import List, Optional
 
 from alert_broker_ztf import watchdog
 from utils import init_db_sync, load_config, log, Mongo
@@ -15,7 +16,13 @@ config = load_config(config_file="config.yaml")["kowalski"]
 
 
 class Program:
-    def __init__(self, group_name="FRITZ_TEST", group_nickname="Fritz"):
+    def __init__(
+        self,
+        group_name: str = "FRITZ_TEST",
+        group_nickname: str = "Fritz",
+        stream_ids: Optional[List[int]] = None,
+        filter_name: str = "Orange Transients",
+    ):
         self.access_token = config["skyportal"]["token"]
         self.base_url = (
             f"{config['skyportal']['protocol']}://"
@@ -25,7 +32,9 @@ class Program:
 
         self.group_name = group_name
         self.group_nickname = group_nickname
-        self.group_id, self.filter_id = self.create()
+        self.group_id, self.filter_id = self.create(
+            stream_ids=stream_ids, filter_name=filter_name
+        )
 
     def get_groups(self):
         resp = requests.get(
@@ -66,10 +75,15 @@ class Program:
 
         return group_filter_ids
 
-    def create(self):
+    def create(
+        self,
+        stream_ids: Optional[List[int]] = None,
+        filter_name: str = "Orange Transients",
+    ):
         user_groups = self.get_groups()
 
-        stream_ids = [1, 2]
+        if stream_ids is None:
+            stream_ids = [1, 2]
 
         if self.group_name in user_groups.keys():
             # already exists? grab its id then:
@@ -111,7 +125,7 @@ class Program:
             resp = requests.post(
                 self.base_url + "/api/filters",
                 json={
-                    "name": "Orange Transients",
+                    "name": filter_name,
                     "stream_id": max(stream_ids),
                     "group_id": group_id,
                 },

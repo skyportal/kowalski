@@ -146,7 +146,7 @@ class PGIRAlertWorker(AlertWorker, ABC):
         if not config["misc"]["broker"]:
             return
 
-        # get ZTF alert stream ids to program ids mapping
+        # get PGIR alert stream id on SP
         self.pgir_stream_id = None
         with timer("Getting PGIR alert stream id from SkyPortal", self.verbose > 1):
             response = self.api_skyportal("GET", "/api/streams")
@@ -179,10 +179,8 @@ class PGIRAlertWorker(AlertWorker, ABC):
 
     def get_active_filters(self):
         """Fetch user-defined filters from own db marked as active."""
-        # todo: query SP to make sure the filters still exist there and we're not out of sync;
-        #       clean up if necessary
         return list(
-            self.mongo.db[config["database"]["collections"]["filters"]].aggregate(
+            self.mongo.db[config["database"]["collections"]["filters_pgir"]].aggregate(
                 [
                     {
                         "$match": {
@@ -258,13 +256,6 @@ class PGIRAlertWorker(AlertWorker, ABC):
                 pipeline = deepcopy(self.filter_pipeline_upstream) + bson_loads(
                     active_filter["fv"]["pipeline"]
                 )
-                # set permissions
-                pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter[
-                    "permissions"
-                ]
-                pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0][
-                    "$in"
-                ][1] = active_filter["permissions"]
 
                 filter_template = {
                     "group_id": active_filter["group_id"],
@@ -312,45 +303,39 @@ class PGIRAlertWorker(AlertWorker, ABC):
         ):
             df_photometry = self.make_photometry(alert)
 
-            df_photometry["stream_id"] = df_photometry["programid"].apply(
-                lambda programid: self.ztf_program_id_to_stream_id[programid]
-            )
+        # post photometry
+        photometry = {
+            "obj_id": alert["objectId"],
+            "stream_ids": [int(self.pgir_stream_id)],
+            "instrument_id": self.instrument_id,
+            "mjd": df_photometry["mjd"].tolist(),
+            "flux": df_photometry["flux"].tolist(),
+            "fluxerr": df_photometry["fluxerr"].tolist(),
+            "zp": df_photometry["zp"].tolist(),
+            "magsys": df_photometry["zpsys"].tolist(),
+            "filter": df_photometry["ztf_filter"].tolist(),
+            "ra": df_photometry["ra"].tolist(),
+            "dec": df_photometry["dec"].tolist(),
+        }
 
-        # post photometry by stream_id
-        for stream_id in set(df_photometry.stream_id.unique()):
-            stream_id_mask = df_photometry.stream_id == int(stream_id)
-            photometry = {
-                "obj_id": alert["objectId"],
-                "stream_ids": [int(stream_id)],
-                "instrument_id": self.instrument_id,
-                "mjd": df_photometry.loc[stream_id_mask, "mjd"].tolist(),
-                "flux": df_photometry.loc[stream_id_mask, "flux"].tolist(),
-                "fluxerr": df_photometry.loc[stream_id_mask, "fluxerr"].tolist(),
-                "zp": df_photometry.loc[stream_id_mask, "zp"].tolist(),
-                "magsys": df_photometry.loc[stream_id_mask, "zpsys"].tolist(),
-                "filter": df_photometry.loc[stream_id_mask, "ztf_filter"].tolist(),
-                "ra": df_photometry.loc[stream_id_mask, "ra"].tolist(),
-                "dec": df_photometry.loc[stream_id_mask, "dec"].tolist(),
-            }
-
-            if (len(photometry.get("flux", ())) > 0) or (
-                len(photometry.get("fluxerr", ())) > 0
+        if (len(photometry.get("flux", ())) > 0) or (
+            len(photometry.get("fluxerr", ())) > 0
+        ):
+            with timer(
+                f"Posting photometry of {alert['objectId']} {alert['candid']}, "
+                f"stream_id={self.pgir_stream_id} to SkyPortal",
+                self.verbose > 1,
             ):
-                with timer(
-                    f"Posting photometry of {alert['objectId']} {alert['candid']}, "
-                    f"stream_id={stream_id} to SkyPortal",
-                    self.verbose > 1,
-                ):
-                    response = self.api_skyportal("PUT", "/api/photometry", photometry)
-                if response.json()["status"] == "success":
-                    log(
-                        f"Posted {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
-                    )
-                else:
-                    log(
-                        f"Failed to post {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
-                    )
-                log(response.json())
+                response = self.api_skyportal("PUT", "/api/photometry", photometry)
+            if response.json()["status"] == "success":
+                log(
+                    f"Posted {alert['objectId']} photometry stream_id={self.pgir_stream_id} to SkyPortal"
+                )
+            else:
+                log(
+                    f"Failed to post {alert['objectId']} photometry stream_id={self.pgir_stream_id} to SkyPortal"
+                )
+            log(response.json())
 
 
 class WorkerInitializer(dask.distributed.WorkerPlugin):
@@ -474,7 +459,7 @@ def watchdog(obs_date: str = None, test: bool = False):
                 datestr = datetime.datetime.utcnow().strftime("%Y%m%d")
             else:
                 datestr = obs_date
-            # as of 20180403, the naming convention is ztf_%Y%m%d_programidN
+            # as of 20210722, the naming convention is pgir_%Y%m%d_programidN
             topics_tonight = [t for t in topics if (datestr in t) and ("pgir" in t)]
             log(f"Topics: {topics_tonight}")
 

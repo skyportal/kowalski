@@ -7,156 +7,12 @@ import subprocess
 import time
 
 from alert_broker_pgir import watchdog
+from test_ingester import Program
 from utils import init_db_sync, load_config, log, Mongo
 
 
 """ load config and secrets """
 config = load_config(config_file="config.yaml")["kowalski"]
-
-
-class Program:
-    def __init__(self, group_name="FRITZ_TEST", group_nickname="Fritz"):
-        self.access_token = config["skyportal"]["token"]
-        self.base_url = (
-            f"{config['skyportal']['protocol']}://"
-            f"{config['skyportal']['host']}:{config['skyportal']['port']}"
-        )
-        self.headers = {"Authorization": f"token {self.access_token}"}
-
-        self.group_name = group_name
-        self.group_nickname = group_nickname
-        self.group_id, self.filter_id = self.create()
-
-    def get_groups(self):
-        resp = requests.get(
-            self.base_url + "/api/groups",
-            headers=self.headers,
-            timeout=3,
-        )
-
-        assert resp.status_code == requests.codes.ok
-        result = resp.json()
-        # print(result)
-        assert result["status"] == "success"
-        assert "data" in result
-        assert "user_groups" in result["data"]
-
-        user_groups = {
-            g["name"]: g["id"] for g in result["data"]["user_accessible_groups"]
-        }
-
-        return user_groups
-
-    def get_group_filters(self, group_id: int):
-        resp = requests.get(
-            self.base_url + "/api/filters",
-            headers=self.headers,
-            timeout=3,
-        )
-
-        assert resp.status_code == requests.codes.ok
-        result = resp.json()
-        # print(result)
-        assert result["status"] == "success"
-        assert "data" in result
-
-        group_filter_ids = [
-            fi["id"] for fi in result["data"] if fi["group_id"] == group_id
-        ]
-
-        return group_filter_ids
-
-    def create(self):
-        user_groups = self.get_groups()
-
-        stream_ids = [4]
-
-        if self.group_name in user_groups.keys():
-            # already exists? grab its id then:
-            group_id = user_groups[self.group_name]
-        else:
-            # else, create a new group and add stream access to it
-            resp = requests.post(
-                self.base_url + "/api/groups",
-                json={"name": self.group_name, "nickname": self.group_nickname},
-                headers=self.headers,
-                timeout=3,
-            )
-            result = resp.json()
-            # print(result)
-            assert result["status"] == "success"
-            assert "data" in result
-            assert "id" in result["data"]
-
-            group_id = result["data"]["id"]
-
-            # grant stream access to group
-            for stream_id in stream_ids:
-                resp = requests.post(
-                    self.base_url + f"/api/groups/{group_id}/streams",
-                    json={"stream_id": stream_id},
-                    headers=self.headers,
-                    timeout=3,
-                )
-                result = resp.json()
-                # print(result)
-                assert result["status"] == "success"
-                assert result["data"]["stream_id"] == stream_id
-
-        # grab filter_ids defined for this group:
-        group_filter_ids = self.get_group_filters(group_id=group_id)
-
-        if len(group_filter_ids) == 0:
-            # none created so far? make one:
-            resp = requests.post(
-                self.base_url + "/api/filters",
-                json={
-                    "name": "Orange Transients",
-                    "stream_id": max(stream_ids),
-                    "group_id": group_id,
-                },
-                headers=self.headers,
-                timeout=3,
-            )
-            result = resp.json()
-            # print(result)
-            assert result["status"] == "success"
-            assert "data" in result
-            assert "id" in result["data"]
-
-            filter_id = result["data"]["id"]
-        else:
-            # else just grab the first one
-            filter_id = group_filter_ids[0]
-
-        return group_id, filter_id
-
-    def remove(self):
-        user_groups = self.get_groups()
-
-        group_filter_ids = self.get_group_filters(group_id=self.group_id)
-        for filter_id in group_filter_ids:
-            resp = requests.delete(
-                self.base_url + f"/api/filters/{filter_id}",
-                headers=self.headers,
-                timeout=3,
-            )
-            assert resp.status_code == requests.codes.ok
-            result = resp.json()
-            assert result["status"] == "success"
-
-        if self.group_name in user_groups.keys():
-
-            resp = requests.delete(
-                self.base_url + f"/api/groups/{user_groups[self.group_name]}",
-                headers=self.headers,
-                timeout=3,
-            )
-            assert resp.status_code == requests.codes.ok
-            result = resp.json()
-            assert result["status"] == "success"
-
-        self.group_id, self.filter_id = None, None
 
 
 class Filter:
@@ -298,14 +154,25 @@ class TestIngester:
 
         if config["misc"]["broker"]:
             log("Setting up test groups and filters in Fritz")
-            program = Program(group_name="FRITZ_TEST", group_nickname="test")
+            program = Program(
+                group_name="FRITZ_TEST_PGIR",
+                group_nickname="test-pgir",
+                filter_name="Infraorange transients",
+                stream_ids=[4],
+            )
             Filter(
                 collection="PGIR_alerts",
                 group_id=program.group_id,
                 filter_id=program.filter_id,
+                pipeline=[{"$match": {"candid": {"$gt": 0}}}],  # pass all
             )
 
-            program2 = Program(group_name="FRITZ_TEST_AUTOSAVE", group_nickname="test2")
+            program2 = Program(
+                group_name="FRITZ_TEST_PGIR_AUTOSAVE",
+                group_nickname="test2-pgir",
+                filter_name="Infraorange transients",
+                stream_ids=[4],
+            )
             Filter(
                 collection="PGIR_alerts",
                 group_id=program2.group_id,
@@ -315,7 +182,10 @@ class TestIngester:
             )
 
             program3 = Program(
-                group_name="FRITZ_TEST_UPDATE_ANNOTATIONS", group_nickname="test3"
+                group_name="FRITZ_TEST_PGIR_UPDATE_ANNOTATIONS",
+                group_nickname="test3-pgir",
+                filter_name="Infraorange transients",
+                stream_ids=[4],
             )
             Filter(
                 collection="PGIR_alerts",
@@ -349,9 +219,7 @@ class TestIngester:
         # take a nap while it fires up
         time.sleep(3)
 
-        log(
-            "Starting up Kafka Server at localhost:9092"
-        )  # should I be using a different port??????? Probably not. ZTF tests will shut it down
+        log("Starting up Kafka Server at localhost:9092")
 
         # start the Kafka server:
         cmd_kafka_server = [
@@ -387,7 +255,7 @@ class TestIngester:
 
         # create a test PGIR topic for the current UTC date
         date = datetime.datetime.utcnow().strftime("%Y%m%d")
-        topic_name = f"pgir_{date}_programid1_test"
+        topic_name = f"pgir_{date}_test"
 
         if topic_name in topics:
             # topic previously created? remove first
@@ -443,33 +311,7 @@ class TestIngester:
 
         # small number of alerts that come with kowalski
         path_alerts = pathlib.Path("/app/data/pgir_alerts/20210629/")
-
-        # ONLY USING THE ARCHIVAL PGIR ALERTS FOR NOW
-        """
-        # grab some more alerts from gs://ztf-fritz/sample-public-alerts
-        try:
-            log("Grabbing more alerts from gs://ztf-fritz/sample-public-alerts")
-            r = requests.get("https://www.googleapis.com/storage/v1/b/ztf-fritz/o") ##Need to change this
-            aa = r.json()["items"]
-            ids = [pathlib.Path(a["id"]).parent for a in aa if "avro" in a["id"]]
-        except Exception as e:
-            log(
-                "Grabbing alerts from gs://ztf-fritz/sample-public-alerts failed, but it is ok"
-            )
-            log(f"{e}")
-            ids = []
-        subprocess.run(
-            [
-                "gsutil",
-                "-m",
-                "cp",
-                "-n",
-                "gs://ztf-fritz/sample-public-alerts/*.avro", #####NEEED TO CHANGE WITH GATTINI PATH
-                "/app/data/ztf_alerts/20200202/",
-            ]
-        )
-        log(f"Fetched {len(ids)} alerts from gs://pgir-fritz/sample-public-alerts")
-        """
+        # fixme: ONLY USING THE ARCHIVAL PGIR ALERTS FOR NOW
 
         # push!
         for p in path_alerts.glob("*.avro"):
@@ -554,8 +396,8 @@ class TestIngester:
             # REMOVE THIS
             print("Testing n_alerts and n_alerts_aux", n_alerts, n_alerts_aux)
             try:
-                assert n_alerts == 313  # Need to change
-                assert n_alerts_aux == 145  # Need to change
+                assert n_alerts == 313  # fixme: Need to change
+                assert n_alerts_aux == 145  # fixme: Need to change
                 break
             except AssertionError:
                 print(
@@ -581,11 +423,11 @@ class TestIngester:
             assert result["status"] == "success"
             assert "data" in result
             assert "totalMatches" in result["data"]
-            # REMOVE THIS
             print("totalMatches", result["data"]["totalMatches"])
+            # fixme:
             assert result["data"]["totalMatches"] == 88
 
-            # check that the only candidate that passed the second filter (ZTF20aaelulu) got saved as Source
+            # check that the only candidate that passed the second filter (PGIR19aacbvv) got saved as Source
             resp = requests.get(
                 program2.base_url + f"/api/sources?group_ids={program2.group_id}",
                 headers=program2.headers,
