@@ -396,13 +396,13 @@ class TestIngester:
             # REMOVE THIS
             print("Testing n_alerts and n_alerts_aux", n_alerts, n_alerts_aux)
             try:
-                assert n_alerts == 313  # fixme: Need to change
-                assert n_alerts_aux == 145  # fixme: Need to change
+                assert n_alerts == 17
+                assert n_alerts_aux == 15
                 break
             except AssertionError:
                 print(
                     "Found an unexpected amount of alert/aux data: "
-                    f"({n_alerts}/{n_alerts_aux}, expecting 313/145). "
+                    f"({n_alerts}/{n_alerts_aux}, expecting 17/15). "
                     "Retrying in 30 seconds..."
                 )
                 time.sleep(30)
@@ -425,7 +425,7 @@ class TestIngester:
             assert "totalMatches" in result["data"]
             print("totalMatches", result["data"]["totalMatches"])
             # fixme:
-            assert result["data"]["totalMatches"] == 88
+            assert result["data"]["totalMatches"] == 17
 
             # check that the only candidate that passed the second filter (PGIR19aacbvv) got saved as Source
             resp = requests.get(

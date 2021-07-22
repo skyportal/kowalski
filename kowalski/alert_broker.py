@@ -267,9 +267,6 @@ class AlertWorker:
         self.collection_alerts_aux = self.config["database"]["collections"][
             f"alerts_{self.instrument.lower()}_aux"
         ]
-        self.collection_alerts_filter = self.config["database"]["collections"][
-            f"alerts_{self.instrument.lower()}_filter"
-        ]
 
         self.mongo = Mongo(
             host=config["database"]["host"],
@@ -283,7 +280,7 @@ class AlertWorker:
 
         # ML models
         self.ml_models = dict()
-        for model in config["ml_models"][self.instrument]:
+        for model in config["ml_models"].get(self.instrument, []):
             try:
                 model_version = config["ml_models"][self.instrument][model]["version"]
                 # todo: allow other formats such as SavedModel

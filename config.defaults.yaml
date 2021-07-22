@@ -69,7 +69,6 @@ kowalski:
       queries: "queries"
       alerts_ztf: "ZTF_alerts"
       alerts_ztf_aux: "ZTF_alerts_aux"
-      alerts_ztf_filter: "ZTF_alerts_filter"
       alerts_zuds: "ZUDS_alerts"
       alerts_zuds_aux: "ZUDS_alerts_aux"
       tns: "TNS"
@@ -666,7 +665,6 @@ kowalski:
         version: "d1_dnn_20201130"
       acai_b:
         version: "d1_dnn_20201130"
-    PGIR:
 
 
   skyportal:
@@ -695,7 +693,7 @@ kowalski:
   dask:
     host: 127.0.0.1
     scheduler_port: 8786
-    diagnostics_port: 8787
+    dashboard_address: :8787
     n_workers: 4
     threads_per_worker: 1
     lifetime: 24 hours
@@ -705,7 +703,7 @@ kowalski:
   dask_pgir:
     host: 127.0.0.1
     scheduler_port: 8788
-    diagnostics_port: 8789
+    dashboard_address: :8789
     n_workers: 4
     threads_per_worker: 1
     lifetime: 24 hours
