@@ -152,8 +152,8 @@ def main(
 
        Requires both Kowalski and SkyPortal tokens.
 
-    :param start_date: datetime.datetime or %Y%m%d
-    :param end_date: datetime.datetime or %Y%m%d
+    :param start_date: datetime.datetime or %Y%m%d. Defaults to current UTC date
+    :param end_date: datetime.datetime or %Y%m%d Defaults to current UTC date + 1 day
     :param num_per_page: how many SP Candidates to grab per batch
     :return:
     """
