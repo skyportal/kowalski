@@ -153,7 +153,6 @@ def main(
         start_date = datetime.datetime.utcnow()
     if end_date is None:
         end_date = datetime.datetime.utcnow() + datetime.timedelta(days=1)
-    print(start_date, end_date)
 
     if end_date < start_date:
         raise ValueError("End date must be before start date.")
