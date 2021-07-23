@@ -436,7 +436,7 @@ class AlertWorker:
         """
         Convert lossless FITS cutouts from ZTF-like alerts into PNGs
 
-        :param alert: ZTF alert packet/dict
+        :param alert: ZTF-like alert packet/dict
         :param skyportal_type: <new|ref|sub> thumbnail type expected by SkyPortal
         :param alert_packet_type: <Science|Template|Difference> survey naming
         :return:
