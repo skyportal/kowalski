@@ -156,7 +156,7 @@ class PGIRAlertWorker(AlertWorker, ABC):
                     self.pgir_stream_id = stream["id"]
         if self.pgir_stream_id is None:
             log("Failed to get ZTF alert stream ids from SkyPortal")
-            raise ValueError("Failed to get ZTF alert stream ids from SkyPortal")
+            raise ValueError("Failed to get PGIR alert stream ids from SkyPortal")
 
         # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
         # including archival photometry and cross-matches:
