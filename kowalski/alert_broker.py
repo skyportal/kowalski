@@ -625,7 +625,7 @@ class AlertWorker:
         return df_light_curve
 
     def alert_filter__ml(self, alert: Mapping) -> dict:
-        """Execute ML models on a ZTF alert
+        """Execute ML models on a ZTF-like alert
 
         :param alert:
         :return:
