@@ -166,12 +166,10 @@ def main(
         start_date = datetime.datetime.utcnow()
     if end_date is None:
         end_date = datetime.datetime.utcnow() + datetime.timedelta(days=1)
-    print(start_date, end_date)
 
     if end_date < start_date:
         raise ValueError("End date must be before start date.")
 
-    # print(get_alert_by_object_id(oid="ZTF21abiuvdk"))
     log(f"Start date: {start_date.strftime('%Y-%m-%d')}")
     log(f"End date: {end_date.strftime('%Y-%m-%d')}")
     # return
