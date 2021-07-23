@@ -541,7 +541,7 @@ class AlertWorker:
         """
         Make a de-duplicated pandas.DataFrame with photometry of alert['objectId']
 
-        :param alert: ZTF alert packet/dict
+        :param alert: ZTF-like alert packet/dict
         :param jd_start:
         :return:
         """
