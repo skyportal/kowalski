@@ -144,6 +144,19 @@ def main(
     end_date: Optional[Union[datetime.datetime, str, int]] = None,
     num_per_page: int = 100,
 ):
+    """A tool to upload ZTF alert thumbnails to a SkyPortal instance.
+
+       Queries SP for all Candidates posted between start_date and end_date,
+       Finds objects originating from the ZTF alert stream with missing thumbnails
+       Queries Kowalski for those and posts them to SP.
+
+       Requires both Kowalski and SkyPortal tokens.
+
+    :param start_date: datetime.datetime or %Y%m%d
+    :param end_date: datetime.datetime or %Y%m%d
+    :param num_per_page: how many SP Candidates to grab per batch
+    :return:
+    """
     if isinstance(start_date, str) or isinstance(start_date, int):
         start_date = datetime.datetime.strptime(str(start_date), "%Y%m%d")
     if isinstance(end_date, str) or isinstance(end_date, int):
