@@ -157,7 +157,6 @@ def main(
     if end_date < start_date:
         raise ValueError("End date must be before start date.")
 
-    # print(get_alert_by_object_id(oid="ZTF21abiuvdk"))
     log(f"Start date: {start_date.strftime('%Y-%m-%d')}")
     log(f"End date: {end_date.strftime('%Y-%m-%d')}")
     # return
