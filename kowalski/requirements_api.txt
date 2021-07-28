@@ -1,7 +1,7 @@
 aiofiles>=0.6.0
 aiohttp>=3.7.3
 aiohttp-swagger3==0.5.1
-astropy==4.2
+astropy<4.3
 bcrypt>=3.2.0
 cryptography>=3.2.1
 gunicorn==20.0.4
