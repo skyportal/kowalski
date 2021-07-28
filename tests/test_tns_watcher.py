@@ -1,3 +1,5 @@
+import pytest
+
 from tns_watcher import get_tns
 from utils import load_config, log, Mongo
 
@@ -11,6 +13,7 @@ class TestTNSWatcher:
     Test TNS monitoring
     """
 
+    @pytest.mark.flaky(reruns=2)
     def test_tns_watcher(self):
         log("Connecting to DB")
         mongo = Mongo(
