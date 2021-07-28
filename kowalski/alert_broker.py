@@ -558,6 +558,7 @@ class AlertWorker:
             df_light_curve["ztf_filter"] = df_light_curve["fid"].apply(
                 lambda x: ztf_filters[x]
             )
+        # todo: same for PGIR, see https://github.com/fritz-marshal/fritz/pull/321
         df_light_curve["magsys"] = "ab"
         df_light_curve["mjd"] = df_light_curve["jd"] - 2400000.5
 
