@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import bz2
+import os
 from contextlib import contextmanager
 import datetime
 from deepdiff import DeepDiff
@@ -502,6 +503,36 @@ class Kowalski:
             sys.exit(1)
 
         print("Testing TNS monitoring")
+        # On the CI, need to propagate TNS access credentials into the config
+        # which are stored as GA secrets
+        with open(
+            pathlib.Path(__file__).parent.absolute() / "config.yaml"
+        ) as config_yaml:
+            config = yaml.load(config_yaml, Loader=yaml.FullLoader)
+        update_config = False
+        for param in ("bot_id", "bot_name", "api_key"):
+            if config["kowalski"]["tns"][param] is None:
+                update_config = True
+                # on the CI, get these from env
+                config["kowalski"]["tns"][param] = os.environ.get(
+                    f"TNS_{param.upper()}"
+                )
+        if update_config:
+            with open(
+                pathlib.Path(__file__).parent.absolute() / "config.yaml", "w"
+            ) as kowalski_config_yaml:
+                yaml.dump(config, kowalski_config_yaml)
+            command = [
+                "docker",
+                "cp",
+                str(pathlib.Path(__file__).parent.absolute() / "config.yaml"),
+                "kowalski_ingester_1:/app",
+            ]
+            try:
+                subprocess.run(command, check=True)
+            except subprocess.CalledProcessError:
+                sys.exit(1)
+
         command = [
             "docker",
             "exec",
