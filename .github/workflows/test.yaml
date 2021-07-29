@@ -34,5 +34,4 @@ jobs:
           TNS_BOT_NAME: ${{ secrets.TNS_BOT_NAME }}
           TNS_API_KEY: ${{ secrets.TNS_API_KEY }}
         run: |
-          docker exec
           ./kowalski.py test
