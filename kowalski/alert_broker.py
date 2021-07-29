@@ -445,7 +445,7 @@ class AlertWorker:
 
         cutout_data = alert[f"cutout{alert_packet_type}"]["stampData"]
         with gzip.open(io.BytesIO(cutout_data), "rb") as f:
-            with fits.open(io.BytesIO(f.read())) as hdu:
+            with fits.open(io.BytesIO(f.read()), ignore_missing_simple=True) as hdu:
                 # header = hdu[0].header
                 data_flipped_y = np.flipud(hdu[0].data)
         # fixme: png, switch to fits eventually
@@ -508,7 +508,7 @@ class AlertWorker:
 
             # unzip
             with gzip.open(io.BytesIO(cutout_data), "rb") as f:
-                with fits.open(io.BytesIO(f.read())) as hdu:
+                with fits.open(io.BytesIO(f.read()), ignore_missing_simple=True) as hdu:
                     data = hdu[0].data
                     # replace nans with zeros
                     cutout_dict[cutout] = np.nan_to_num(data)
