@@ -2388,7 +2388,7 @@ async def ztf_alert_get_cutout(request):
 
         # unzip and flip about y axis on the server side
         with gzip.open(io.BytesIO(cutout_data), "rb") as f:
-            with fits.open(io.BytesIO(f.read())) as hdu:
+            with fits.open(io.BytesIO(f.read()), ignore_missing_simple=True) as hdu:
                 header = hdu[0].header
                 data_flipped_y = np.flipud(hdu[0].data)
 
@@ -2581,7 +2581,7 @@ async def zuds_alert_get_cutout(request):
 
         # unzip and flip about y axis on the server side
         with gzip.open(io.BytesIO(cutout_data), "rb") as f:
-            with fits.open(io.BytesIO(f.read())) as hdu:
+            with fits.open(io.BytesIO(f.read()), ignore_missing_simple=True) as hdu:
                 header = hdu[0].header
                 # no need to flip it since Danny does that on his end
                 # data_flipped_y = np.flipud(hdu[0].data)

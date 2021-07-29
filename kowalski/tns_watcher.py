@@ -112,19 +112,29 @@ def get_tns(grab_all: bool = False, num_pages: int = 10, entries_per_page: int =
             except Exception as e:
                 log(e)
 
-    bot_id = config["tns"]["bot_id"]
-    bot_name = config["tns"]["bot_name"]
+    tns_credentials = {
+        param: config["tns"][param] for param in ("bot_id", "bot_name", "api_key")
+    }
+    for param in tns_credentials:
+        if tns_credentials[param] is None:
+            # on the CI, get it from env
+            tns_credentials[param] = os.environ.get(f"TNS_{param.upper()}")
+
+    bot_id = tns_credentials.get("bot_id")
+    bot_name = tns_credentials.get("bot_name")
     headers = {
-        "User-Agent": f"tns_marker{{'tns_id': {bot_id}, 'type': 'bot', 'name': '{bot_name}'}}",
+        "User-Agent": f'tns_marker{{"tns_id": {bot_id}, "type": "bot", "name": "{bot_name}"}}',
     }
 
     if grab_all:
         # grab the latest data (5 is the minimum):
         url = os.path.join(config["tns"]["url"], "search?format=csv&num_page=5&page=0")
-        csv_data = requests.get(
+        csv_data = requests.post(
             url,
             headers=headers,
-            allow_redirects=False,
+            data={"api_key": tns_credentials["api_key"]},
+            stream=True,
+            allow_redirects=True,
             timeout=60,
         ).content
         data = pd.read_csv(io.StringIO(csv_data.decode("utf-8")))
@@ -137,10 +147,12 @@ def get_tns(grab_all: bool = False, num_pages: int = 10, entries_per_page: int =
             f"search?format=csv&num_page={entries_per_page}&page={num_page}",
         )
 
-        csv_data = requests.get(
+        csv_data = requests.post(
             url,
             headers=headers,
-            allow_redirects=False,
+            data={"api_key": tns_credentials["api_key"]},
+            allow_redirects=True,
+            stream=True,
             timeout=60,
         ).content
         data = pd.read_csv(io.StringIO(csv_data.decode("utf-8")))

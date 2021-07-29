@@ -1152,7 +1152,7 @@ class ZTFAlert:
 
             # unzip
             with gzip.open(io.BytesIO(cutout_data), "rb") as f:
-                with fits.open(io.BytesIO(f.read())) as hdu:
+                with fits.open(io.BytesIO(f.read()), ignore_missing_simple=True) as hdu:
                     data = hdu[0].data
                     # replace nans with zeros
                     cutout_dict[cutout] = np.nan_to_num(data)
