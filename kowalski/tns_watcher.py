@@ -24,7 +24,8 @@ config = load_config(config_file="config.yaml")["kowalski"]
 def mongify(doc):
     """Massage a TNS catalog entry into something digestible by K's mongo
 
-    :param doc:
+    :param doc: dict returned by TNS:/api/get/object
+                see p.5, https://www.wis-tns.org/sites/default/files/api/TNS_APIs_manual.pdf
     :return:
     """
     doc["_id"] = doc["objid"]
