@@ -541,17 +541,6 @@ kowalski:
         redirect_stderr: True
         environment: "PRODUCTION=1"
 
-      "program:tns-watcher-weekly":
-        command: /usr/local/bin/python tns_watcher.py --graball
-        directory: /app
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: /data/logs/tns_watcher_weekly.log
-        stdout_logfile_maxbytes: 30MB
-        redirect_stderr: True
-        environment: "PRODUCTION=1"
-
       "program:performance_reporter":
         command: /usr/local/bin/python performance_reporter.py --send_to_slack --days_ago 1
         directory: /app

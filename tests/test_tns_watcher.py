@@ -35,8 +35,7 @@ class TestTNSWatcher:
         )
         get_tns(
             grab_all=False,
-            num_pages=1,
-            entries_per_page=5,
+            test=True,
         )
         log("Done")
 
