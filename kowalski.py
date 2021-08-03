@@ -466,6 +466,23 @@ class Kowalski:
             sleep_for_seconds=10,
         )
 
+        print("Testing PGIR alert ingestion")
+        command = [
+            "docker",
+            "exec",
+            "-i",
+            "kowalski_ingester_1",
+            "python",
+            "-m",
+            "pytest",
+            "-s",
+            "test_ingester_pgir.py",
+        ]
+        try:
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError:
+            sys.exit(1)
+
         print("Testing ZTF alert ingestion")
 
         command = [

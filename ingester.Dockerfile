@@ -14,7 +14,7 @@ ARG acai_b_version=d1_dnn_20201130
 
 # Install jdk, mkdirs, fetch and install Kafka
 RUN apt-get update && apt-get install -y default-jdk && \
-    mkdir -p /app /data /data/logs /_tmp /kafka && \
+    mkdir -p /app /app/models_pgir /data /data/logs /_tmp /kafka && \
     wget https://storage.googleapis.com/ztf-fritz/kafka_$kafka_version.tgz -O /kafka/kafka_$kafka_version.tgz && \
     tar -xzf /kafka/kafka_$kafka_version.tgz
 
@@ -35,6 +35,7 @@ ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_b.$acai_b_vers
 
 # copy over the test data
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
+COPY data/pgir_alerts/ /app/data/pgir_alerts/
 COPY data/catalogs/ /app/data/catalogs/
 COPY data/ztf_matchfiles/ /app/data/ztf_matchfiles/
 COPY data/ztf_source_features/ /app/data/ztf_source_features/
@@ -42,12 +43,16 @@ COPY data/ztf_source_features/ /app/data/ztf_source_features/
 # copy over the config and the code
 COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py",\
       "kowalski/dask_cluster.py",\
+      "kowalski/alert_broker.py",\
       "kowalski/alert_broker_ztf.py",\
       "kowalski/ops_watcher_ztf.py",\
       "kowalski/tns_watcher.py",\
+      "kowalski/alert_broker_pgir.py",\
+      "kowalski/dask_cluster_pgir.py",\
       "kowalski/performance_reporter.py",\
       "kowalski/requirements_ingester.txt",\
-      "tests/test_ingester.py", "tests/test_tns_watcher.py", "tests/test_tools.py",\
+      "tests/test_ingester.py", "tests/test_ingester_pgir.py",\
+      "tests/test_tns_watcher.py", "tests/test_tools.py",\
       "tools/fetch_ztf_matchfiles.py",\
       "tools/ingest_ztf_matchfiles.py", "tools/ingest_ztf_source_features.py",\
       "tools/istarmap.py",\
