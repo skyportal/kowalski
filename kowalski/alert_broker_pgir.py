@@ -313,7 +313,7 @@ class PGIRAlertWorker(AlertWorker, ABC):
             "fluxerr": df_photometry["fluxerr"].tolist(),
             "zp": df_photometry["zp"].tolist(),
             "magsys": df_photometry["zpsys"].tolist(),
-            "filter": df_photometry["ztf_filter"].tolist(),
+            "filter": df_photometry["filter"].tolist(),
             "ra": df_photometry["ra"].tolist(),
             "dec": df_photometry["dec"].tolist(),
         }

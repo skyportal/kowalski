@@ -1205,9 +1205,7 @@ class ZTFAlert:
         )
 
         ztf_filters = {1: "ztfg", 2: "ztfr", 3: "ztfi"}
-        df_light_curve["ztf_filter"] = df_light_curve["fid"].apply(
-            lambda x: ztf_filters[x]
-        )
+        df_light_curve["filter"] = df_light_curve["fid"].apply(lambda x: ztf_filters[x])
         df_light_curve["magsys"] = "ab"
         df_light_curve["mjd"] = df_light_curve["jd"] - 2400000.5
 

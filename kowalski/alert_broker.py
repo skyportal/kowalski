@@ -555,10 +555,14 @@ class AlertWorker:
 
         if self.instrument == "ZTF":
             ztf_filters = {1: "ztfg", 2: "ztfr", 3: "ztfi"}
-            df_light_curve["ztf_filter"] = df_light_curve["fid"].apply(
+            df_light_curve["filter"] = df_light_curve["fid"].apply(
                 lambda x: ztf_filters[x]
             )
-        # todo: same for PGIR, see https://github.com/fritz-marshal/fritz/pull/321
+        elif self.instrument == "PGIR":
+            # fixme: PGIR uses 2massj, which is not in sncosmo as of 20210803
+            #        cspjs seems to be close/good enough as an approximation
+            df_light_curve["filter"] = "cspjs"
+
         df_light_curve["magsys"] = "ab"
         df_light_curve["mjd"] = df_light_curve["jd"] - 2400000.5
 
