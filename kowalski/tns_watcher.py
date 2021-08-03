@@ -1,13 +1,13 @@
 import argparse
 import datetime
-import io
-import pandas as pd
+import json
 import pytz
 import requests
 import os
 import sys
 import time
 import traceback
+import tqdm
 
 from utils import (
     load_config,
@@ -21,39 +21,34 @@ from utils import (
 config = load_config(config_file="config.yaml")["kowalski"]
 
 
-def mongify(_dict):
-    """Massage a TNS catalog entry into something digestable by mongo
+def mongify(doc):
+    """Massage a TNS catalog entry into something digestible by K's mongo
 
-    :param _dict:
+    :param doc: dict returned by TNS:/api/get/object
+                see p.5, https://www.wis-tns.org/sites/default/files/api/TNS_APIs_manual.pdf
     :return:
     """
-    _tmp = dict(_dict)
-
-    doc = {
-        _key.lower().replace(".", "_").replace(" ", "_"): _tmp[_key].strip()
-        if isinstance(_tmp[_key], str)
-        else _tmp[_key]
-        for _key in _tmp
-        if not pd.isnull(_tmp[_key])
-    }
-
-    doc["_id"] = _dict["ID"]
-    doc.pop("id")
+    doc["_id"] = doc["objid"]
+    doc["name"] = f"{doc['name_prefix']} {doc['objname']}"
 
     # discovery date as datetime
     try:
         doc["discovery_date"] = datetime.datetime.strptime(
-            _dict["Discovery Date (UT)"], "%Y-%m-%d %H:%M:%S.%f"
+            doc["discoverydate"], "%Y-%m-%d %H:%M:%S.%f"
         ).astimezone(pytz.utc)
     except Exception as _e:
         log(_e)
         try:
             doc["discovery_date"] = datetime.datetime.strptime(
-                _dict["Discovery Date (UT)"], "%Y-%m-%d %H:%M:%S"
+                doc["discoverydate"], "%Y-%m-%d %H:%M:%S"
             ).astimezone(pytz.utc)
         except Exception as _e:
             log(_e)
             doc["discovery_date"] = None
+    if doc["discovery_date"] is not None:
+        doc["discovery_date_(ut)"] = doc["discovery_date"].strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
+        )
 
     # GeoJSON for 2D indexing
     doc["coordinates"] = {}
@@ -73,13 +68,12 @@ def mongify(_dict):
     return doc
 
 
-def get_tns(grab_all: bool = False, num_pages: int = 10, entries_per_page: int = 100):
+def get_tns(grab_all: bool = False, test: bool = False):
     """
     Queries the TNS and obtains the sources reported to it.
 
     :param grab_all: grab the complete database from TNS? takes a while!
-    :param num_pages: grab the last <num_pages> pages
-    :param entries_per_page: number of entries per page to grab
+    :param test: grab one object and return
     :return:
     """
 
@@ -126,40 +120,57 @@ def get_tns(grab_all: bool = False, num_pages: int = 10, entries_per_page: int =
         "User-Agent": f'tns_marker{{"tns_id": {bot_id}, "type": "bot", "name": "{bot_name}"}}',
     }
 
-    if grab_all:
-        # grab the latest data (5 is the minimum):
-        url = os.path.join(config["tns"]["url"], "search?format=csv&num_page=5&page=0")
-        csv_data = requests.post(
+    if grab_all or test:
+        public_timestamp = datetime.datetime(1, 1, 1).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        public_timestamp = (
+            datetime.datetime.utcnow() - datetime.timedelta(hours=3)
+        ).strftime("%Y-%m-%d %H:%M:%S")
+
+    url = os.path.join(
+        config["tns"]["url"],
+        "api/get/search",
+    )
+
+    recent_sources = (
+        requests.post(
             url,
             headers=headers,
-            data={"api_key": tns_credentials["api_key"]},
-            stream=True,
+            data={
+                "api_key": tns_credentials["api_key"],
+                "data": json.dumps({"public_timestamp": public_timestamp}),
+            },
             allow_redirects=True,
+            stream=True,
             timeout=60,
-        ).content
-        data = pd.read_csv(io.StringIO(csv_data.decode("utf-8")))
-        num_pages = data["ID"].max() // entries_per_page
-
-    for num_page in range(num_pages):
-        log(f"Digesting page #{num_page+1} of {num_pages}...")
-        url = os.path.join(
-            config["tns"]["url"],
-            f"search?format=csv&num_page={entries_per_page}&page={num_page}",
         )
+        .json()
+        .get("data", dict())
+        .get("reply", [])
+    )
+    recent_sources.reverse()
+    log(f"Found {len(recent_sources)} sources reported after {public_timestamp}")
 
-        csv_data = requests.post(
-            url,
-            headers=headers,
-            data={"api_key": tns_credentials["api_key"]},
-            allow_redirects=True,
-            stream=True,
-            timeout=60,
-        ).content
-        data = pd.read_csv(io.StringIO(csv_data.decode("utf-8")))
-
-        for index, row in data.iterrows():
-            try:
-                doc = mongify(row)
+    url = os.path.join(
+        config["tns"]["url"],
+        "api/get/object",
+    )
+    for source in tqdm.tqdm(recent_sources):
+        try:
+            data = requests.post(
+                url,
+                headers=headers,
+                data={
+                    "api_key": tns_credentials["api_key"],
+                    "data": json.dumps({"objname": source.get("objname")}),
+                },
+                allow_redirects=True,
+                stream=True,
+                timeout=10,
+            ).json()
+            source_data = data.get("data", dict()).get("reply", dict())
+            if len(source_data) != 0:
+                doc = mongify(source_data)
                 doc_id = doc.pop("_id", None)
                 if doc_id:
                     mongo.update_one(
@@ -168,9 +179,13 @@ def get_tns(grab_all: bool = False, num_pages: int = 10, entries_per_page: int =
                         update={"$set": doc},
                         upsert=True,
                     )
-            except Exception as e:
-                log(str(e))
-                log(traceback.print_exc())
+        except Exception as e:
+            log(str(e))
+            log(traceback.print_exc())
+
+        if test:
+            # attempt ingest only the most recent source when running test
+            break
 
     # close connection to db
     mongo.client.close()
@@ -193,7 +208,7 @@ def main(grab_all=False):
             log(traceback.print_exc())
 
         if not grab_all:
-            time.sleep(120)
+            time.sleep(60 * 4)
         else:
             time.sleep(86400 * 7)
 

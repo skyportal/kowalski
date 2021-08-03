@@ -31,12 +31,11 @@ class TestTNSWatcher:
         collection = config["database"]["collections"]["tns"]
 
         log(
-            "Grabbing 1 page with 5 entries from the TNS and ingesting that into the database"
+            "Grabbing most recent object from the TNS and ingesting that into the database"
         )
         get_tns(
             grab_all=False,
-            num_pages=1,
-            entries_per_page=5,
+            test=True,
         )
         log("Done")
 
