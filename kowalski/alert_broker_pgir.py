@@ -180,7 +180,7 @@ class PGIRAlertWorker(AlertWorker, ABC):
     def get_active_filters(self):
         """Fetch user-defined filters from own db marked as active."""
         return list(
-            self.mongo.db[config["database"]["collections"]["filters_pgir"]].aggregate(
+            self.mongo.db[config["database"]["collections"]["filters"]].aggregate(
                 [
                     {
                         "$match": {
