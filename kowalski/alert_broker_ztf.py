@@ -342,7 +342,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
                 "fluxerr": df_photometry.loc[stream_id_mask, "fluxerr"].tolist(),
                 "zp": df_photometry.loc[stream_id_mask, "zp"].tolist(),
                 "magsys": df_photometry.loc[stream_id_mask, "zpsys"].tolist(),
-                "filter": df_photometry.loc[stream_id_mask, "ztf_filter"].tolist(),
+                "filter": df_photometry.loc[stream_id_mask, "filter"].tolist(),
                 "ra": df_photometry.loc[stream_id_mask, "ra"].tolist(),
                 "dec": df_photometry.loc[stream_id_mask, "dec"].tolist(),
             }
