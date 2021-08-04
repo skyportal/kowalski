@@ -29,7 +29,7 @@ def alert_fixture(request):
     log("Successfully loaded")
 
 
-class TestAlertBrokerZTF:
+class TestAlertBrokerPGIR:
     """Test individual components/methods of the PGIR alert processor used by the broker"""
 
     def test_alert_mongification(self):
