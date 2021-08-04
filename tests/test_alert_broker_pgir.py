@@ -1,4 +1,3 @@
-import copy
 import fastavro
 import pytest
 
@@ -74,7 +73,8 @@ class TestAlertBrokerZTF:
     def test_alert_filter__user_defined(self):
         """Test pushing an alert through a filter"""
         # prepend upstream aggregation stages:
-        pipeline = copy.deepcopy(self.worker.filter_pipeline_upstream) + [
+        upstream_pipeline = config["database"]["filters"][self.worker.collection_alerts]
+        pipeline = upstream_pipeline + [
             {
                 "$match": {
                     "candidate.drb": {"$gt": 0.5},
