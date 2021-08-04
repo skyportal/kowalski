@@ -9,7 +9,7 @@ from utils import load_config, uid
 config = load_config(config_file="config.yaml")["kowalski"]
 
 
-class TestAPIs(object):
+class TestAPIs:
     # python -m pytest -s api.py
     # python -m pytest api.py
 
