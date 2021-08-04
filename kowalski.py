@@ -466,90 +466,67 @@ class Kowalski:
             sleep_for_seconds=10,
         )
 
-        print("Testing PGIR alert ingestion")
-        command = [
-            "docker",
-            "exec",
-            "-i",
-            "kowalski_ingester_1",
-            "python",
-            "-m",
-            "pytest",
-            "-s",
-            "test_ingester_pgir.py",
+        test_setups = [
+            {
+                "part": "PGIR alert broker components",
+                "container": "kowalski_ingester_1",
+                "test_script": "test_alert_broker_pgir.py",
+            },
+            {
+                "part": "ZTF alert broker components",
+                "container": "kowalski_ingester_1",
+                "test_script": "test_alert_broker_ztf.py",
+            },
+            {
+                "part": "PGIR alert ingestion",
+                "container": "kowalski_ingester_1",
+                "test_script": "test_ingester_pgir.py",
+            },
+            {
+                "part": "ZTF alert ingestion",
+                "container": "kowalski_ingester_1",
+                "test_script": "test_ingester.py",
+            },
+            {
+                "part": "API",
+                "container": "kowalski_api_1",
+                "test_script": "test_api.py",
+            },
+            {
+                "part": "TNS monitoring",
+                "container": "kowalski_ingester_1",
+                "test_script": "test_tns_watcher.py",
+            },
+            {
+                "part": "Tools",
+                "container": "kowalski_ingester_1",
+                "test_script": "test_tools.py",
+            },
         ]
-        try:
-            subprocess.run(command, check=True)
-        except subprocess.CalledProcessError:
-            sys.exit(1)
 
-        print("Testing ZTF alert ingestion")
+        failed_tests = []
 
-        command = [
-            "docker",
-            "exec",
-            "-i",
-            "kowalski_ingester_1",
-            "python",
-            "-m",
-            "pytest",
-            "-s",
-            "test_ingester.py",
-        ]
-        try:
-            subprocess.run(command, check=True)
-        except subprocess.CalledProcessError:
-            sys.exit(1)
+        for setup in test_setups:
+            print(f"Testing {setup['part']}")
+            command = [
+                "docker",
+                "exec",
+                "-i",
+                setup["container"],
+                "python",
+                "-m",
+                "pytest",
+                "-s",
+                setup["test_script"],
+            ]
+            try:
+                subprocess.run(command, check=True)
+            except subprocess.CalledProcessError:
+                failed_tests.append(setup["part"])
+                continue
 
-        print("Testing API")
-        command = [
-            "docker",
-            "exec",
-            "-i",
-            "kowalski_api_1",
-            "python",
-            "-m",
-            "pytest",
-            "-s",
-            "test_api.py",
-        ]
-        try:
-            subprocess.run(command, check=True)
-        except subprocess.CalledProcessError:
-            sys.exit(1)
-
-        print("Testing TNS monitoring")
-        command = [
-            "docker",
-            "exec",
-            "-i",
-            "kowalski_ingester_1",
-            "python",
-            "-m",
-            "pytest",
-            "-s",
-            "test_tns_watcher.py",
-        ]
-        try:
-            subprocess.run(command, check=True)
-        except subprocess.CalledProcessError:
-            sys.exit(1)
-
-        print("Testing tools")
-        command = [
-            "docker",
-            "exec",
-            "-i",
-            "kowalski_ingester_1",
-            "python",
-            "-m",
-            "pytest",
-            "-s",
-            "test_tools.py",
-        ]
-        try:
-            subprocess.run(command, check=True)
-        except subprocess.CalledProcessError:
+        if failed_tests:
+            print(f"Failed tests: {failed_tests}")
             sys.exit(1)
 
     @staticmethod

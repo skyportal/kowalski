@@ -185,6 +185,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
         self.filter_templates = self.make_filter_templates(active_filters)
 
         # set up watchdog for periodic refresh of the filter templates, in case those change
+        self.run_forever = True
         self.filter_monitor = threading.Thread(target=self.reload_filters)
         self.filter_monitor.start()
 
@@ -308,7 +309,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
 
         :return:
         """
-        while True:
+        while self.run_forever:
             time.sleep(60 * 5)
 
             active_filters = self.get_active_filters()
