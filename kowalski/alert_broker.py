@@ -862,14 +862,12 @@ class AlertWorker:
         self,
         filter_templates: Sequence,
         alert: Mapping,
-        catalog: str,
         max_time_ms: int = 1000,
     ) -> list:
         """Evaluate user-defined filters
 
         :param filter_templates:
         :param alert:
-        :param catalog: ZTF_alerts or PGIR_alerts
         :param max_time_ms:
         :return:
         """
@@ -882,7 +880,7 @@ class AlertWorker:
                 _filter["pipeline"][0]["$match"]["candid"] = alert["candid"]
 
                 filtered_data = list(
-                    self.mongo.db[catalog].aggregate(
+                    self.mongo.db[self.collection_alerts].aggregate(
                         _filter["pipeline"], allowDiskUse=False, maxTimeMS=max_time_ms
                     )
                 )
