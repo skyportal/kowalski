@@ -140,7 +140,7 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
 
 class PGIRAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(instrument="PGIR", **kwargs)
 
         # talking to SkyPortal?
         if not config["misc"]["broker"]:
@@ -171,6 +171,7 @@ class PGIRAlertWorker(AlertWorker, ABC):
         self.filter_templates = self.make_filter_templates(active_filters)
 
         # set up watchdog for periodic refresh of the filter templates, in case those change
+        self.run_forever = True
         self.filter_monitor = threading.Thread(target=self.reload_filters)
         self.filter_monitor.start()
 
@@ -285,7 +286,7 @@ class PGIRAlertWorker(AlertWorker, ABC):
 
         :return:
         """
-        while True:
+        while self.run_forever:
             time.sleep(60 * 5)
 
             active_filters = self.get_active_filters()
@@ -343,7 +344,7 @@ class WorkerInitializer(dask.distributed.WorkerPlugin):
         self.alert_worker = None
 
     def setup(self, worker: dask.distributed.Worker):
-        self.alert_worker = PGIRAlertWorker(instrument="PGIR")
+        self.alert_worker = PGIRAlertWorker()
 
 
 def topic_listener(

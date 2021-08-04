@@ -51,7 +51,10 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
       "kowalski/dask_cluster_pgir.py",\
       "kowalski/performance_reporter.py",\
       "kowalski/requirements_ingester.txt",\
-      "tests/test_ingester.py", "tests/test_ingester_pgir.py",\
+      "tests/test_alert_broker_ztf.py",\
+      "tests/test_alert_broker_pgir.py",\
+      "tests/test_ingester.py",\
+      "tests/test_ingester_pgir.py",\
       "tests/test_tns_watcher.py", "tests/test_tools.py",\
       "tools/fetch_ztf_matchfiles.py",\
       "tools/ingest_ztf_matchfiles.py", "tools/ingest_ztf_source_features.py",\

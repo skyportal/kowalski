@@ -140,7 +140,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
 
 class ZTFAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(instrument="ZTF", **kwargs)
 
         # talking to SkyPortal?
         if not config["misc"]["broker"]:
@@ -372,7 +372,7 @@ class WorkerInitializer(dask.distributed.WorkerPlugin):
         self.alert_worker = None
 
     def setup(self, worker: dask.distributed.Worker):
-        self.alert_worker = ZTFAlertWorker(instrument="ZTF")
+        self.alert_worker = ZTFAlertWorker()
 
 
 def topic_listener(

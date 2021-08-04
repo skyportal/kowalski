@@ -431,8 +431,9 @@ class AlertWorker:
 
         return doc, prv_candidates
 
-    @staticmethod
-    def make_thumbnail(alert: Mapping, skyportal_type: str, alert_packet_type: str):
+    def make_thumbnail(
+        self, alert: Mapping, skyportal_type: str, alert_packet_type: str
+    ):
         """
         Convert lossless FITS cutouts from ZTF-like alerts into PNGs
 
@@ -443,12 +444,14 @@ class AlertWorker:
         """
         alert = deepcopy(alert)
 
-        cutout_data = alert[f"cutout{alert_packet_type}"]["stampData"]
+        cutout_data = alert[f"cutout{alert_packet_type}"]
+        if self.instrument == "ZTF":
+            cutout_data = cutout_data["stampData"]
         with gzip.open(io.BytesIO(cutout_data), "rb") as f:
             with fits.open(io.BytesIO(f.read()), ignore_missing_simple=True) as hdu:
                 # header = hdu[0].header
                 data_flipped_y = np.flipud(hdu[0].data)
-        # fixme: png, switch to fits eventually
+
         buff = io.BytesIO()
         plt.close("all")
         fig = plt.figure()
@@ -638,7 +641,7 @@ class AlertWorker:
 
         scores = dict()
 
-        if self.ml_models is None or len(self.ml_models) > 0:
+        if self.ml_models is None or len(self.ml_models) == 0:
             return dict()
 
         if self.instrument == "ZTF":
