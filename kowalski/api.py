@@ -1813,13 +1813,14 @@ class FilterHandler(Handler):
                 )
                 # match candid
                 filter_template[0]["$match"]["candid"] = alert["candid"]
-                # match permissions
-                filter_template[0]["$match"]["candidate.programid"][
-                    "$in"
-                ] = filter_new.permissions
-                filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"][
-                    "$and"
-                ][0]["$in"][1] = filter_new.permissions
+                # match permissions for ZTF
+                if filter_new.catalog.startswith("ZTF"):
+                    filter_template[0]["$match"]["candidate.programid"][
+                        "$in"
+                    ] = filter_new.permissions
+                    filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"][
+                        "$and"
+                    ][0]["$in"][1] = filter_new.permissions
                 cursor = request.app["mongo"][filter_new.catalog].aggregate(
                     filter_template, allowDiskUse=False, maxTimeMS=3000
                 )
