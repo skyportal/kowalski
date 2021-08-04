@@ -638,7 +638,7 @@ class AlertWorker:
 
         scores = dict()
 
-        if self.ml_models is None or len(self.ml_models) > 0:
+        if self.ml_models is None or len(self.ml_models) == 0:
             return dict()
 
         if self.instrument == "ZTF":
