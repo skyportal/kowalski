@@ -923,7 +923,7 @@ class AlertWorker:
             "id": alert["objectId"],
             "ra": alert["candidate"].get("ra"),
             "dec": alert["candidate"].get("dec"),
-            "score": alert["candidate"].get("drb", alert["candidate"]["rb"]),
+            "score": alert["candidate"].get("drb", alert["candidate"].get("rb")),
             "filter_ids": filter_ids,
             "passing_alert_id": alert["candid"],
             "passed_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f"),
