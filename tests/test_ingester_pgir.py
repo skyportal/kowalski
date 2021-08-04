@@ -425,7 +425,7 @@ class TestIngester:
             assert "totalMatches" in result["data"]
             print("totalMatches", result["data"]["totalMatches"])
             # fixme:
-            assert result["data"]["totalMatches"] == 17
+            assert result["data"]["totalMatches"] == 15
 
             # check that the only candidate that passed the second filter (PGIR19aacbvv) got saved as Source
             resp = requests.get(
