@@ -630,7 +630,6 @@ RGE = np.array(
 )
 
 
-@jit
 def radec2lb(ra, dec):
     """
         Convert $R.A.$ and $Decl.$ into Galactic coordinates $l$ and $b$
