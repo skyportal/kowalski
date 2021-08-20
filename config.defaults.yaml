@@ -648,6 +648,16 @@ kowalski:
             zMeanPSFMagErr: 1
             yMeanPSFMag: 1
             yMeanPSFMagErr: 1
+            
+        ZTF_alerts:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
+          filter: {candidate.programid: 1}
+          projection:
+            objectId: 1
+            candidate.jd: 1
+            candidate.magpsf: 1
+            candidate.fid: 1
 
 
   ml_models:
