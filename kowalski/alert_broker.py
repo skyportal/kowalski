@@ -860,8 +860,7 @@ class AlertWorker:
             log(str(e))
 
         return xmatches
-        
-        
+
     def alert_filter__xmatch_live_stream(
         self, alert: Mapping, live_stream: str = "ZTF_alerts"
     ) -> dict:
@@ -886,7 +885,7 @@ class AlertWorker:
             dec = float(alert["candidate"]["dec"])
 
             # geojson-friendly ra:
-            ra_geojson = float(alert["candidate"]["ra"]) - 180.0
+            ra_geojson = ra - 180.0
             dec_geojson = dec
 
             catalog_filter = {"candidate.programid": {"$eq": 1}}
@@ -905,26 +904,29 @@ class AlertWorker:
             object_position_query = dict()
             object_position_query["coordinates.radec_geojson"] = {
                 "$geoWithin": {
-                    "$centerSphere": [[ra_geojson, dec_geojson], cone_search_radius_live]
+                    "$centerSphere": [
+                        [ra_geojson, dec_geojson],
+                        cone_search_radius_live,
+                    ]
                 }
             }
-            #Just find the most recent alert within the crossmatch radius, if any
-            live_alert =
-                self.mongo.db[live_stream].find_one(
-                    {**object_position_query, **catalog_filter}, projection = {**catalog_projection}, sort = {**catalog_sort}
-                )
-            
-            #Check if any result was found (live_alert is not null)
+            # Just find the most recent alert within the crossmatch radius, if any
+            live_alert = self.mongo.db[live_stream].find_one(
+                {**object_position_query, **catalog_filter},
+                projection={**catalog_projection},
+                sort={**catalog_sort},
+            )
+
+            # Check if any result was found (live_alert is not null)
             if live_alert:
                 xmatches[live_stream] = [live_alert]
             else:
                 xmatches[live_stream] = []
-        
+
         except Exception as e:
             log(str(e))
 
         return xmatches
-
 
     def alert_filter__user_defined(
         self,

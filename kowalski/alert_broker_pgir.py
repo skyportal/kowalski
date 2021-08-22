@@ -98,10 +98,10 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
                     **xmatches,
                     **alert_worker.alert_filter__xmatch_clu(alert),
                 }
-                
-            #Crossmatch new alert with most recent record in ZTF_alerts and insert into aux
-	    with timer(
-       	        f"ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+
+            # Crossmatch new alert with most recent ZTF_alerts and insert
+            with timer(
+                f"ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
             ):
                 xmatches = {
                     **xmatches,
@@ -128,21 +128,21 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
                     {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
                     upsert=True,
                 )
-                
-            #Crossmatch exisiting alert with most recent record in ZTF_alerts and update aux
-	    with timer(
-       	        f"ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+
+            # Crossmatch exisiting alert with most recent record in ZTF_alerts and update aux
+            with timer(
+                f"ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
             ):
                 xmatches_ztf = alert_worker.alert_filter__xmatch_live_stream(alert)
-            
+
             with timer(
                 f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1
             ):
                 alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
                     {"_id": object_id},
-                    {"$addToSet": {'ZTF_alerts': {"$each": xmatches_ztf}}},
+                    {"$addToSet": {"ZTF_alerts": {"$each": xmatches_ztf}}},
                     upsert=True,
-                )    
+                )
 
         if config["misc"]["broker"]:
             # execute user-defined alert filters
