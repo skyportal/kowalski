@@ -860,6 +860,71 @@ class AlertWorker:
             log(str(e))
 
         return xmatches
+        
+        
+    def alert_filter__xmatch_live_stream(
+        self, alert: Mapping, live_stream: str = "ZTF_alerts"
+    ) -> dict:
+        """
+        Run cross-match with a live catalog that is constantly updated
+        Only searches for the most entry to keep it efficient
+
+        :param alert:
+        :param live_stream: Name of live stream catalog
+        :return:
+        """
+
+        xmatches = dict()
+
+        # cone search radius in arcsec:
+        cone_search_radius_live = 8.0
+        # convert arcsec to rad:
+        cone_search_radius_live *= np.pi / (180.0 * 3600)
+
+        try:
+            ra = float(alert["candidate"]["ra"])
+            dec = float(alert["candidate"]["dec"])
+
+            # geojson-friendly ra:
+            ra_geojson = float(alert["candidate"]["ra"]) - 180.0
+            dec_geojson = dec
+
+            catalog_filter = {"candidate.programid": {"$eq": 1}}
+            catalog_sort = {"candidate.jd": -1}
+            catalog_projection = {
+                "objectId": 1,
+                "candidate.jd": 1,
+                "candidate.magpsf": 1,
+                "candidate.sigmapsf": 1,
+                "candidate.fid": 1,
+                "candidate.drb": 1,
+                "coordinates.radec_str": 1,
+            }
+
+            # do search of everything that is within the cross-match radius
+            object_position_query = dict()
+            object_position_query["coordinates.radec_geojson"] = {
+                "$geoWithin": {
+                    "$centerSphere": [[ra_geojson, dec_geojson], cone_search_radius_live]
+                }
+            }
+            #Just find the most recent alert within the crossmatch radius, if any
+            live_alert =
+                self.mongo.db[live_stream].find_one(
+                    {**object_position_query, **catalog_filter}, projection = {**catalog_projection}, sort = {**catalog_sort}
+                )
+            
+            #Check if any result was found (live_alert is not null)
+            if live_alert:
+                xmatches[live_stream] = [live_alert]
+            else:
+                xmatches[live_stream] = []
+        
+        except Exception as e:
+            log(str(e))
+
+        return xmatches
+
 
     def alert_filter__user_defined(
         self,
