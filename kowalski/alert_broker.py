@@ -465,7 +465,7 @@ class AlertWorker:
         fig.add_axes(ax)
 
         # replace nans with median:
-        img = np.array(data_corrected)
+        img = np.array(image_data)
         # replace dubiously large values
         xl = np.greater(np.abs(img), 1e20, where=~np.isnan(img))
         if img[xl].any():
