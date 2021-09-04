@@ -447,18 +447,14 @@ class AlertWorker:
         cutout_data = alert[f"cutout{alert_packet_type}"]
         if self.instrument == "ZTF":
             cutout_data = cutout_data["stampData"]
-            with gzip.open(io.BytesIO(cutout_data), "rb") as f:
-                with fits.open(io.BytesIO(f.read()), ignore_missing_simple=True) as hdu:
-                    # header = hdu[0].header
-                    data_flipped_y = np.flipud(hdu[0].data)
-                    data_corrected = data_flipped_y
+        with gzip.open(io.BytesIO(cutout_data), "rb") as f:
+            with fits.open(io.BytesIO(f.read()), ignore_missing_simple=True) as hdu:
+                image_data = hdu[0].data
+
+        if self.instrument == "ZTF":
+            image_data = np.flipud(image_data)
         elif self.instrument == "PGIR":
-            cutout_data = cutout_data["stampData"]
-            with gzip.open(io.BytesIO(cutout_data), "rb") as f:
-                with fits.open(io.BytesIO(f.read()), ignore_missing_simple=True) as hdu:
-                    # header = hdu[0].header
-                    data_flipped_x = np.fliplr(hdu[0].data)
-                    data_corrected = np.rot90(data_flipped_x, 3)
+            image_data = np.rot90(np.fliplr(image_data), 3)
 
         buff = io.BytesIO()
         plt.close("all")
