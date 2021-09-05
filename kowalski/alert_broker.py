@@ -866,7 +866,7 @@ class AlertWorker:
     ) -> dict:
         """
         Run cross-match with a live catalog that is constantly updated
-        Only searches for the most entry to keep it efficient
+        Only searches for the most recent entry to keep it efficient
 
         :param alert:
         :param live_stream: Name of live stream catalog
