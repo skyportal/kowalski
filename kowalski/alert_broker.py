@@ -889,7 +889,7 @@ class AlertWorker:
             dec_geojson = dec
 
             catalog_filter = {"candidate.programid": {"$eq": 1}}
-            catalog_sort = {"candidate.jd": -1}
+            catalog_sort = [("candidate.jd", -1)]
             catalog_projection = {
                 "objectId": 1,
                 "candidate.jd": 1,
