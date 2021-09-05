@@ -917,7 +917,7 @@ class AlertWorker:
                 projection={**catalog_projection},
                 sort=catalog_sort,
                 limit=1,
-            )
+            ))
 
             # Check if any result was found (live_alert is not null)
             if live_alert:
