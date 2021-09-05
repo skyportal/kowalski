@@ -920,10 +920,7 @@ class AlertWorker:
             ))
 
             # Check if any result was found (live_alert is not null)
-            if live_alert:
-                xmatches[live_stream] = [live_alert]
-            else:
-                xmatches[live_stream] = []
+            xmatches[live_stream] = latest_alert if latest_alert else []
 
         except Exception as e:
             log(str(e))
