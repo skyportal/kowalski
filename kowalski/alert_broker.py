@@ -912,7 +912,7 @@ class AlertWorker:
                 }
             }
             # Just find the most recent alert within the crossmatch radius, if any
-            live_alert = self.mongo.db[live_stream].find_one(
+            latest_alert = list(self.mongo.db[live_stream].find(
                 {**object_position_query, **catalog_filter},
                 projection={**catalog_projection},
                 sort={**catalog_sort},
