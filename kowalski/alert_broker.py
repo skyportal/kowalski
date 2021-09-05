@@ -892,6 +892,7 @@ class AlertWorker:
             catalog_sort = [("candidate.jd", -1)]
             catalog_projection = {
                 "objectId": 1,
+                "candid": 1,
                 "candidate.jd": 1,
                 "candidate.magpsf": 1,
                 "candidate.sigmapsf": 1,
