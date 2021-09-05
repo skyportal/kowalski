@@ -915,7 +915,8 @@ class AlertWorker:
             latest_alert = list(self.mongo.db[live_stream].find(
                 {**object_position_query, **catalog_filter},
                 projection={**catalog_projection},
-                sort={**catalog_sort},
+                sort=catalog_sort,
+                limit=1,
             )
 
             # Check if any result was found (live_alert is not null)
