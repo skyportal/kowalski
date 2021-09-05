@@ -140,7 +140,7 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
             ):
                 alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
                     {"_id": object_id},
-                    {"$addToSet": {"ZTF_alerts": {"$each": xmatches_ztf}}},
+                    {"$set": {"ZTF_alerts": xmatches_ztf}},
                     upsert=True,
                 )
 
