@@ -912,12 +912,14 @@ class AlertWorker:
                 }
             }
             # Just find the most recent alert within the crossmatch radius, if any
-            latest_alert = list(self.mongo.db[live_stream].find(
-                {**object_position_query, **catalog_filter},
-                projection={**catalog_projection},
-                sort=catalog_sort,
-                limit=1,
-            ))
+            latest_alert = list(
+                self.mongo.db[live_stream].find(
+                    {**object_position_query, **catalog_filter},
+                    projection={**catalog_projection},
+                    sort=catalog_sort,
+                    limit=1,
+                )
+            )
 
             # Check if any result was found (live_alert is not null)
             xmatches[live_stream] = latest_alert if latest_alert else []
