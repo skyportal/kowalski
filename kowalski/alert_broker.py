@@ -449,8 +449,13 @@ class AlertWorker:
             cutout_data = cutout_data["stampData"]
         with gzip.open(io.BytesIO(cutout_data), "rb") as f:
             with fits.open(io.BytesIO(f.read()), ignore_missing_simple=True) as hdu:
-                # header = hdu[0].header
-                data_flipped_y = np.flipud(hdu[0].data)
+                image_data = hdu[0].data
+
+        # Survey-specific transformations to get North up and West on the right
+        if self.instrument == "ZTF":
+            image_data = np.flipud(image_data)
+        elif self.instrument == "PGIR":
+            image_data = np.rot90(np.fliplr(image_data), 3)
 
         buff = io.BytesIO()
         plt.close("all")
@@ -461,7 +466,7 @@ class AlertWorker:
         fig.add_axes(ax)
 
         # replace nans with median:
-        img = np.array(data_flipped_y)
+        img = np.array(image_data)
         # replace dubiously large values
         xl = np.greater(np.abs(img), 1e20, where=~np.isnan(img))
         if img[xl].any():
