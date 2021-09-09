@@ -4,6 +4,7 @@ from bson.json_util import loads as bson_loads
 from copy import deepcopy
 import dask.distributed
 import datetime
+import numpy as np
 import multiprocessing
 import os
 import subprocess
@@ -105,7 +106,7 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
             ):
                 xmatches = {
                     **xmatches,
-                    **alert_worker.alert_filter__xmatch_live_stream(alert),
+                    **alert_worker.alert_filter__xmatch_ztf_alerts(alert),
                 }
 
             alert_aux = {
@@ -133,7 +134,7 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
             with timer(
                 f"ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
             ):
-                xmatches_ztf = alert_worker.alert_filter__xmatch_live_stream(alert)
+                xmatches_ztf = alert_worker.alert_filter__xmatch_ztf_alerts(alert)
 
             with timer(
                 f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1
@@ -315,6 +316,74 @@ class PGIRAlertWorker(AlertWorker, ABC):
 
             active_filters = self.get_active_filters()
             self.filter_templates = self.make_filter_templates(active_filters)
+
+    def alert_filter__xmatch_ztf_alerts(
+        self, alert: Mapping, ztf_stream: str = "ZTF_alerts"
+    ) -> dict:
+        """
+        Run cross-match with ZTF alerts
+        Only searches for the most recent entry to keep it efficient
+
+        :param alert:
+        :param ztf_stream: Name of ZTF alert stream catalog
+        :return:
+        """
+
+        xmatches = dict()
+
+        # cone search radius in arcsec:
+        cone_search_radius_ztf = 8.0
+        # convert arcsec to rad:
+        cone_search_radius_ztf *= np.pi / (180.0 * 3600)
+
+        try:
+            ra = float(alert["candidate"]["ra"])
+            dec = float(alert["candidate"]["dec"])
+
+            # geojson-friendly ra:
+            ra_geojson = ra - 180.0
+            dec_geojson = dec
+
+            catalog_filter = {"candidate.programid": {"$eq": 1}}
+            catalog_sort = [("candidate.jd", -1)]
+            catalog_projection = {
+                "objectId": 1,
+                "candid": 1,
+                "candidate.jd": 1,
+                "candidate.magpsf": 1,
+                "candidate.sigmapsf": 1,
+                "candidate.fid": 1,
+                "candidate.drb": 1,
+                "coordinates.radec_str": 1,
+            }
+
+            # do search of everything that is within the cross-match radius
+            object_position_query = dict()
+            object_position_query["coordinates.radec_geojson"] = {
+                "$geoWithin": {
+                    "$centerSphere": [
+                        [ra_geojson, dec_geojson],
+                        cone_search_radius_ztf,
+                    ]
+                }
+            }
+            # Just find the most recent alert within the crossmatch radius, if any
+            latest_alert = list(
+                self.mongo.db[ztf_stream].find(
+                    {**object_position_query, **catalog_filter},
+                    projection={**catalog_projection},
+                    sort=catalog_sort,
+                    limit=1,
+                )
+            )
+
+            # Check if any result was found (latest_alert is not null)
+            xmatches[ztf_stream] = latest_alert if latest_alert else []
+
+        except Exception as e:
+            log(str(e))
+
+        return xmatches
 
     def alert_put_photometry(self, alert):
         """PUT photometry to SkyPortal
