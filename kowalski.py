@@ -471,36 +471,43 @@ class Kowalski:
                 "part": "PGIR alert broker components",
                 "container": "kowalski_ingester_1",
                 "test_script": "test_alert_broker_pgir.py",
+                "flaky": False,
             },
             {
                 "part": "ZTF alert broker components",
                 "container": "kowalski_ingester_1",
                 "test_script": "test_alert_broker_ztf.py",
+                "flaky": False,
             },
             {
                 "part": "PGIR alert ingestion",
                 "container": "kowalski_ingester_1",
                 "test_script": "test_ingester_pgir.py",
+                "flaky": False,
             },
             {
                 "part": "ZTF alert ingestion",
                 "container": "kowalski_ingester_1",
                 "test_script": "test_ingester.py",
+                "flaky": False,
             },
             {
                 "part": "API",
                 "container": "kowalski_api_1",
                 "test_script": "test_api.py",
+                "flaky": False,
             },
             {
                 "part": "TNS monitoring",
                 "container": "kowalski_ingester_1",
                 "test_script": "test_tns_watcher.py",
+                "flaky": True,
             },
             {
                 "part": "Tools",
                 "container": "kowalski_ingester_1",
                 "test_script": "test_tools.py",
+                "flaky": False,
             },
         ]
 
@@ -522,7 +529,10 @@ class Kowalski:
             try:
                 subprocess.run(command, check=True)
             except subprocess.CalledProcessError:
-                failed_tests.append(setup["part"])
+                if not setup.get("flaky", False):
+                    failed_tests.append(setup["part"])
+                else:
+                    print(f"{setup['part']} test, marked as flaky, failed.")
                 continue
 
         if failed_tests:
