@@ -344,7 +344,8 @@ class PGIRAlertWorker(AlertWorker, ABC):
             ra_geojson = ra - 180.0
             dec_geojson = dec
 
-            catalog_filter = {"candidate.programid": {"$eq": 1}}
+            # restrict to public data only
+            catalog_filter = {"candidate.programid": 1}
             catalog_sort = [("candidate.jd", -1)]
             catalog_projection = {
                 "objectId": 1,
