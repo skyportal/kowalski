@@ -334,7 +334,8 @@ class PGIRAlertWorker(AlertWorker, ABC):
         # cone search radius in arcsec:
         cone_search_radius_ztf = 8.0
         # convert arcsec to rad:
-        cone_search_radius_ztf *= np.pi / (180.0 * 3600)
+        PI = 3.141592653589793
+        cone_search_radius_ztf *= PI / (180.0 * 3600)
 
         try:
             ra = float(alert["candidate"]["ra"])
