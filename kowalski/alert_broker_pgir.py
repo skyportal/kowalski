@@ -4,7 +4,6 @@ from bson.json_util import loads as bson_loads
 from copy import deepcopy
 import dask.distributed
 import datetime
-import numpy as np
 import multiprocessing
 import os
 import subprocess
