@@ -99,6 +99,15 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
                     **alert_worker.alert_filter__xmatch_clu(alert),
                 }
 
+            # Crossmatch new alert with most recent ZTF_alerts and insert
+            with timer(
+                f"ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+            ):
+                xmatches = {
+                    **xmatches,
+                    **alert_worker.alert_filter__xmatch_ztf_alerts(alert),
+                }
+
             alert_aux = {
                 "_id": object_id,
                 "cross_matches": xmatches,
@@ -117,6 +126,21 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
                 alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
                     {"_id": object_id},
                     {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
+                    upsert=True,
+                )
+
+            # Crossmatch exisiting alert with most recent record in ZTF_alerts and update aux
+            with timer(
+                f"ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+            ):
+                xmatches_ztf = alert_worker.alert_filter__xmatch_ztf_alerts(alert)
+
+            with timer(
+                f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1
+            ):
+                alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
+                    {"_id": object_id},
+                    {"$set": {"ZTF_alerts": xmatches_ztf}},
                     upsert=True,
                 )
 
@@ -291,6 +315,76 @@ class PGIRAlertWorker(AlertWorker, ABC):
 
             active_filters = self.get_active_filters()
             self.filter_templates = self.make_filter_templates(active_filters)
+
+    def alert_filter__xmatch_ztf_alerts(
+        self, alert: Mapping, ztf_stream: str = "ZTF_alerts"
+    ) -> dict:
+        """
+        Run cross-match with ZTF alerts
+        Only searches for the most recent entry to keep it efficient
+
+        :param alert:
+        :param ztf_stream: Name of ZTF alert stream catalog
+        :return:
+        """
+
+        xmatches = dict()
+
+        # cone search radius in arcsec:
+        cone_search_radius_ztf = 8.0
+        # convert arcsec to rad:
+        PI = 3.141592653589793
+        cone_search_radius_ztf *= PI / (180.0 * 3600)
+
+        try:
+            ra = float(alert["candidate"]["ra"])
+            dec = float(alert["candidate"]["dec"])
+
+            # geojson-friendly ra:
+            ra_geojson = ra - 180.0
+            dec_geojson = dec
+
+            # restrict to public data only
+            catalog_filter = {"candidate.programid": 1}
+            catalog_sort = [("candidate.jd", -1)]
+            catalog_projection = {
+                "objectId": 1,
+                "candid": 1,
+                "candidate.jd": 1,
+                "candidate.magpsf": 1,
+                "candidate.sigmapsf": 1,
+                "candidate.fid": 1,
+                "candidate.drb": 1,
+                "coordinates.radec_str": 1,
+            }
+
+            # do search of everything that is within the cross-match radius
+            object_position_query = dict()
+            object_position_query["coordinates.radec_geojson"] = {
+                "$geoWithin": {
+                    "$centerSphere": [
+                        [ra_geojson, dec_geojson],
+                        cone_search_radius_ztf,
+                    ]
+                }
+            }
+            # Just find the most recent alert within the crossmatch radius, if any
+            latest_alert = list(
+                self.mongo.db[ztf_stream].find(
+                    {**object_position_query, **catalog_filter},
+                    projection={**catalog_projection},
+                    sort=catalog_sort,
+                    limit=1,
+                )
+            )
+
+            # Check if any result was found (latest_alert is not null)
+            xmatches[ztf_stream] = latest_alert if latest_alert else []
+
+        except Exception as e:
+            log(str(e))
+
+        return xmatches
 
     def alert_put_photometry(self, alert):
         """PUT photometry to SkyPortal

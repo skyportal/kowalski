@@ -5,6 +5,7 @@ from ingest_igaps import run as run_igaps
 from ingest_ptf_matchfiles import run as run_ptf_matchfiles
 from ingest_vlass import run as run_vlass
 from ingest_ztf_matchfiles import run as run_ztf_matchfiles
+from ingest_ztf_public import run as run_ztf_public
 from ingest_ztf_source_features import run as run_ztf_source_features
 from ingest_ztf_source_classifications import run as run_ztf_source_classifications
 from utils import get_default_args, load_config, log, Mongo
@@ -88,7 +89,6 @@ class TestTools:
         assert len(ingested_exposures) == 10
 
     def test_ingest_vlass(self):
-
         collection = "VLASS_DR1"
 
         run_vlass(
@@ -102,7 +102,6 @@ class TestTools:
         assert len(ingested_entries) == 27
 
     def test_ingest_igaps(self):
-
         collection = "IGAPS_DR2"
 
         run_igaps(
@@ -115,8 +114,18 @@ class TestTools:
 
         assert len(ingested_entries) == 100
 
-    def test_ingest_ptf(self):
+    def test_ingest_ztf_public(self):
+        tag = get_default_args(run_ztf_public).get("tag")
+        collection = f"ZTF_public_sources_{tag}"
 
+        run_ztf_public(path="/app/data/catalogs", num_proc=1)
+
+        ingested_entries = list(self.mongo.db[collection].find({}, {"_id": 1}))
+        log(f"Ingested features of {len(ingested_entries)} sources")
+
+        assert len(ingested_entries) == 5449
+
+    def test_ingest_ptf(self):
         sources_collection = "PTF_sources"
         exposures_collection = "PTF_exposures"
         run_ptf_matchfiles(
