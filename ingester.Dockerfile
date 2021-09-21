@@ -39,6 +39,7 @@ COPY data/pgir_alerts/ /app/data/pgir_alerts/
 COPY data/catalogs/ /app/data/catalogs/
 COPY data/ztf_matchfiles/ /app/data/ztf_matchfiles/
 COPY data/ztf_source_features/ /app/data/ztf_source_features/
+COPY data/ztf_source_classifications/ /app/data/ztf_source_classifications/
 
 # copy over the config and the code
 COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py",\
@@ -55,9 +56,12 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
       "tests/test_alert_broker_pgir.py",\
       "tests/test_ingester.py",\
       "tests/test_ingester_pgir.py",\
-      "tests/test_tns_watcher.py", "tests/test_tools.py",\
+      "tests/test_tns_watcher.py",
+      "tests/test_tools.py",\
       "tools/fetch_ztf_matchfiles.py",\
-      "tools/ingest_ztf_matchfiles.py", "tools/ingest_ztf_source_features.py",\
+      "tools/ingest_ztf_matchfiles.py",
+      "tools/ingest_ztf_source_features.py",\
+      "tools/ingest_ztf_source_classifications.py",\
       "tools/istarmap.py",\
       "tools/ingest_vlass.py",\
       "tools/ingest_igaps.py",\

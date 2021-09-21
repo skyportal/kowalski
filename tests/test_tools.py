@@ -1,11 +1,12 @@
 import pytest
 from random import randrange
 
-from ingest_ztf_source_features import run as run_ztf_source_features
-from ingest_vlass import run as run_vlass
 from ingest_igaps import run as run_igaps
-from ingest_ztf_matchfiles import run as run_ztf_matchfiles
 from ingest_ptf_matchfiles import run as run_ptf_matchfiles
+from ingest_vlass import run as run_vlass
+from ingest_ztf_matchfiles import run as run_ztf_matchfiles
+from ingest_ztf_source_features import run as run_ztf_source_features
+from ingest_ztf_source_classifications import run as run_ztf_source_classifications
 from utils import get_default_args, load_config, log, Mongo
 
 
@@ -50,6 +51,21 @@ class TestTools:
         log(f"Ingested features of {len(ingested_entries)} sources")
 
         assert len(ingested_entries) == 123
+
+    def test_ingest_ztf_source_classifications(self):
+        tag = get_default_args(run_ztf_source_classifications).get("tag")
+        collection = f"ZTF_source_classifications_{tag}"
+
+        run_ztf_source_classifications(
+            path="/app/data/ztf_source_classifications/",
+            tag=tag,
+            num_processes=1,
+        )
+
+        ingested_entries = list(self.mongo.db[collection].find({}, {"_id": 1}))
+        log(f"Ingested classifications of {len(ingested_entries)} sources")
+
+        assert len(ingested_entries) == 9875
 
     def test_ingest_ztf_matchfiles(self):
         tag = str(randrange(10000000, 99999999, 1))
