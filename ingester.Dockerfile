@@ -56,10 +56,10 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
       "tests/test_alert_broker_pgir.py",\
       "tests/test_ingester.py",\
       "tests/test_ingester_pgir.py",\
-      "tests/test_tns_watcher.py",
+      "tests/test_tns_watcher.py",\
       "tests/test_tools.py",\
       "tools/fetch_ztf_matchfiles.py",\
-      "tools/ingest_ztf_matchfiles.py",
+      "tools/ingest_ztf_matchfiles.py",\
       "tools/ingest_ztf_source_features.py",\
       "tools/ingest_ztf_source_classifications.py",\
       "tools/istarmap.py",\
