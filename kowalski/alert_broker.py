@@ -1002,7 +1002,9 @@ class AlertWorker:
                     self.verbose > 1,
                 ):
                     response = self.api_skyportal(
-                        "POST", "/api/annotation", annotations
+                        "POST",
+                        f"/api/sources/{alert['objectId']}/annotations",
+                        annotations,
                     )
                 if response.json()["status"] == "success":
                     log(f"Posted {alert['objectId']} annotation to SkyPortal")
@@ -1065,7 +1067,8 @@ class AlertWorker:
                 ):
                     response = self.api_skyportal(
                         "PUT",
-                        f"/api/annotation/{existing_annotations[origin]['annotation_id']}",
+                        f"/api/sources/{alert['objectId']}"
+                        f"/annotations/{existing_annotations[origin]['annotation_id']}",
                         annotations,
                     )
                 if response.json()["status"] == "success":

@@ -50,7 +50,7 @@ action_patterns = {
     "Alert Submission": "Submitting alert",
     "Get ZTF Instrument Id": "Getting ZTF instrument_id from SkyPortal",
     "Get Source Groups Info": "Getting source groups info on",
-    "Get Group Info": "Getting info on group",
+    # "Get Group Info": "Getting info on group",
 }
 
 skyportal_actions = [
@@ -65,7 +65,7 @@ skyportal_actions = [
     "Post Thumbnail",
     "Get ZTF Instrument Id",
     "Get Source Groups Info",
-    "Get Group Info",
+    # "Get Group Info",
 ]
 
 
