@@ -8,6 +8,7 @@ import fire
 import pathlib
 from pprint import pprint
 import questionary
+import re
 import secrets
 import string
 import subprocess
@@ -38,7 +39,7 @@ dependencies = {
         # Command to get version
         ["docker-compose", "--version"],
         # Extract *only* the version number
-        lambda v: v.split()[2][:-1],
+        lambda v: re.search(r"\s*([\d.]+)", v).group(0),
         # It must be >= 1.22.0
         "1.22.0",
     ),
