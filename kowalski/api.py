@@ -1842,7 +1842,7 @@ class FilterHandler(Handler):
             log(e)
             test_successful, test_message = False, e
         if not test_successful:
-            return self.error(message=test_message)
+            return self.error(message=str(test_message))
 
         # if a filter does not exist for (filter_id, group_id), create one:
         if filter_existing is None:
