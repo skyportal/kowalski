@@ -4,7 +4,7 @@ bcrypt==3.2.0
 beautifulsoup4==4.10.0
 confluent_kafka==1.7.0
 cryptography==3.4.8
-dask==2021.9.0
+dask==2021.9.1
 distributed==2021.9.1
 fastavro==1.4.4
 fire==0.4.0
