@@ -39,7 +39,7 @@ dependencies = {
         # Command to get version
         ["docker-compose", "--version"],
         # Extract *only* the version number
-        lambda v: re.search(r"\s*([\d.]+)", v).group(0),
+        lambda v: re.search(r"\s*([\d.]+)", v).group(0).strip(),
         # It must be >= 1.22.0
         "1.22.0",
     ),
