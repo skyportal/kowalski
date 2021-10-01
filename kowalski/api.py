@@ -1840,7 +1840,7 @@ class FilterHandler(Handler):
 
         except Exception as e:
             log(e)
-            test_successful, test_message = False, e
+            test_successful, test_message = False, str(e)
         if not test_successful:
             return self.error(message=test_message)
 
