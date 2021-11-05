@@ -27,11 +27,11 @@ COPY kowalski/server.properties /kafka_$kafka_version/config/
 
 # ML models <model_name>.<tag>.<extensions>:
 ADD https://github.com/dmitryduev/braai/raw/master/models/braai_$braai_version.h5 /app/models/braai.$braai_version.h5
-ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_h.$acai_h_version.h5 /app/models/
-ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_v.$acai_v_version.h5 /app/models/
-ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_o.$acai_o_version.h5 /app/models/
-ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_n.$acai_n_version.h5 /app/models/
-ADD https://github.com/dmitryduev/acai-pub/raw/master/models/acai_b.$acai_b_version.h5 /app/models/
+ADD https://github.com/dmitryduev/acai/raw/master/models/acai_h.$acai_h_version.h5 /app/models/
+ADD https://github.com/dmitryduev/acai/raw/master/models/acai_v.$acai_v_version.h5 /app/models/
+ADD https://github.com/dmitryduev/acai/raw/master/models/acai_o.$acai_o_version.h5 /app/models/
+ADD https://github.com/dmitryduev/acai/raw/master/models/acai_n.$acai_n_version.h5 /app/models/
+ADD https://github.com/dmitryduev/acai/raw/master/models/acai_b.$acai_b_version.h5 /app/models/
 
 # copy over the test data
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
