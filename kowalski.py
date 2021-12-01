@@ -107,7 +107,7 @@ def deps_ok() -> bool:
             print("     ", exc)
         print()
         print(
-            "    Please refer to https://github.com/dmitryduev/tails "
+            "    Please refer to https://github.com/dmitryduev/kowalski "
             "for installation instructions."
         )
         print()
