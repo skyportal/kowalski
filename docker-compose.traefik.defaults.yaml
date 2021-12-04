@@ -33,6 +33,7 @@ services:
       # Create a letsencrypt dir within the folder where the docker-compose file is
       - "./letsencrypt:/letsencrypt"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    restart: always
 
   api:
     build:
