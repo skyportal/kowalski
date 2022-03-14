@@ -53,7 +53,7 @@ pip install -r requirements.txt
 Start up `Kowalski` using the default config/secrets (copying them over):
 
 ```bash
-./kowalski.py up
+./kowalski.py up --build
 ```
 
 ### Config file
