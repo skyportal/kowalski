@@ -51,7 +51,7 @@ pip install -r requirements.txt
 
 You can then use the `kowalski.py` utility to manage `Kowalski`.
 
-### Setting config files
+### Setting up config files
 
 You need config files in order to run `Kowalski`. You can start off by copying the default config/secrets over:
 
