@@ -36,40 +36,66 @@ The easiest way to interact with a `Kowalski` instance is by using a python clie
 
 ## Spin up your own `kowalski`
 
-Clone the repo and cd to the cloned directory:
+### Cloning and Environment configuration
+
+Start off by cloning the repo, then `cd` into the cloned directory:
 ```bash
 git clone https://github.com/dmitryduev/kowalski.git
 cd kowalski
 ```
-
-Use the `kowalski.py` utility to manage `Kowalski`.
-
-Make sure the requirements to run the `kowalski.py` utility are met, e.g.:
+Make sure you have a `python` environment that meets the requirements to run `Kowalski`:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Start up `Kowalski` using the default config/secrets (copying them over):
+You can then use the `kowalski.py` utility to manage `Kowalski`.
+
+### Setting up config files
+
+You need config files in order to run `Kowalski`. You can start off by copying the default config/secrets over:
 
 ```bash
-./kowalski.py up
+cp config.defaults.yaml config.yaml
+cp docker-compose.defaults.yaml docker-compose.yaml
 ```
-
-### Config file
-
-You should `cp config.defaults.yaml config.yaml` instead of using the default config in a production setting.
-Make sure to choose strong passwords!
 
 `config.yaml` contains the API and ingester configs, the `supevisord` config for the API and ingester containers,
 together with all the secrets, so be careful when committing code / pushing docker images.
 
+However, if you want to run in a production setting, be sure to modify `config.yaml` and choose strong passwords!
 
-### Deployment scenarios
+`docker-compose.yaml` serves as a config file for `docker-compose`, and can be used for different Kowalski deployment modes.
+Kowalski comes with several template `docker-compose` configs (see [below](#different-deployment-scenarios) for more info).
+
+### Building Kowalski
+
+Finally, once you've set the config files, you can build an instance of Kowalski.
+You can do this with the following command:
 
 ```bash
-./kowalski.py up
+./kowalski.py up --build
 ```
+
+You have now successfully built a `Kowalski` instance!
+Any time you want to rebuild `kowalski`, you need to re-run this command.
+
+### Interacting with a Kowalski build
+
+If you want to just interact with a `Kowalski` instance that has already been built, you can drop the `--build` flag:
+
+* `./kowalski.py up` to start up a pre-built Kowalski instance
+* `./koiwalski.py down`to shut down a pre-built Kowalski instance
+
+## Run tests
+
+You can check that a running `Kowalski` instance is working by using the Kowalski test suite:
+
+```bash
+./kowalski.py test
+```
+
+## Different Deployment scenarios
 
 `Kowalski` uses `docker-compose` under the hood and requires a `docker-compose.yaml` file.
 There are several available deployment scenarios:
@@ -78,19 +104,19 @@ There are several available deployment scenarios:
 - Bare-bones + broker for `SkyPortal` / `Fritz`
 - Behind `traefik`
 
-#### Bare-bones
+### Bare-bones
 
 Use `docker-compose.defaults.yaml` as a template for `docker-compose.yaml`.
 Note that the environment variables for the `mongo` service must match
 `admin_*` under `kowalski.database` in `config.yaml`.
 
-#### Bare-bones + broker for [`SkyPortal`](https://skyportal.io/) / [`Fritz`](https://github.com/fritz-marshal/fritz)
+### Bare-bones + broker for [`SkyPortal`](https://skyportal.io/) / [`Fritz`](https://github.com/fritz-marshal/fritz)
 
 Use `docker-compose.fritz.defaults.yaml` as a template for `docker-compose.yaml`.
 If you want the alert ingester to post (filtered) alerts to `SkyPortal`, make sure
 `{"misc": {"broker": true}}` in `config.yaml`.
 
-#### Behind `traefik`
+### Behind `traefik`
 
 Use `docker-compose.traefik.defaults.yaml` as a template for `docker-compose.yaml`.
 
@@ -102,13 +128,6 @@ getting a TLS certificate from `letsencrypt`.
 In `docker-compose.yaml`:
 - Replace `kowalski@caltech.edu` with your email.
 - Replace `private.caltech.edu` with your domain.
-
-
-## Run tests
-
-```bash
-./kowalski.py test
-```
 
 ## Shut down `Kowalski`
 
