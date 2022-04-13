@@ -66,7 +66,7 @@ together with all the secrets, so be careful when committing code / pushing dock
 However, if you want to run in a production setting, be sure to modify `config.yaml` and choose strong passwords!
 
 `docker-compose.yaml` serves as a config file for `docker-compose`, and can be used for different Kowalski deployment modes.
-Kowalski comes with several possible default `docker-compose` configs (see [below](#different-deployment-scenarios) for more info).
+Kowalski comes with several template `docker-compose` configs (see [below](#different-deployment-scenarios) for more info).
 
 ### Building Kowalski
 
