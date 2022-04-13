@@ -38,7 +38,7 @@ The easiest way to interact with a `Kowalski` instance is by using a python clie
 
 ### Cloning and Environment configuration
 
-First clone the repo and cd to the cloned directory:
+Start off by cloning the repo, then `cd` into the cloned directory:
 ```bash
 git clone https://github.com/dmitryduev/kowalski.git
 cd kowalski
