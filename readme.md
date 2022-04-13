@@ -78,7 +78,7 @@ You can do this with the following command:
 ```
 
 You have now successfully built a `Kowalski` instance!
-Any time you want to rebuild kowalski, you need to run the same command.
+Any time you want to rebuild `kowalski`, you need to re-run this command.
 
 ### Interacting with a Kowalski build
 
