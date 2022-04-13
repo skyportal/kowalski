@@ -70,7 +70,7 @@ Kowalski comes with several template `docker-compose` configs (see [below](#diff
 
 ### Building Kowalski
 
-Finally, once you've set the config files, you can actually build an instance of Kowalski.
+Finally, once you've set the config files, you can build an instance of Kowalski.
 You can do this with the following command:
 
 ```bash
