@@ -43,7 +43,7 @@ Start off by cloning the repo, then `cd` into the cloned directory:
 git clone https://github.com/dmitryduev/kowalski.git
 cd kowalski
 ```
-Make sure you have also a python environment which meets the requirements to run `Kowalski`:
+Make sure you have a `python` environment that meets the requirements to run `Kowalski`:
 
 ```bash
 pip install -r requirements.txt
