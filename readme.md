@@ -36,7 +36,7 @@ The easiest way to interact with a `Kowalski` instance is by using a python clie
 
 ## Spin up your own `kowalski`
 
-###Cloning and Envirornment configuration
+### Cloning and Environment configuration
 
 First clone the repo and cd to the cloned directory:
 ```bash
