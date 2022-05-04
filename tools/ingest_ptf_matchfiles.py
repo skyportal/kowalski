@@ -164,7 +164,7 @@ def process_file(argument_list: Sequence):
             )
 
             def clean_up_document(group):
-                """ Format passed in dicts for Mongo insertion """
+                """Format passed in dicts for Mongo insertion"""
                 document = {}
                 for k, v in group.items():
                     if k == "matchedSourceID":

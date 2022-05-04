@@ -68,7 +68,7 @@ def process_file(argument_list: Sequence):
         )
 
         def clean_up_document(document):
-            """ Format passed in dicts for Mongo insertion """
+            """Format passed in dicts for Mongo insertion"""
             # convert types for pymongo:
             for k, v in document.items():
                 if k in sources_int_fields:
