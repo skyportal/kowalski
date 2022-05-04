@@ -3,4 +3,5 @@ fire>=0.3.1
 pyyaml>=5.3.1
 gsutil>=4.56
 questionary>=1.8.1
-click==8.1.2
+black==22.3.0
+click==8.1.3
