@@ -2221,7 +2221,15 @@ class ZTFTriggerHandler(Handler):
 
         if response.status == 201:
             return self.success(message="submitted", data=dict(response.headers))
-        return self.error(message=f"ZTF trigger attempt rejected: {response.content}")
+
+        elif response.status == 200:
+            data = dict(response.headers)
+            return self.error(
+                message=f"Submitted queue {data['queue_name']} already exists",
+                status=409,
+            )
+
+        return self.error(message=f"ZTF trigger attempt rejected: {response.text}")
 
     @admin_required
     async def delete(self, request: web.Request) -> web.Response:
@@ -2281,7 +2289,7 @@ class ZTFTriggerHandler(Handler):
 
         if response.status == 200:
             return self.success(message="deleted", data=dict(response.headers))
-        return self.error(message=f"ZTF delete attempt rejected: {response.content}")
+        return self.error(message=f"ZTF delete attempt rejected: {response.text}")
 
 
 """ lab """
