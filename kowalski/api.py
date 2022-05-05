@@ -2108,6 +2108,62 @@ class ZTFTriggerHandler(Handler):
         self.test = test
 
     @admin_required
+    async def get(self, request: web.Request) -> web.Response:
+        """Retrieve ZTF queue
+
+        :param request:
+        :return:
+        ---
+        summary: Get ZTF queue
+        tags:
+          - triggers
+
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+        responses:
+          '200':
+            description: queue retrieved
+            content:
+              application/json:
+                schema:
+                  type: object
+          '400':
+            description: query parsing/execution error
+            content:
+              application/json:
+                schema:
+                  type: object
+        """
+
+        if self.test:
+            return self.success(message="submitted")
+
+        server = SSHTunnelForwarder(
+            (config["ztf"]["mountain_ip"], config["ztf"]["mountain_port"]),
+            ssh_username=config["ztf"]["mountain_username"],
+            ssh_password=config["ztf"]["mountain_password"],
+            remote_bind_address=(
+                config["ztf"]["mountain_bind_ip"],
+                config["ztf"]["mountain_bind_port"],
+            ),
+        )
+
+        server.start()
+        url = f"http://{server.local_bind_address[0]}:{server.local_bind_address[1]}/queues"
+        async with ClientSession() as client_session:
+            async with client_session.get(url, json={}, timeout=10) as response:
+                response_json = await response.json()
+        server.stop()
+
+        if response.status == 200:
+            return self.success(message="retrieved", data=response_json)
+        return self.error(message=f"ZTF queue query attempt rejected: {response.text}")
+
+    @admin_required
     async def put(self, request: web.Request) -> web.Response:
         """Trigger ZTF
 
@@ -2746,6 +2802,7 @@ async def app_factory():
             web.patch("/api/filters", filter_handler.patch),
             web.delete("/api/filters/{filter_id:[0-9]+}", filter_handler.delete),
             # triggers
+            web.get("/api/triggers/ztf", ztf_trigger_handler.get),
             web.put("/api/triggers/ztf", ztf_trigger_handler.put),
             web.delete("/api/triggers/ztf", ztf_trigger_handler.delete),
             web.put("/api/triggers/ztf.test", ztf_trigger_handler_test.put),
