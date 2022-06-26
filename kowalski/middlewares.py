@@ -2,11 +2,13 @@ from aiohttp import web
 from copy import deepcopy
 from functools import wraps
 import jwt
+import os
 import traceback
 from utils import load_config, log
 
 
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 @web.middleware

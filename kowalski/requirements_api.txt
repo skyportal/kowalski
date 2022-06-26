@@ -8,8 +8,8 @@ gunicorn==20.0.4
 matplotlib==3.3.3
 motor>=2.3.0
 multidict==5.1.0
-numba==0.52.0
-numpy==1.18.5
+numba==0.55.2
+numpy==1.22.0
 odmantic>=0.3.2
 pandas==1.1.4
 pyjwt>=2.0.0

@@ -221,3 +221,100 @@ pre-commit install
 This will check your changes before each commit to ensure that they
 conform with our code style standards. We use `black` to reformat `Python`
 code and `flake8` to verify that code complies with [PEP8](https://www.python.org/dev/peps/pep-0008/).
+
+
+## Building and deploying locally
+
+When developing, it can be useful to just run kowalski directly.
+
+### API
+
+To install the API requirements, run:
+
+```bash
+pip install -r kowalski/requirements_api.txt
+```
+
+Just as described above, the config file must be created:
+
+```bash
+cp config.defaults.yaml config.yaml
+```
+
+When running locally, it is likely that database.host should be 127.0.0.1 or similar. For simplicity, we also set database.replica_set to null.
+
+We need to set the admin and user roles for the database. To do so, login to mongdb and set (using the default values from the config):
+
+```bash
+mongosh --host 127.0.0.1 --port 27017
+```
+and then from within the mongo terminal
+
+```bash
+use kowalski
+db.createUser( { user: "mongoadmin", pwd: "mongoadminsecret", roles: [ { role: "userAdmin", db: "admin" } ] } )
+db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "admin" } ] } )
+db.createUser( { user: "mongoadmin", pwd: "mongoadminsecret", roles: [ { role: "userAdmin", db: "kowalski" } ] } )
+db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "kowalski" } ] } )
+```
+
+The API app can then be run with
+
+```bash
+KOWALSKI_APP_PATH=./ KOWALSKI_PATH=kowalski python kowalski/api.py
+```
+
+Then tests can be run by going into the kowalski/ directory
+
+```bash
+cd kowalski
+```
+
+and running:
+
+```bash
+KOWALSKI_APP_PATH=../ python -m pytest -s api.py ../tests/test_api.py
+```
+
+which should complete.
+
+### Alert Broker
+
+To install the broker requirements, run:
+
+```bash
+pip install -r kowalski/requirements_ingester.txt
+```
+
+The ingester requires kafka, which can be installed with:
+
+```bash
+export kafka_version=2.13-2.5.0
+wget https://storage.googleapis.com/ztf-fritz/kafka_$kafka_version.tgz
+tar -xzf kafka_$kafka_version.tgz
+```
+
+Installed in this way, path.kafka in the config should be set to ./kafka_2.13-2.5.0.
+
+The broker can then be run with
+```bash
+KOWALSKI_APP_PATH=./ python kowalski/alert_broker_ztf.py
+```
+
+Then tests can be run by going into the kowalski/ directory
+
+```bash
+cd kowalski
+```
+
+and running:
+
+```bash
+KOWALSKI_APP_PATH=../ KOWALSKI_DATA_PATH=../data python -m pytest -s alert_broker_ztf.py ../tests/test_alert_broker_ztf.py
+```
+
+We also provide an option `USE_TENSORFLOW=False` for users who cannot install Tensorflow for whatever reason.
+
+### Ingester
+
+Coming soon.
