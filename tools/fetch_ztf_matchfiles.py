@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 import fire
 import multiprocessing as mp
+import os
 import os.path
 import pandas as pd
 import pathlib
@@ -13,10 +14,10 @@ from urllib.parse import urljoin
 from utils import load_config
 
 
-config = load_config(
-    path=pathlib.Path(__file__).parent.absolute(),
-    config_file="config.yaml",
-)["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get(
+    "KOWALSKI_APP_PATH", pathlib.Path(__file__).parent.absolute()
+)
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 def collect_urls(readout_channel: int) -> list:

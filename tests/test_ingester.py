@@ -12,7 +12,8 @@ from utils import init_db_sync, load_config, log, Mongo
 
 
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 class Program:

@@ -12,6 +12,7 @@ import gzip
 import io
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 import pathlib
 from penquins import Kowalski
 import requests
@@ -24,7 +25,8 @@ from utils import load_config, log  # noqa: E402
 
 
 """ load config and secrets """
-config = load_config(path=str(parent_dir), config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", str(parent_dir))
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 KOWALSKI_PROTOCOL = "https"

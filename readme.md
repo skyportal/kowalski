@@ -278,7 +278,7 @@ KOWALSKI_APP_PATH=../ python -m pytest -s api.py ../tests/test_api.py
 
 which should complete.
 
-### Alert Broker
+### Alert Broker and Ingester
 
 To install the broker requirements, run:
 
@@ -315,6 +315,35 @@ KOWALSKI_APP_PATH=../ KOWALSKI_DATA_PATH=../data python -m pytest -s alert_broke
 
 We also provide an option `USE_TENSORFLOW=False` for users who cannot install Tensorflow for whatever reason.
 
-### Ingester
+To test the ingester, path.logs in the config should be set to ./data/logs/.
 
-Coming soon.
+Then tests can be run by going into the kowalski/ directory
+
+```bash
+cd kowalski
+```
+
+and running:
+
+```bash
+KOWALSKI_APP_PATH=../ KOWALSKI_DATA_PATH=../data python -m pytest ../tests/test_ingester.py
+```
+
+### Tools
+
+To install the tools requirements, run:
+
+```bash
+pip install -r kowalski/requirements_tools.txt
+```
+
+Then tests can be run by going into the kowalski/ directory
+
+```bash
+cd kowalski
+```
+
+and running:
+```bash
+KOWALSKI_APP_PATH=../ KOWALSKI_DATA_PATH=../data python -m pytest -s ../tools/istarmap.py ../tests/test_tools.py
+```
