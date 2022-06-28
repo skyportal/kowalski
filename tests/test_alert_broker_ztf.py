@@ -1,11 +1,14 @@
 import fastavro
+import os
 import pytest
 
 from alert_broker_ztf import ZTFAlertWorker
 from utils import load_config, log
 
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+KOWALSKI_DATA_PATH = os.environ.get("KOWALSKI_DATA_PATH", "/app/data")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 @pytest.fixture(autouse=True, scope="class")
@@ -22,7 +25,7 @@ def alert_fixture(request):
     log("Loading a sample ZTF alert")
     candid = 1127561445515015011
     request.cls.candid = candid
-    sample_avro = f"/app/data/ztf_alerts/20200202/{candid}.avro"
+    sample_avro = f"{KOWALSKI_DATA_PATH}/ztf_alerts/20200202/{candid}.avro"
     with open(sample_avro, "rb") as f:
         for record in fastavro.reader(f):
             request.cls.alert = record

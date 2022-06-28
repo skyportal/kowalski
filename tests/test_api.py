@@ -1,3 +1,4 @@
+import os
 import string
 import random
 from typing import List
@@ -6,7 +7,8 @@ from api import app_factory
 from utils import load_config, uid
 
 
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 class TestAPIs:

@@ -24,8 +24,7 @@ import pathlib
 import requests
 from requests.packages.urllib3.util.retry import Retry
 import sys
-import tensorflow as tf
-from tensorflow.keras.models import load_model
+
 import traceback
 from typing import Mapping, Optional, Sequence
 
@@ -45,12 +44,26 @@ from utils import (
     ZTFAlert,
 )
 
+# Tensorflow is problematic for Mac's currently, so we can add an option to disable it
+USE_TENSORFLOW = os.environ.get("USE_TENSORFLOW", True) in [
+    "True",
+    "t",
+    "true",
+    "1",
+    True,
+    1,
+]
 
-tf.config.optimizer.set_jit(True)
+if USE_TENSORFLOW:
+    import tensorflow as tf
+    from tensorflow.keras.models import load_model
+
+    tf.config.optimizer.set_jit(True)
 
 
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 class EopError(Exception):
@@ -280,23 +293,27 @@ class AlertWorker:
 
         # ML models
         self.ml_models = dict()
-        for model in config["ml_models"].get(self.instrument, []):
-            try:
-                model_version = config["ml_models"][self.instrument][model]["version"]
-                # todo: allow other formats such as SavedModel
-                model_filepath = os.path.join(
-                    config["path"][f"ml_models_{self.instrument.lower()}"],
-                    f"{model}.{model_version}.h5",
-                )
-                self.ml_models[model] = {
-                    "model": load_model(model_filepath),
-                    "version": model_version,
-                }
-            except Exception as e:
-                log(f"Error loading ML model {model}: {str(e)}")
-                _err = traceback.format_exc()
-                log(_err)
-                continue
+
+        if USE_TENSORFLOW:
+            for model in config["ml_models"].get(self.instrument, []):
+                try:
+                    model_version = config["ml_models"][self.instrument][model][
+                        "version"
+                    ]
+                    # todo: allow other formats such as SavedModel
+                    model_filepath = os.path.join(
+                        config["path"][f"ml_models_{self.instrument.lower()}"],
+                        f"{model}.{model_version}.h5",
+                    )
+                    self.ml_models[model] = {
+                        "model": load_model(model_filepath),
+                        "version": model_version,
+                    }
+                except Exception as e:
+                    log(f"Error loading ML model {model}: {str(e)}")
+                    _err = traceback.format_exc()
+                    log(_err)
+                    continue
 
         # talking to SkyPortal?
         if not config["misc"]["broker"]:

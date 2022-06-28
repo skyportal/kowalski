@@ -25,6 +25,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from multidict import MultiDict
 import numpy as np
 from odmantic import AIOEngine, EmbeddedModel, Field, Model
+import os
 import pathlib
 from pydantic import root_validator
 from sshtunnel import SSHTunnelForwarder
@@ -43,7 +44,9 @@ from utils import (
 import uvloop
 
 
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+KOWALSKI_PATH = os.environ.get("KOWALSKI_PATH", "./")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 class Handler:
@@ -2781,7 +2784,7 @@ async def app_factory():
         title=config["server"]["name"],
         version=config["server"]["version"],
         description=config["server"]["description"],
-        components="components_api.yaml",
+        components=os.path.join(KOWALSKI_PATH, "components_api.yaml"),
     )
 
     # instantiate handler classes:
