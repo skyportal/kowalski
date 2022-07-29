@@ -101,7 +101,7 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
         # candid not in db, ingest decoded avro packet into db
         with timer(f"Mongification of {object_id} {candid}"):
             print(f'Trying to mongify')
-            alert, prv_candidates = self.alert_mongify(alert)
+            alert, prv_candidates = alert_worker.alert_mongify(alert)
 
         # prv_candidates: pop nulls - save space
         prv_candidates = [
@@ -111,7 +111,7 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
 
 class WNTRAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
-        super().__init__(instrument="WNTR", **kwargs)
+        super().__init__(instrument="PGIR", **kwargs)
         
 class WorkerInitializer(dask.distributed.WorkerPlugin):
     def __init__(self, *args, **kwargs):
@@ -200,12 +200,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print(f'Starting up 2')
-    # For testing
-    # i = 1
-    # while i < 5:
-    #     test_consumer.poll()
-    #     print(f'Finished poll {i}')
-    #     i += 1
     offset_reset = config["kafka"]["default.topic.config"][
                         "auto.offset.reset"
                     ]
@@ -214,7 +208,5 @@ if __name__ == "__main__":
     test = False # test mode 
     topic_listener(args.topic, args.servers, offset_reset, group, test) 
 
-    # test_consumer = AlertConsumer(args.servers, args.topic, args.group_id)
-    # print(f'Successfully created AlertConsumer')
   
 
