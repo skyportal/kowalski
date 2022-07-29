@@ -1,30 +1,50 @@
+from abc import ABC
 import argparse
-from ast import literal_eval
+from bson.json_util import loads as bson_loads
 from copy import deepcopy
+import dask.distributed
 import datetime
+import multiprocessing
+import os
+import subprocess
+import sys
+import time
+import traceback
+import threading
+from typing import Mapping, Sequence
+
+from alert_broker import (
+    AlertConsumer,
+    AlertWorker,
+    EopError
+)
+from utils import init_db_sync, load_config, log, timer
+
+
+""" load config and secrets """
+config = load_config(config_file="config.yaml")["kowalski"]
+
+# Misc: not in alert_broker_pgir
+# TODO: remove as not needed
+# specific, copied from kowalski repo
+# https://github.com/dmitryduev/kowalski
+from utils import (
+    deg2dms,
+    deg2hms,
+    radec2lb
+)
+from ast import literal_eval
 from ensurepip import bootstrap
 import io
 import logging
-import sys
-import traceback
-from typing import Mapping
-
-# specific, copied from kowalski repo
-# https://github.com/dmitryduev/kowalski
-from winterdrp.utils_kowalski import (
-    deg2dms,
-    deg2hms,
-    radec2lb,
-    timer
-)
-
 import confluent_kafka
 import fastavro
 
 logger = logging.getLogger(__name__)  
 logger.setLevel(logging.INFO)
 
-class AlertConsumer:
+
+class WNTRAlertConsumer(AlertConsumer, ABC):
     """
     Creates an alert stream Kafka consumer for a given topic,
     reads incoming packets, and ingests stream into database
@@ -32,14 +52,13 @@ class AlertConsumer:
 
     """
    
-    def __init__(
-        self,
-        bootstrap_server_str:str, 
-        topic:str,
-        group_id:str,
-        verbose = 2
-        
-    ):
+    def __init__(self, topic:str, dask_client: dask.distributed.Client, **kwargs):
+        # Old class params
+        # bootstrap_server_str:str, 
+        # topic:str,
+        # group_id:str,
+        # dask_client: dask.distributed.Client,
+        # verbose = 2,
         """
         Initializes Kafka consumer.
 
@@ -53,52 +72,54 @@ class AlertConsumer:
         :param verbose: _description_, defaults to 2
         :type verbose: int, optional
         """
-        # Configure consumer connection to Kafka broker
-        bootstrap_servers = {bootstrap_server_str} 
-        logger.info(f'testingggggg')
-        conf = {
-            "bootstrap.servers": bootstrap_servers,
-            "default.topic.config": {"auto.offset.reset": "earliest"},
-        }
+        super().__init__(topic, dask_client, **kwargs)
 
-        conf["group.id"] = group_id
-        # make it unique
-        conf["group.id"] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
+        # # Configure consumer connection to Kafka broker
+        # bootstrap_servers = {bootstrap_server_str} 
+        # logger.info(f'testingggggg')
+        # conf = {
+        #     "bootstrap.servers": bootstrap_servers,
+        #     "default.topic.config": {"auto.offset.reset": "earliest"},
+        # }
+
+        # conf["group.id"] = group_id
+        # # make it unique
+        # conf["group.id"] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
         
-        # keep track of disconnected partitions
-        self.num_disconnected_partitions = 0
-        self.topic = topic
-        self.verbose = verbose
+        # # keep track of disconnected partitions
+        # self.num_disconnected_partitions = 0
+        # self.topic = topic
+        # self.verbose = 2
 
-        def error_cb(err, _self=self):
-            print(f"error_cb --------> {err}")
-            print(f'{err.code()}')
-            if err.code() == -195:
-                _self.num_disconnected_partitions += 1
-                if _self.num_disconnected_partitions == _self.num_partitions:
-                    print("All partitions got disconnected, killing thread")
-                    sys.exit()
-                else:
-                    print(
-                        f"{_self.topic}: disconnected from partition. total: {_self.num_disconnected_partitions}"
-                    )
+        # def error_cb(err, _self=self):
+        #     print(f"error_cb --------> {err}")
+        #     print(f'{err.code()}')
+        #     if err.code() == -195:
+        #         _self.num_disconnected_partitions += 1
+        #         if _self.num_disconnected_partitions == _self.num_partitions:
+        #             print("All partitions got disconnected, killing thread")
+        #             sys.exit()
+        #         else:
+        #             print(
+        #                 f"{_self.topic}: disconnected from partition. total: {_self.num_disconnected_partitions}"
+        #             )
 
-        self.consumer = confluent_kafka.Consumer(conf)
-        self.num_partitions = 0
+        # self.consumer = confluent_kafka.Consumer(conf)
+        # self.num_partitions = 0
 
-        def on_assign(consumer, partitions, _self=self):
-            # force-reset offsets when subscribing to a topic:
-            print(f'parititions: {partitions}')
-            for part in partitions:
-                # -2 stands for beginning and -1 for end
-                part.offset = -2
-                # keep number of partitions.
-                # when reaching end of last partition, kill thread and start from beginning
-                _self.num_partitions += 1
-                print(f'Topic partition offsets: {consumer.get_watermark_offsets(part)}')
+        # def on_assign(consumer, partitions, _self=self):
+        #     # force-reset offsets when subscribing to a topic:
+        #     print(f'parititions: {partitions}')
+        #     for part in partitions:
+        #         # -2 stands for beginning and -1 for end
+        #         part.offset = -2
+        #         # keep number of partitions.
+        #         # when reaching end of last partition, kill thread and start from beginning
+        #         _self.num_partitions += 1
+        #         print(f'Topic partition offsets: {consumer.get_watermark_offsets(part)}')
 
-        self.consumer.subscribe([topic], on_assign=on_assign)
-        print(f"Successfully subscribed to {topic}")
+        # self.consumer.subscribe([topic], on_assign=on_assign)
+        # print(f"Successfully subscribed to {topic}")
 
     @staticmethod
     def read_schema_data(bytes_io):
@@ -192,13 +213,21 @@ class AlertConsumer:
         """
         candid = alert["candid"]
         object_id = alert["objectId"]
-        candidate = alert["candidate"]
 
+        candidate = alert["candidate"]
         print(f"{topic} {object_id} {candid} in process_alert")
         print(f"----------------------------------------------")
         print(f"{candidate}")
         print(f"----------------------------------------------")
 
+        # get worker running current task
+        worker = dask.distributed.get_worker()
+        alert_worker = worker.plugins["worker-init"].alert_worker
+
+        log(f"{topic} {object_id} {candid} {worker.address}")
+
+        # TODO check: return if this alert packet has already been processed 
+        # and ingested into collection_alerts:
 
         # candid not in db, ingest decoded avro packet into db
         with timer(f"Mongification of {object_id} {candid}"):
@@ -251,6 +280,87 @@ class AlertConsumer:
                 _err = traceback.format_exc()
                 print(_err)
 
+class WNTRAlertWorker(AlertWorker, ABC):
+    def __init__(self, **kwargs):
+        super().__init__(instrument="PGIR", **kwargs)
+        
+class WorkerInitializer(dask.distributed.WorkerPlugin):
+    def __init__(self, *args, **kwargs):
+        self.alert_worker = None
+
+    def setup(self, worker: dask.distributed.Worker):
+        self.alert_worker = WNTRAlertWorker()
+
+def topic_listener(
+    topic,
+    bootstrap_servers: str,
+    offset_reset: str = "earliest",
+    group: str = None,
+    test: bool = False,
+):
+    """
+        Listen to a Kafka topic with WNTR alerts
+    :param topic:
+    :param bootstrap_servers:
+    :param offset_reset:
+    :param group:
+    :param test: when testing, terminate once reached end of partition
+    :return:
+    """
+    # TODO change to WNTR
+    # Configure dask client
+    dask_client = dask.distributed.Client(
+        address=f"{config['dask_pgir']['host']}:{config['dask_pgir']['scheduler_port']}"
+    )
+
+    # init each worker with AlertWorker instance
+    worker_initializer = WorkerInitializer()
+    dask_client.register_worker_plugin(worker_initializer, name="worker-init")
+
+    # Configure consumer connection to Kafka broker
+    conf = {
+        "bootstrap.servers": bootstrap_servers,
+        "default.topic.config": {"auto.offset.reset": offset_reset},
+    }
+    if group is not None:
+        conf["group.id"] = group
+    else:
+        conf["group.id"] = os.environ.get("HOSTNAME", "kowalski")
+
+    # make it unique:
+    conf[
+        "group.id"
+    ] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
+
+    # Start alert stream consumer
+    # TODO change instrument to WNTR
+    stream_reader = WNTRAlertConsumer(topic, dask_client, instrument="PGIR", **conf)
+
+    while True:
+        try:
+            # poll!
+            stream_reader.poll()
+
+        except EopError as e:
+            # Write when reaching end of partition
+            log(e.message)
+            if test:
+                # when testing, terminate once reached end of partition:
+                sys.exit()
+        except IndexError:
+            log("Data cannot be decoded\n")
+        except UnicodeDecodeError:
+            log("Unexpected data format received\n")
+        except KeyboardInterrupt:
+            log("Aborted by user\n")
+            sys.exit()
+        except Exception as e:
+            log(str(e))
+            _err = traceback.format_exc()
+            log(_err)
+            sys.exit()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Read broadcasts from a Kafka Producer")
     parser.add_argument("--topic", help="Topic name to query")
@@ -260,16 +370,22 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    print(f'Starting up')
-    test_consumer = AlertConsumer(args.servers, args.topic, args.group_id)
-    print(f'Successfully created AlertConsumer')
-
+    print(f'Starting up 2')
     # For testing
-    i = 1
-    while i < 5:
-        test_consumer.poll()
-        print(f'Finished poll {i}')
-        i += 1
+    # i = 1
+    # while i < 5:
+    #     test_consumer.poll()
+    #     print(f'Finished poll {i}')
+    #     i += 1
+    offset_reset = config["kafka"]["default.topic.config"][
+                        "auto.offset.reset"
+                    ]
+    group = config["kafka"]["group"] # possible source of error?
+    print(group)
+    test = False # test mode 
+    topic_listener(args.topic, args.servers, offset_reset, group, test) 
 
-    
+    # test_consumer = AlertConsumer(args.servers, args.topic, args.group_id)
+    # print(f'Successfully created AlertConsumer')
+  
 
