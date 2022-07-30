@@ -46,6 +46,7 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
       "kowalski/dask_cluster.py",\
       "kowalski/alert_broker.py",\
       "kowalski/alert_broker_ztf.py",\
+      "kowalski/alert_broker_winter.py",\
       "kowalski/ops_watcher_ztf.py",\
       "kowalski/tns_watcher.py",\
       "kowalski/alert_broker_pgir.py",\
