@@ -26,19 +26,8 @@ config = load_config(config_file="config.yaml")["kowalski"]
 
 # Misc: not in alert_broker_pgir
 # TODO: remove as not needed
-# specific, copied from kowalski repo
-# https://github.com/dmitryduev/kowalski
-from utils import (
-    deg2dms,
-    deg2hms,
-    radec2lb
-)
-from ast import literal_eval
-from ensurepip import bootstrap
-import io
+
 import logging
-import confluent_kafka
-import fastavro
 
 logger = logging.getLogger(__name__)  
 logger.setLevel(logging.INFO)
@@ -111,7 +100,7 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
 
 class WNTRAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
-        super().__init__(instrument="PGIR", **kwargs)
+        super().__init__(instrument="WNTR", **kwargs)
         
 class WorkerInitializer(dask.distributed.WorkerPlugin):
     def __init__(self, *args, **kwargs):
@@ -136,10 +125,9 @@ def topic_listener(
     :param test: when testing, terminate once reached end of partition
     :return:
     """
-    # TODO change to WNTR
     # Configure dask client
     dask_client = dask.distributed.Client(
-        address=f"{config['dask_pgir']['host']}:{config['dask_pgir']['scheduler_port']}"
+        address=f"{config['dask_wntr']['host']}:{config['dask_wntr']['scheduler_port']}"
     )
 
     # init each worker with AlertWorker instance
@@ -163,7 +151,7 @@ def topic_listener(
 
     # Start alert stream consumer
     # TODO change instrument to WNTR
-    stream_reader = WNTRAlertConsumer(topic, dask_client, instrument="PGIR", **conf)
+    stream_reader = WNTRAlertConsumer(topic, dask_client, instrument="WNTR", **conf)
 
     while True:
         try:
@@ -189,24 +177,107 @@ def topic_listener(
             log(_err)
             sys.exit()
 
+def watchdog(obs_date: str = None, test: bool = False):
+    """
+        Watchdog for topic listeners
+
+    :param obs_date: observing date: YYYYMMDD
+    :param test: test mode
+    :return:
+    """
+
+    init_db_sync(config=config, verbose=True)
+
+    topics_on_watch = dict()
+
+    while True:
+
+        try:
+            # get kafka topic names with kafka-topics command
+            if not test:
+                # Production Kafka stream at IPAC
+                kafka_cmd = [
+                    os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
+                    "--zookeeper",
+                    config["kafka"]["zookeeper"],
+                    "-list",
+                ]
+                print(f"in kafka_cmd")
+            else:
+                # Local test stream
+                kafka_cmd = [
+                    os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
+                    "--zookeeper",
+                    config["kafka"]["zookeeper.test"],
+                    "-list",
+                ]
+
+            topics = (
+                subprocess.run(kafka_cmd, stdout=subprocess.PIPE)
+                .stdout.decode("utf-8")
+                .split("\n")[:-1]
+            )
+            print(f"topics: {topics}")
+
+            if obs_date is None:
+                datestr = datetime.datetime.utcnow().strftime("%Y%m%d")
+            else:
+                datestr = obs_date
+            # as of 20220801, the naming convention is winter_%Y%m%d
+            topics_tonight = [t for t in topics if (datestr in t) and ("winter" in t)]
+            log(f"Topics tonight: {topics_tonight}")
+
+            for t in topics_tonight:
+                if t not in topics_on_watch:
+                    log(f"Starting listener thread for {t}")
+                    offset_reset = config["kafka"]["default.topic.config"][
+                        "auto.offset.reset"
+                    ]
+                    if not test:
+                        bootstrap_servers = config["kafka"]["bootstrap.servers"]
+                    else:
+                        bootstrap_servers = config["kafka"]["bootstrap.test.servers"]
+                    group = config["kafka"]["group"]
+
+                    topics_on_watch[t] = multiprocessing.Process(
+                        target=topic_listener,
+                        args=(t, bootstrap_servers, offset_reset, group, test),
+                    )
+                    topics_on_watch[t].daemon = True
+                    topics_on_watch[t].start()
+
+                else:
+                    log(f"Performing thread health check for {t}")
+                    try:
+                        if not topics_on_watch[t].is_alive():
+                            log(f"Thread {t} died, removing")
+                            # topics_on_watch[t].terminate()
+                            topics_on_watch.pop(t, None)
+                        else:
+                            log(f"Thread {t} appears normal")
+                    except Exception as _e:
+                        log(f"Failed to perform health check: {_e}")
+                        pass
+
+            if test:
+                time.sleep(120)
+                # when testing, wait for topic listeners to pull all the data, then break
+                for t in topics_on_watch:
+                    topics_on_watch[t].kill()
+                break
+
+        except Exception as e:
+            log(str(e))
+            _err = traceback.format_exc()
+            log(str(_err))
+
+        time.sleep(60)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Read broadcasts from a Kafka Producer")
-    parser.add_argument("--topic", help="Topic name to query")
-    parser.add_argument("--group_id", help="prefix of topic, bit redundant")
-    parser.add_argument("--servers", help="comma-seperated string of server IP addresses")
-    
+    parser = argparse.ArgumentParser(description="Kowalski's WNTR Alert Broker")
+    parser.add_argument("--obsdate", help="observing date YYYYMMDD")
+    parser.add_argument("--test", help="listen to the test stream", action="store_true")
 
     args = parser.parse_args()
 
-    print(f'Starting up 2')
-    offset_reset = config["kafka"]["default.topic.config"][
-                        "auto.offset.reset"
-                    ]
-    group = config["kafka"]["group"] # possible source of error?
-    print(group)
-    test = False # test mode 
-    topic_listener(args.topic, args.servers, offset_reset, group, test) 
-
-  
-
+    watchdog(obs_date=args.obsdate, test=args.test)
