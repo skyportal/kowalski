@@ -223,6 +223,59 @@ kowalski:
             - ["candidate.dmag2mass", -1]
           unique: false
 
+      WNTR_alerts:
+        - name: radec_candid
+          fields:
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["candid", -1]
+          unique: false
+        - name: radec_objectId
+          fields:
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["objectId", -1]
+          unique: false
+        - name: jd_radec_candid
+          fields:
+            - ["candidate.jd", 1]
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["candid", -1]
+          unique: false
+        - name: jd_radec_objectId
+          fields:
+            - ["candidate.jd", 1]
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["objectId", -1]
+          unique: false
+        - name: objectId
+          fields:
+            - ["objectId", -1]
+          unique: false
+        - name: candid
+          fields:
+            - ["candid", -1]
+          unique: true
+        - name: jd_drb_candid
+          fields:
+            - ["candidate.jd", -1]
+            - ["candidate.drb", -1]
+            - ["candid", -1]
+          unique: false
+        - name: jd_drb_ndethist_dmag2mass_isstar_distnearbrstar
+          fields:
+            - ["candidate.jd", -1]
+            - ["candidate.drb", -1]
+            - ["candidate.ndethist", 1]
+            - ["candidate.dmag2mass", -1]
+            - ["candidate.isstar", -1]
+            - ["candidate.distnearbrstar", 1]
+          unique: false
+        - name: jd_scorr_dmag2mass
+          fields:
+            - ["candidate.jd", -1]
+            - ["candidate.scorr", -1]
+            - ["candidate.dmag2mass", -1]
+          unique: false
+
     filters:
       ZTF_alerts:
         # default upstream aggregation pipeline stages for filtering ZTF alerts:
@@ -343,6 +396,65 @@ kowalski:
                 "coordinates": 1,
               },
           }
+
+      WNTR_alerts:
+        # TODO verify! copied from PGIR - 1 Aug 2022
+        # default upstream aggregation pipeline stages for filtering WNTR alerts:
+        - {
+            "$match":
+              {
+                "candid": null
+              },
+          }
+        - {
+            "$project":
+              {
+                "cutoutScience": 0,
+                "cutoutTemplate": 0,
+                "cutoutDifference": 0,
+              },
+          }
+        - {
+            "$lookup":
+              {
+                "from": "WNTR_alerts_aux",
+                "localField": "objectId",
+                "foreignField": "_id",
+                "as": "aux",
+              },
+          }
+        - {
+            "$project":
+              {
+                "cross_matches": { "$arrayElemAt": ["$aux.cross_matches", 0] },
+                "prv_candidates":
+                  {
+                    "$filter":
+                      {
+                        "input": { "$arrayElemAt": ["$aux.prv_candidates", 0] },
+                        "as": "item",
+                        "cond":
+                          {
+                            "$lt":
+                              [
+                                {
+                                  "$subtract":
+                                    ["$candidate.jd", "$$item.jd"],
+                                },
+                                1000,
+                              ],
+                          },
+                      },
+                  },
+                "schemavsn": 1,
+                "publisher": 1,
+                "objectId": 1,
+                "candid": 1,
+                "candidate": 1,
+                "classifications": 1,
+                "coordinates": 1,
+              },
+          }    
 
     xmatch:
       ZTF:
@@ -713,9 +825,10 @@ kowalski:
     lifetime_restart: true
 
   dask_wntr:
+    # TODO verify! can't used PGIR's
     host: 127.0.0.1
-    scheduler_port: 8790
-    dashboard_address: :8791
+    scheduler_port: 8788
+    dashboard_address: :8789
     n_workers: 4
     threads_per_worker: 1
     lifetime: 24 hours
