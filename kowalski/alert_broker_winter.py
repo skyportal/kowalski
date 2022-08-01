@@ -84,13 +84,27 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
 
         log(f"{topic} {object_id} {candid} {worker.address}")
 
-        # TODO check: return if this alert packet has already been processed 
+        # return if this alert packet has already been processed 
         # and ingested into collection_alerts:
+        if (
+            alert_worker.mongo.db[alert_worker.collection_alerts].count_documents(
+                {"candid": candid}, limit=1
+            )
+            == 1
+        ):
+            return
 
         # candid not in db, ingest decoded avro packet into db
         with timer(f"Mongification of {object_id} {candid}"):
             print(f'Trying to mongify')
             alert, prv_candidates = alert_worker.alert_mongify(alert)
+
+        # future: add ML model filtering here
+
+        with timer(f"Ingesting {object_id} {candid}", alert_worker.verbose > 1):
+            alert_worker.mongo.insert_one(
+                collection=alert_worker.collection_alerts, document=alert
+            )
 
         # prv_candidates: pop nulls - save space
         prv_candidates = [
@@ -98,9 +112,16 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
             for prv_candidate in prv_candidates
         ]
 
+        # TODO: cross-match with external catalogs if objectId not in collection_alerts_aux:
+        # TODO execute user-defined alert filters
+            # then post to SkyPortal 
+
+
 class WNTRAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
         super().__init__(instrument="WNTR", **kwargs)
+
+    # TODO WNTR subclass specific methods
         
 class WorkerInitializer(dask.distributed.WorkerPlugin):
     def __init__(self, *args, **kwargs):
@@ -125,6 +146,7 @@ def topic_listener(
     :param test: when testing, terminate once reached end of partition
     :return:
     """
+
     # Configure dask client
     dask_client = dask.distributed.Client(
         address=f"{config['dask_wntr']['host']}:{config['dask_wntr']['scheduler_port']}"
@@ -150,7 +172,6 @@ def topic_listener(
     ] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
 
     # Start alert stream consumer
-    # TODO change instrument to WNTR
     stream_reader = WNTRAlertConsumer(topic, dask_client, instrument="WNTR", **conf)
 
     while True:
