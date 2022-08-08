@@ -1,5 +1,6 @@
 from penquins import Kowalski
-
+import datetime
+import requests
 username = "admin"
 password = "admin"
 
@@ -148,9 +149,19 @@ def nearest(catalog, ra, dec, limit = 7):
     data = response.get("data")
     return data
 
+def api(method, endpoint, data=None):
+    """Skyportal API Query"""
+    
+    headers = {'Authorization': f'token {fritz_token}'}
+    response = requests.request(method, endpoint, json=data, headers=headers)
+    return response
+
 if __name__ == "__main__":
     print(f'ping! {kowalski.ping()}')
     print(f'catalog names avail: {retrieve_catalogs()}')
     print(f'wntr_alerts query: {find_cand("WNTR_alerts", "WNTR21aaaaaab")}')
     print(f'cone search query: {cone_search("WNTR_alerts", "null", 160.68674841985782, 34.37037400826267)}')
+    print(f"{datetime.datetime.utcnow().strftime('%Y%m%d')}")
 
+    response = api("GET", "https://fritz.science/api/streams")
+    print(response.json())
