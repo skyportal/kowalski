@@ -68,21 +68,21 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
         :param topic: Kafka stream topic name for bookkeeping
         :return:
         """
-        print(f'In process alert')
+        print(f'w: In process alert')
         candid = alert["candid"]
         object_id = alert["objectId"]
 
         candidate = alert["candidate"]
-        print(f"{topic} {object_id} {candid} in process_alert")
-        print(f"----------------------------------------------")
-        print(f"{candidate}")
-        print(f"----------------------------------------------")
+        print(f"winter: {topic} {object_id} {candid} in process_alert")
+        print(f"winter: ----------------------------------------------")
+        print(f"winter: {candidate}")
+        print(f"winter: ----------------------------------------------")
 
         # get worker running current task
         worker = dask.distributed.get_worker()
         alert_worker = worker.plugins["worker-init"].alert_worker
 
-        log(f"{topic} {object_id} {candid} {worker.address}")
+        log(f"winter: {topic} {object_id} {candid} {worker.address}")
 
         # return if this alert packet has already been processed 
         # and ingested into collection_alerts:
@@ -135,13 +135,14 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
 class WNTRAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
         super().__init__(instrument="WNTR", **kwargs)
-
+        log(f'in WNTR AlertW')
         # TODO WNTR subclass specific methods
         
         # talking to SkyPortal?
         if not config["misc"]["broker"]:
             return
 
+        
         # get WINTER alert stream id on SP
         self.stream_id = None
         with timer("Getting WNTR alert stream id from SkyPortal", self.verbose > 1):
@@ -362,16 +363,17 @@ def topic_listener(
     :param test: when testing, terminate once reached end of partition
     :return:
     """
-
+    log(f'before dask client')
     # Configure dask client
     dask_client = dask.distributed.Client(
         address=f"{config['dask_wntr']['host']}:{config['dask_wntr']['scheduler_port']}"
     )
-
+    log(f'after dask client')
     # init each worker with AlertWorker instance
     worker_initializer = WorkerInitializer()
+    log(f'after WorkerInitializer')
     dask_client.register_worker_plugin(worker_initializer, name="worker-init")
-
+    log(f'after register worker init completed')
     # Configure consumer connection to Kafka broker
     conf = {
         "bootstrap.servers": bootstrap_servers,
@@ -439,7 +441,7 @@ def watchdog(obs_date: str = None, test: bool = False):
                     config["kafka"]["zookeeper"],
                     "-list",
                 ]
-                print(f"in kafka_cmd")
+                print(f"winter: in kafka_cmd")
             else:
                 # Local test stream
                 kafka_cmd = [
@@ -461,7 +463,7 @@ def watchdog(obs_date: str = None, test: bool = False):
                 datestr = obs_date
             # as of 20220801, the naming convention is winter_%Y%m%d
             topics_tonight = [t for t in topics if (datestr in t) and ("winter" in t)]
-            log(f"Topics tonight: {topics_tonight}")
+            log(f"winter: Topics tonight: {topics_tonight}")
 
             for t in topics_tonight:
                 if t not in topics_on_watch:
@@ -469,17 +471,21 @@ def watchdog(obs_date: str = None, test: bool = False):
                     offset_reset = config["kafka"]["default.topic.config"][
                         "auto.offset.reset"
                     ]
+                    log(f'before bootstrap')
                     if not test:
                         bootstrap_servers = config["kafka"]["bootstrap.servers"]
+                        log(f'bootstraped')
                     else:
                         bootstrap_servers = config["kafka"]["bootstrap.test.servers"]
                     group = config["kafka"]["group"]
-
+                    log(f'before processors') 
                     topics_on_watch[t] = multiprocessing.Process(
                         target=topic_listener,
                         args=(t, bootstrap_servers, offset_reset, group, test),
                     )
+                    log(f'topic_listener called')
                     topics_on_watch[t].daemon = True
+                    log(f"set daemon to true {topics_on_watch}")
                     topics_on_watch[t].start()
 
                 else:

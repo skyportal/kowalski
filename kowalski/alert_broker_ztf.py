@@ -1,5 +1,6 @@
 from abc import ABC
 import argparse
+from cgi import print_directory
 from bson.json_util import loads as bson_loads
 from copy import deepcopy
 import dask.distributed
@@ -393,21 +394,31 @@ def topic_listener(
     :param test: when testing, terminate once reached end of partition
     :return:
     """
+    log(f'ztf: before dask')
+    print(f'p ztf: before dask')
 
     # Configure dask client
     dask_client = dask.distributed.Client(
         address=f"{config['dask']['host']}:{config['dask']['scheduler_port']}"
     )
+    log(f'ztf:after dask client')
+    print(f'p ztf:after dask client')
 
+    
     # init each worker with AlertWorker instance
     worker_initializer = WorkerInitializer()
     dask_client.register_worker_plugin(worker_initializer, name="worker-init")
-
+    log(f'ztf: register client')
+    print(f'p ztf: register client')
     # Configure consumer connection to Kafka broker
     conf = {
         "bootstrap.servers": bootstrap_servers,
         "default.topic.config": {"auto.offset.reset": offset_reset},
     }
+    log(f'ztf: botsrap')
+    print(f'p ztf: botsrap')
+
+
     if group is not None:
         conf["group.id"] = group
     else:
@@ -512,11 +523,12 @@ def watchdog(obs_date: str = None, test: bool = False):
                     else:
                         bootstrap_servers = config["kafka"]["bootstrap.test.servers"]
                     group = config["kafka"]["group"]
-
+                    log(f'ztf: before topics')
                     topics_on_watch[t] = multiprocessing.Process(
                         target=topic_listener,
                         args=(t, bootstrap_servers, offset_reset, group, test),
                     )
+                    log(f'ztf: after topics processors')
                     topics_on_watch[t].daemon = True
                     topics_on_watch[t].start()
 
