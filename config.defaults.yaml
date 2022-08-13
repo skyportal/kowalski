@@ -936,6 +936,17 @@ kowalski:
         redirect_stderr: True
         environment: "PRODUCTION=1"
 
+      "program:dask-cluster-winter":
+        command: /usr/local/bin/python dask_cluster_winter.py
+        directory: /app
+        user: root
+        autostart: true
+        autorestart: true
+        stdout_logfile: /data/logs/dask_cluster_winter.log
+        stdout_logfile_maxbytes: 50MB
+        redirect_stderr: True
+        environment: "PRODUCTION=1"
+
       "program:alert-broker-ztf":
         command: /usr/local/bin/python alert_broker_ztf.py
         directory: /app
@@ -954,6 +965,17 @@ kowalski:
         autostart: true
         autorestart: true
         stdout_logfile: /data/logs/alert_broker_pgir.log
+        stdout_logfile_maxbytes: 30MB
+        redirect_stderr: True
+        environment: "PRODUCTION=1"
+      
+      "program:alert-broker-winter":
+        command: /usr/local/bin/python alert_broker_winter.py
+        directory: /app
+        user: root
+        autostart: true
+        autorestart: true
+        stdout_logfile: /data/logs/alert_broker_winter.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: "PRODUCTION=1"
