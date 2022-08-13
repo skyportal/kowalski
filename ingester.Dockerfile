@@ -51,12 +51,15 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
       "kowalski/tns_watcher.py",\
       "kowalski/alert_broker_pgir.py",\
       "kowalski/dask_cluster_pgir.py",\
+      "kowalski/dask_cluster_winter.py",\
       "kowalski/performance_reporter.py",\
       "kowalski/requirements_ingester.txt",\
+      "kowalski/check_db_entries.py",\
       "tests/test_alert_broker_ztf.py",\
       "tests/test_alert_broker_pgir.py",\
       "tests/test_ingester.py",\
       "tests/test_ingester_pgir.py",\
+      "tests/test_ingester_wntr.py",\
       "tests/test_tns_watcher.py",\
       "tests/test_tools.py",\
       "tools/fetch_ztf_matchfiles.py",\
@@ -78,4 +81,4 @@ RUN pip install -r /app/requirements_ingester.txt --no-cache-dir && \
     python generate_supervisord_conf.py ingester
 
 # run container
-CMD /usr/local/bin/supervisord -n -c supervisord_ingester.conf
+ CMD /usr/local/bin/supervisord -n -c supervisord_ingester.conf
