@@ -36,6 +36,7 @@ ADD https://github.com/dmitryduev/acai/raw/master/models/acai_b.$acai_b_version.
 # copy over the test data
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
 COPY data/pgir_alerts/ /app/data/pgir_alerts/
+COPY data/wntr_alerts/ /app/data/wntr_alerts/
 COPY data/catalogs/ /app/data/catalogs/
 COPY data/ztf_matchfiles/ /app/data/ztf_matchfiles/
 COPY data/ztf_source_features/ /app/data/ztf_source_features/

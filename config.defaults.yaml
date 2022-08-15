@@ -827,8 +827,8 @@ kowalski:
   dask_wntr:
     # TODO verify! can't used PGIR's
     host: 127.0.0.1
-    scheduler_port: 8788
-    dashboard_address: :8789
+    scheduler_port: 8784
+    dashboard_address: :8785
     n_workers: 4
     threads_per_worker: 1
     lifetime: 24 hours
