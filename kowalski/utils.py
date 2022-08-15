@@ -62,7 +62,7 @@ import traceback
 from typing import Optional, Sequence
 import yaml
 
-LOG_DIR = os.getenv('KOWALSKI_LOG_DIR', '/app/logs')
+LOG_DIR = os.getenv('KOWALSKI_LOG_DIR', './logs')
 
 pi = 3.141592653589793
 
