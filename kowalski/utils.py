@@ -108,7 +108,7 @@ def time_stamp():
 
 def log(message):
     timestamp = time_stamp()
-    print(f"{time}: {message}")
+    print(f"{timestamp}: {message}")
 
     if not os.path.isdir(LOG_DIR):
         os.mkdir(LOG_DIR)
