@@ -292,7 +292,6 @@ class WNTRAlertWorker(AlertWorker, ABC):
             self.filter_templates = self.make_filter_templates(active_filters)
 
     def alert_put_photometry(self, alert):
-        # TODO update for WINTER
         """PUT photometry to SkyPortal
 
         :param alert:
@@ -302,8 +301,6 @@ class WNTRAlertWorker(AlertWorker, ABC):
             f"Making alert photometry of {alert['objectId']} {alert['candid']}",
             self.verbose > 1,
         ):
-            # TODO remove once "diffmaglim" updated
-            alert["diffmaglim"] = 0 
             df_photometry = self.make_photometry(alert)
 
         # post photometry
