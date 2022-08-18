@@ -44,8 +44,8 @@ class TestAlertBrokerWNTR:
 
     def test_make_photometry(self):
         df_photometry = self.worker.make_photometry(self.alert)
-        log(f'WNTR: df_photometry len: {len(df_photometry)}')
-        # TODO is this correct?? WHY
+        assert df_photometry["isdiffpos"][0] == 1.0
+        assert df_photometry["diffmaglim"][0] == 19.74010467529297
         assert len(df_photometry) == 1
 
     def test_make_thumbnails(self):
