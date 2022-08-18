@@ -328,9 +328,17 @@ class ZTFAlertWorker(AlertWorker, ABC):
         ):
             df_photometry = self.make_photometry(alert)
 
+            log(
+                f"Alert {alert['objectId']} contains program_ids={df_photometry['programid']}"
+            )
+
             df_photometry["stream_id"] = df_photometry["programid"].apply(
                 lambda programid: self.ztf_program_id_to_stream_id[programid]
             )
+
+        log(
+            f"Posting {alert['objectId']} photometry for stream_ids={set(df_photometry.stream_id.unique())} to SkyPortal"
+        )
 
         # post photometry by stream_id
         for stream_id in set(df_photometry.stream_id.unique()):
