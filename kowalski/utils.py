@@ -62,6 +62,7 @@ import traceback
 from typing import Optional, Sequence
 import yaml
 
+LOG_DIR = os.getenv("KOWALSKI_LOG_DIR", "./logs")
 
 pi = 3.141592653589793
 
@@ -106,7 +107,16 @@ def time_stamp():
 
 
 def log(message):
-    print(f"{time_stamp()}: {message}")
+    timestamp = time_stamp()
+    print(f"{timestamp}: {message}")
+
+    if not os.path.isdir(LOG_DIR):
+        os.mkdir(LOG_DIR)
+
+    date = timestamp.split("_")[0]
+    with open(os.path.join(LOG_DIR, f"kowalski_{date}.log"), "a") as logfile:
+        logfile.write(f"{timestamp}: {message}\n")
+        logfile.flush()
 
 
 def forgiving_true(expression):

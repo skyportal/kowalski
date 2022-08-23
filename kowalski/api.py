@@ -679,6 +679,7 @@ QUERY_TYPES = (
     "aggregate",
     "info",
     "near",
+    "drop",
 )
 INFO_COMMANDS = (
     "catalog_names",
@@ -1153,6 +1154,13 @@ class QueryHandler(Handler):
                       "filter": {"objectId": "ZTF20aakyoez"}
                     }
 
+                drop:
+                  value:
+                    "query_type": "drop"
+                    "query": {
+                      "catalog": "ZTF_alerts",
+                    }
+
                 estimated_document_count:
                   value:
                     "query_type": "estimated_document_count"
@@ -1265,6 +1273,12 @@ class QueryHandler(Handler):
                       "message": "Successfully executed query"
                       "data": 1
 
+                  drop:
+                    value:
+                      "status": "success"
+                      "message": "Successfully dropped collection"
+                      "data": 1
+
                   estimated_document_count:
                     value:
                       "status": "success"
@@ -1331,6 +1345,12 @@ class QueryHandler(Handler):
 
         # execute query, depending on query.query_type
         data = dict()
+
+        if query.query_type == "drop":
+            catalog = query.query["catalog"]
+            cursor = request.app["mongo"][catalog].drop()
+            data = await cursor
+            return self.success(message="Successfully dropped collection", data=data)
 
         if query.query_type in ("cone_search", "near"):
             # iterate over catalogs
