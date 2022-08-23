@@ -202,7 +202,7 @@ class TestIngester:
 
         # create a test WNTR topic for the current UTC date
         date = datetime.datetime.utcnow().strftime("%Y%m%d")
-        topic_name = f"wntr_{date}_test"
+        topic_name = f"winter_{date}_test"
 
         if topic_name in topics:
             log(f'Topic previously created, removing...')
@@ -294,8 +294,8 @@ class TestIngester:
             # REMOVE THIS
             print("WNTR: Testing n_alerts and n_alerts_aux", n_alerts, n_alerts_aux)
             try:
-                assert n_alerts == 4
-                assert n_alerts_aux == 0
+                assert n_alerts == 5
+                assert n_alerts_aux == 4
                 break
             except AssertionError:
                 print(
@@ -406,6 +406,3 @@ class TestIngester:
 if __name__ == "__main__":
     testIngest = TestIngester()
     testIngest.test_ingester()
-
-    # testFilter = Filter()
-    # print(f'finished tests in __main__')

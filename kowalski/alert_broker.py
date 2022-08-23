@@ -231,13 +231,9 @@ class AlertConsumer:
             try:
                 # decode avro packet
                 with timer("Decoding alert", self.verbose > 1):
-                    print(f'Trying to decode avro')
                     msg_decoded = self.decode_message(msg)
-                    print(f'Avro packet decoded')
 
                 for record in msg_decoded:
-                    # submit only unprocessed alerts:
-                    # TODO
                     if (
                         self.mongo.db[self.collection_alerts].count_documents(
                             {"candid": record["candid"]}, limit=1
@@ -285,7 +281,6 @@ class AlertWorker:
             ) as version_file:
                 version = version_file.read().strip()
 
-        print(f'trying to make wntr MongoDB collection')
         # MongoDB collections to store the alerts:
         self.collection_alerts = self.config["database"]["collections"][
             f"alerts_{self.instrument.lower()}"

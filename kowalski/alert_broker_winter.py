@@ -113,6 +113,33 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
         ]
 
         # TODO: cross-match with external catalogs if objectId not in collection_alerts_aux:
+        if (
+            alert_worker.mongo.db[alert_worker.collection_alerts_aux].count_documents(
+                {"_id": object_id}, limit=1
+            )
+            == 0
+        ):
+            alert_aux = {
+                    "_id": object_id,
+                    # "cross_matches": xmatches,
+                    "prv_candidates": prv_candidates,
+                }
+
+            with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
+                alert_worker.mongo.insert_one(
+                    collection=alert_worker.collection_alerts_aux, document=alert_aux
+                )
+
+        else:
+            with timer(
+                f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1
+            ):
+                alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
+                    {"_id": object_id},
+                    {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
+                    upsert=True,
+                )
+
         # TODO execute user-defined alert filters
         if config["misc"]["broker"]:
             # execute user-defined alert filters
