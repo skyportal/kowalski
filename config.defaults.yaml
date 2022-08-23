@@ -763,6 +763,151 @@ kowalski:
             yMeanPSFMag: 1
             yMeanPSFMagErr: 1
 
+      WNTR:
+        2MASS_PSC:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            j_m: 1
+            h_m: 1
+            k_m: 1
+
+        AllWISE:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            w1mpro: 1
+            w1sigmpro: 1
+            w2mpro: 1
+            w2sigmpro: 1
+            w3mpro: 1
+            w3sigmpro: 1
+            w4mpro: 1
+            w4sigmpro: 1
+            ph_qual: 1
+
+        Gaia_DR2:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            parallax: 1
+            parallax_error: 1
+            phot_g_mean_mag: 1
+            phot_bp_mean_mag: 1
+            phot_rp_mean_mag: 1
+
+        Gaia_EDR3:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            parallax: 1
+            parallax_error: 1
+            phot_g_mean_mag: 1
+            phot_bp_mean_mag: 1
+            phot_rp_mean_mag: 1
+
+        PS1_STRM:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
+          filter: {}
+          projection:
+            _id: 1
+            objID: 1
+            coordinates.radec_str: 1
+            class: 1
+            prob_Galaxy: 1
+            prob_Star: 1
+            prob_QSO: 1
+            z_phot: 1
+            z_phot_err: 1
+
+        galaxy_redshifts_20200522:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            z: 1
+            l: 1
+            b: 1
+
+        GALEX:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
+          filter: {}
+          projection:
+            _id: 0
+            name: 1
+            coordinates.radec_str: 1
+            FUVmag: 1
+            e_FUVmag: 1
+            NUVmag: 1
+            e_NUVmag: 1
+
+        IGAPS_DR2:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
+          filter: {}
+          projection:
+            _id: 0
+            name: 1
+            coordinates.radec_str: 1
+            r: 1
+            rErr: 1
+            i: 1
+            iErr: 1
+            ha: 1
+            haErr: 1
+            U_RGO: 1
+            UErr: 1
+
+        LAMOST_DR5_v3:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            mjd: 1
+            snru: 1
+            snrg: 1
+            snrr: 1
+            snri: 1
+            snrz: 1
+            objtype: 1
+            class: 1
+            subclass: 1
+
+        PS1_DR1:
+          cone_search_radius: 8
+          cone_search_unit: "arcsec"
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            gMeanPSFMag: 1
+            gMeanPSFMagErr: 1
+            rMeanPSFMag: 1
+            rMeanPSFMagErr: 1
+            iMeanPSFMag: 1
+            iMeanPSFMagErr: 1
+            zMeanPSFMag: 1
+            zMeanPSFMagErr: 1
+            yMeanPSFMag: 1
+            yMeanPSFMagErr: 1
 
   ml_models:
     ZTF:

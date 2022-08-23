@@ -29,10 +29,17 @@ if __name__ == '__main__':
     if args.count:
         for srv in surveys:
             collection_alerts = config["database"]["collections"][f"alerts_{srv}"]
+            collection_alerts_aux = config["database"]["collections"][f"alerts_{srv}_aux"]
+            
             n_alerts = mongo.db[collection_alerts].count_documents({})
-            print(srv, n_alerts)
+            n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
+
+            print(srv, n_alerts, n_alerts_aux)
 
     if args.clear:
         for srv in surveys:
             collection_alerts = config["database"]["collections"][f"alerts_{srv}"]
+            collection_alerts_aux = config["database"]["collections"][f"alerts_{srv}_aux"]
+
             mongo.db[collection_alerts].remove({})
+            mongo.db[collection_alerts_aux].remove({})

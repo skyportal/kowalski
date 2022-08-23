@@ -300,7 +300,7 @@ class TestIngester:
             except AssertionError:
                 print(
                     "Found an unexpected amount of alert/aux data: "
-                    f"({n_alerts}/{n_alerts_aux}, expecting 4/0). "
+                    f"({n_alerts}/{n_alerts_aux}, expecting 5/4). "
                     "Retrying in 30 seconds..."
                 )
                 time.sleep(30)
@@ -362,47 +362,6 @@ class TestIngester:
         collection_alerts_aux = config["database"]["collections"]["alerts_wntr_aux"]
 
         return mongo, collection_alerts, collection_alerts_aux
-
-
-    def read_mongoDB(self):
-        """Query mongoDB for number of rows/alerts in table."""
-        print("Reading MongoDB collection states")
-        mongo = Mongo(
-            host=config["database"]["host"],
-            port=config["database"]["port"],
-            replica_set=config["database"]["replica_set"],
-            username=config["database"]["username"],
-            password=config["database"]["password"],
-            db=config["database"]["db"],
-            verbose=True,
-        )
-        collection_alerts_wntr = config["database"]["collections"]["alerts_wntr"]
-        collection_alerts_aux_wntr = config["database"]["collections"]["alerts_wntr_aux"]
-
-        n_alerts_wntr = mongo.db[collection_alerts_wntr].count_documents({})
-        n_alerts_aux_wntr = mongo.db[collection_alerts_aux_wntr].count_documents({})
-
-        collection_alerts_pgir = config["database"]["collections"]["alerts_pgir"]
-        collection_alerts_aux_pgir = config["database"]["collections"]["alerts_pgir_aux"]
-
-        n_alerts_pgir = mongo.db[collection_alerts_pgir].count_documents({})
-        n_alerts_aux_pgir = mongo.db[collection_alerts_aux_pgir].count_documents({})
-
-        # REMOVE THIS
-        print(f"WINTER: {n_alerts_wntr} alerts, {n_alerts_aux_wntr} alerts_aux")
-        print(f"PGIR: {n_alerts_pgir} alerts, {n_alerts_aux_pgir} alerts_aux")
-
-        # TODO check
-        try: 
-            assert n_alerts_wntr == 4
-            assert n_alerts_aux_wntr == 0
-        except AssertionError:
-                print(
-                    "Found an unexpected amount of alert/aux data: "
-                    f"({n_alerts_wntr}/{n_alerts_aux_wntr}, expecting 4/0). "
-                )
-
-
 if __name__ == "__main__":
     testIngest = TestIngester()
     testIngest.test_ingester()
