@@ -36,6 +36,7 @@ ADD https://github.com/dmitryduev/acai/raw/master/models/acai_b.$acai_b_version.
 # copy over the test data
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
 COPY data/pgir_alerts/ /app/data/pgir_alerts/
+COPY data/wntr_alerts/ /app/data/wntr_alerts/
 COPY data/catalogs/ /app/data/catalogs/
 COPY data/ztf_matchfiles/ /app/data/ztf_matchfiles/
 COPY data/ztf_source_features/ /app/data/ztf_source_features/
@@ -46,16 +47,21 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
       "kowalski/dask_cluster.py",\
       "kowalski/alert_broker.py",\
       "kowalski/alert_broker_ztf.py",\
+      "kowalski/alert_broker_winter.py",\
       "kowalski/ops_watcher_ztf.py",\
       "kowalski/tns_watcher.py",\
       "kowalski/alert_broker_pgir.py",\
       "kowalski/dask_cluster_pgir.py",\
+      "kowalski/dask_cluster_winter.py",\
       "kowalski/performance_reporter.py",\
       "kowalski/requirements_ingester.txt",\
+      "kowalski/check_db_entries.py",\
       "tests/test_alert_broker_ztf.py",\
       "tests/test_alert_broker_pgir.py",\
+      "tests/test_alert_broker_wntr.py",\
       "tests/test_ingester.py",\
       "tests/test_ingester_pgir.py",\
+      "tests/test_ingester_wntr.py",\
       "tests/test_tns_watcher.py",\
       "tests/test_tools.py",\
       "tools/fetch_ztf_matchfiles.py",\
@@ -77,4 +83,4 @@ RUN pip install -r /app/requirements_ingester.txt --no-cache-dir && \
     python generate_supervisord_conf.py ingester
 
 # run container
-CMD /usr/local/bin/supervisord -n -c supervisord_ingester.conf
+ CMD /usr/local/bin/supervisord -n -c supervisord_ingester.conf

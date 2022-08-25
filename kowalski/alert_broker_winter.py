@@ -1,6 +1,5 @@
 from abc import ABC
 import argparse
-from cgi import print_directory
 from bson.json_util import loads as bson_loads
 from copy import deepcopy
 import dask.distributed
@@ -17,42 +16,76 @@ from typing import Mapping, Sequence
 from alert_broker import (
     AlertConsumer,
     AlertWorker,
-    EopError,
+    EopError
 )
 from utils import init_db_sync, load_config, log, timer
 
 
 """ load config and secrets """
-KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
-config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+config = load_config(config_file="config.yaml")["kowalski"]
+
+# Misc: not in alert_broker_pgir
+# TODO: remove as not needed
+
+import logging
+
+logger = logging.getLogger(__name__)  
+logger.setLevel(logging.INFO)
 
 
-class ZTFAlertConsumer(AlertConsumer, ABC):
+class WNTRAlertConsumer(AlertConsumer, ABC):
     """
-    Creates an alert stream Kafka consumer for a given topic.
-    """
+    Creates an alert stream Kafka consumer for a given topic,
+    reads incoming packets, and ingests stream into database
+    based on applied filters. 
 
-    def __init__(self, topic: str, dask_client: dask.distributed.Client, **kwargs):
+    """
+   
+    def __init__(self, topic:str, dask_client: dask.distributed.Client, **kwargs):
+        """
+        Initializes Kafka consumer.
+
+        :param bootstrap_server_str: IP addresses of brokers to subscribe to, comma-separated
+        e.g. 192.168.0.64:9092,192.168.0.65:9092,192.168.0.66:9092
+        :type bootstrap_server_str: str
+        :param topic: name of topic to poll from, e.g. winter_20220728
+        :type topic: str
+        :param group_id: id, typically prefix of topic name, e.g. winter
+        :type group_id: str
+        :param verbose: _description_, defaults to 2
+        :type verbose: int, optional
+        """
         super().__init__(topic, dask_client, **kwargs)
 
     @staticmethod
     def process_alert(alert: Mapping, topic: str):
-        """Alert brokering task run by dask.distributed workers
+        """
+        Main function that runs on a single alert.
+            -Read top-level packet field
+            -Separate alert and prv_candidate in MongoDB prep
 
         :param alert: decoded alert from Kafka stream
         :param topic: Kafka stream topic name for bookkeeping
         :return:
         """
+        print(f'w: In process alert')
         candid = alert["candid"]
         object_id = alert["objectId"]
+
+        candidate = alert["candidate"]
+        print(f"winter: {topic} {object_id} {candid} in process_alert")
+        print(f"winter: ----------------------------------------------")
+        print(f"winter: {candidate}")
+        print(f"winter: ----------------------------------------------")
 
         # get worker running current task
         worker = dask.distributed.get_worker()
         alert_worker = worker.plugins["worker-init"].alert_worker
 
-        log(f"{topic} {object_id} {candid} {worker.address}")
+        log(f"winter: {topic} {object_id} {candid} {worker.address}")
 
-        # return if this alert packet has already been processed and ingested into collection_alerts:
+        # return if this alert packet has already been processed 
+        # and ingested into collection_alerts:
         if (
             alert_worker.mongo.db[alert_worker.collection_alerts].count_documents(
                 {"candid": candid}, limit=1
@@ -62,13 +95,11 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             return
 
         # candid not in db, ingest decoded avro packet into db
-        with timer(f"Mongification of {object_id} {candid}", alert_worker.verbose > 1):
+        with timer(f"Mongification of {object_id} {candid}"):
+            print(f'Trying to mongify')
             alert, prv_candidates = alert_worker.alert_mongify(alert)
 
-        # ML models:
-        with timer(f"MLing of {object_id} {candid}", alert_worker.verbose > 1):
-            scores = alert_worker.alert_filter__ml(alert)
-            alert["classifications"] = scores
+        # future: add ML model filtering here
 
         with timer(f"Ingesting {object_id} {candid}", alert_worker.verbose > 1):
             alert_worker.mongo.insert_one(
@@ -101,11 +132,20 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                     **alert_worker.alert_filter__xmatch_clu(alert),
                 }
 
+            # Crossmatch new alert with most recent ZTF_alerts and insert
+            with timer(
+                f"ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+            ):
+                xmatches = {
+                    **xmatches,
+                    **alert_worker.alert_filter__xmatch_ztf_alerts(alert),
+                }
+
             alert_aux = {
-                "_id": object_id,
-                "cross_matches": xmatches,
-                "prv_candidates": prv_candidates,
-            }
+                    "_id": object_id,
+                    "cross_matches": xmatches,
+                    "prv_candidates": prv_candidates,
+                }
 
             with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
                 alert_worker.mongo.insert_one(
@@ -119,6 +159,21 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
                     {"_id": object_id},
                     {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
+                    upsert=True,
+                )
+            
+            # Crossmatch exisiting alert with most recent record in ZTF_alerts and update aux
+            with timer(
+                f"Exists in aux: ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+            ):
+                xmatches_ztf = alert_worker.alert_filter__xmatch_ztf_alerts(alert)
+
+            with timer(
+                f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1
+            ):
+                alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
+                    {"_id": object_id},
+                    {"$set": {"ZTF_alerts": xmatches_ztf}},
                     upsert=True,
                 )
 
@@ -140,39 +195,28 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
         del alert, prv_candidates
 
 
-class ZTFAlertWorker(AlertWorker, ABC):
+class WNTRAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
-        super().__init__(instrument="ZTF", **kwargs)
-
+        super().__init__(instrument="WNTR", **kwargs)
+        log(f'in WNTR AlertW')
+        # TODO WNTR subclass specific methods
+        
         # talking to SkyPortal?
         if not config["misc"]["broker"]:
             return
 
-        # get ZTF alert stream ids to program ids mapping
-        self.ztf_program_id_to_stream_id = dict()
-        with timer("Getting ZTF alert stream ids from SkyPortal", self.verbose > 1):
+        
+        # get WINTER alert stream id on SP
+        self.stream_id = None
+        with timer("Getting WNTR alert stream id from SkyPortal", self.verbose > 1):
             response = self.api_skyportal("GET", "/api/streams")
         if response.json()["status"] == "success" and len(response.json()["data"]) > 0:
             for stream in response.json()["data"]:
-                if stream.get("name") == "ZTF Public":
-                    self.ztf_program_id_to_stream_id[1] = stream["id"]
-                if stream.get("name") == "ZTF Public+Partnership":
-                    self.ztf_program_id_to_stream_id[2] = stream["id"]
-                if stream.get("name") == "ZTF Public+Partnership+Caltech":
-                    # programid=0 is engineering data
-                    self.ztf_program_id_to_stream_id[0] = stream["id"]
-                    self.ztf_program_id_to_stream_id[3] = stream["id"]
-            if len(self.ztf_program_id_to_stream_id) != 4:
-                log("Failed to map ZTF alert stream ids from SkyPortal to program ids")
-                raise ValueError(
-                    "Failed to map ZTF alert stream ids from SkyPortal to program ids"
-                )
-            log(
-                f"Got ZTF program id to SP stream id mapping: {self.ztf_program_id_to_stream_id}"
-            )
-        else:
-            log("Failed to get ZTF alert stream ids from SkyPortal")
-            raise ValueError("Failed to get ZTF alert stream ids from SkyPortal")
+                if "WNTR" in stream.get("name"):
+                    self.stream_id = stream["id"]
+        if self.stream_id is None:
+            log("Failed to get WNTR alert stream ids from SkyPortal")
+            raise ValueError("Failed to get WNTR alert stream ids from SkyPortal")
 
         # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
         # including archival photometry and cross-matches:
@@ -195,9 +239,8 @@ class ZTFAlertWorker(AlertWorker, ABC):
         log(self.filter_templates)
 
     def get_active_filters(self):
+        # TODO copied from PGIR
         """Fetch user-defined filters from own db marked as active."""
-        # todo: query SP to make sure the filters still exist there and we're not out of sync;
-        #       clean up if necessary
         return list(
             self.mongo.db[config["database"]["collections"]["filters"]].aggregate(
                 [
@@ -233,8 +276,9 @@ class ZTFAlertWorker(AlertWorker, ABC):
                 ]
             )
         )
-
+    
     def make_filter_templates(self, active_filters: Sequence):
+        # TODO update to fit WINTER
         """
         Make filter templates by adding metadata, prepending upstream aggregation stages and setting permissions
 
@@ -275,13 +319,6 @@ class ZTFAlertWorker(AlertWorker, ABC):
                 pipeline = deepcopy(self.filter_pipeline_upstream) + bson_loads(
                     active_filter["fv"]["pipeline"]
                 )
-                # set permissions
-                pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter[
-                    "permissions"
-                ]
-                pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0][
-                    "$in"
-                ][1] = active_filter["permissions"]
 
                 filter_template = {
                     "group_id": active_filter["group_id"],
@@ -317,6 +354,76 @@ class ZTFAlertWorker(AlertWorker, ABC):
             active_filters = self.get_active_filters()
             self.filter_templates = self.make_filter_templates(active_filters)
 
+    def alert_filter__xmatch_ztf_alerts(
+        self, alert: Mapping, ztf_stream: str = "ZTF_alerts"
+    ) -> dict:
+        """
+        Run cross-match with ZTF alerts
+        Only searches for the most recent entry to keep it efficient
+
+        :param alert:
+        :param ztf_stream: Name of ZTF alert stream catalog
+        :return:
+        """
+
+        xmatches = dict()
+
+        # cone search radius in arcsec:
+        cone_search_radius_ztf = 8.0
+        # convert arcsec to rad:
+        PI = 3.141592653589793
+        cone_search_radius_ztf *= PI / (180.0 * 3600)
+
+        try:
+            ra = float(alert["candidate"]["ra"])
+            dec = float(alert["candidate"]["dec"])
+
+            # geojson-friendly ra:
+            ra_geojson = ra - 180.0
+            dec_geojson = dec
+
+            # restrict to public data only
+            catalog_filter = {"candidate.programid": 1}
+            catalog_sort = [("candidate.jd", -1)]
+            catalog_projection = {
+                "objectId": 1,
+                "candid": 1,
+                "candidate.jd": 1,
+                "candidate.magpsf": 1,
+                "candidate.sigmapsf": 1,
+                "candidate.fid": 1,
+                "candidate.drb": 1,
+                "coordinates.radec_str": 1,
+            }
+
+            # do search of everything that is within the cross-match radius
+            object_position_query = dict()
+            object_position_query["coordinates.radec_geojson"] = {
+                "$geoWithin": {
+                    "$centerSphere": [
+                        [ra_geojson, dec_geojson],
+                        cone_search_radius_ztf,
+                    ]
+                }
+            }
+            # Just find the most recent alert within the crossmatch radius, if any
+            latest_alert = list(
+                self.mongo.db[ztf_stream].find(
+                    {**object_position_query, **catalog_filter},
+                    projection={**catalog_projection},
+                    sort=catalog_sort,
+                    limit=1,
+                )
+            )
+
+            # Check if any result was found (latest_alert is not null)
+            xmatches[ztf_stream] = latest_alert if latest_alert else []
+
+        except Exception as e:
+            log(str(e))
+
+        return xmatches
+        
     def alert_put_photometry(self, alert):
         """PUT photometry to SkyPortal
 
@@ -329,62 +436,46 @@ class ZTFAlertWorker(AlertWorker, ABC):
         ):
             df_photometry = self.make_photometry(alert)
 
-            log(
-                f"Alert {alert['objectId']} contains program_ids={df_photometry['programid']}"
-            )
+        # post photometry
+        photometry = {
+            "obj_id": alert["objectId"],
+            "stream_ids": [int(self.pgir_stream_id)],
+            "instrument_id": self.instrument_id,
+            "mjd": df_photometry["mjd"].tolist(),
+            "flux": df_photometry["flux"].tolist(),
+            "fluxerr": df_photometry["fluxerr"].tolist(),
+            "zp": df_photometry["zp"].tolist(),
+            "magsys": df_photometry["zpsys"].tolist(),
+            "filter": df_photometry["filter"].tolist(),
+            "ra": df_photometry["ra"].tolist(),
+            "dec": df_photometry["dec"].tolist(),
+        }
 
-            df_photometry["stream_id"] = df_photometry["programid"].apply(
-                lambda programid: self.ztf_program_id_to_stream_id[programid]
-            )
-
-        log(
-            f"Posting {alert['objectId']} photometry for stream_ids={set(df_photometry.stream_id.unique())} to SkyPortal"
-        )
-
-        # post photometry by stream_id
-        for stream_id in set(df_photometry.stream_id.unique()):
-            stream_id_mask = df_photometry.stream_id == int(stream_id)
-            photometry = {
-                "obj_id": alert["objectId"],
-                "stream_ids": [int(stream_id)],
-                "instrument_id": self.instrument_id,
-                "mjd": df_photometry.loc[stream_id_mask, "mjd"].tolist(),
-                "flux": df_photometry.loc[stream_id_mask, "flux"].tolist(),
-                "fluxerr": df_photometry.loc[stream_id_mask, "fluxerr"].tolist(),
-                "zp": df_photometry.loc[stream_id_mask, "zp"].tolist(),
-                "magsys": df_photometry.loc[stream_id_mask, "zpsys"].tolist(),
-                "filter": df_photometry.loc[stream_id_mask, "filter"].tolist(),
-                "ra": df_photometry.loc[stream_id_mask, "ra"].tolist(),
-                "dec": df_photometry.loc[stream_id_mask, "dec"].tolist(),
-            }
-
-            if (len(photometry.get("flux", ())) > 0) or (
-                len(photometry.get("fluxerr", ())) > 0
+        if (len(photometry.get("flux", ())) > 0) or (
+            len(photometry.get("fluxerr", ())) > 0
+        ):
+            with timer(
+                f"Posting photometry of {alert['objectId']} {alert['candid']}, "
+                f"stream_id={self.pgir_stream_id} to SkyPortal",
+                self.verbose > 1,
             ):
-                with timer(
-                    f"Posting photometry of {alert['objectId']} {alert['candid']}, "
-                    f"stream_id={stream_id} to SkyPortal",
-                    self.verbose > 1,
-                ):
-                    response = self.api_skyportal("PUT", "/api/photometry", photometry)
-                if response.json()["status"] == "success":
-                    log(
-                        f"Posted {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
-                    )
-                else:
-                    log(
-                        f"Failed to post {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
-                    )
-                log(response.json())
-
+                response = self.api_skyportal("PUT", "/api/photometry", photometry)
+            if response.json()["status"] == "success":
+                log(
+                    f"Posted {alert['objectId']} photometry stream_id={self.pgir_stream_id} to SkyPortal"
+                )
+            else:
+                log(
+                    f"Failed to post {alert['objectId']} photometry stream_id={self.pgir_stream_id} to SkyPortal"
+                )
+            log(response.json())
 
 class WorkerInitializer(dask.distributed.WorkerPlugin):
     def __init__(self, *args, **kwargs):
         self.alert_worker = None
 
     def setup(self, worker: dask.distributed.Worker):
-        self.alert_worker = ZTFAlertWorker()
-
+        self.alert_worker = WNTRAlertWorker()
 
 def topic_listener(
     topic,
@@ -394,7 +485,7 @@ def topic_listener(
     test: bool = False,
 ):
     """
-        Listen to a Kafka topic with ZTF alerts
+        Listen to a Kafka topic with WNTR alerts
     :param topic:
     :param bootstrap_servers:
     :param offset_reset:
@@ -402,31 +493,22 @@ def topic_listener(
     :param test: when testing, terminate once reached end of partition
     :return:
     """
-    log(f'ztf: before dask')
-    print(f'p ztf: before dask')
-
+    log(f'before dask client')
     # Configure dask client
     dask_client = dask.distributed.Client(
-        address=f"{config['dask']['host']}:{config['dask']['scheduler_port']}"
+        address=f"{config['dask_wntr']['host']}:{config['dask_wntr']['scheduler_port']}"
     )
-    log(f'ztf:after dask client')
-    print(f'p ztf:after dask client')
-
-    
+    log(f'after dask client')
     # init each worker with AlertWorker instance
     worker_initializer = WorkerInitializer()
+    log(f'after WorkerInitializer')
     dask_client.register_worker_plugin(worker_initializer, name="worker-init")
-    log(f'ztf: register client')
-    print(f'p ztf: register client')
+    log(f'after register worker init completed')
     # Configure consumer connection to Kafka broker
     conf = {
         "bootstrap.servers": bootstrap_servers,
         "default.topic.config": {"auto.offset.reset": offset_reset},
     }
-    log(f'ztf: botsrap')
-    print(f'p ztf: botsrap')
-
-
     if group is not None:
         conf["group.id"] = group
     else:
@@ -438,7 +520,7 @@ def topic_listener(
     ] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
 
     # Start alert stream consumer
-    stream_reader = ZTFAlertConsumer(topic, dask_client, instrument="ZTF", **conf)
+    stream_reader = WNTRAlertConsumer(topic, dask_client, instrument="WNTR", **conf)
 
     while True:
         try:
@@ -463,7 +545,6 @@ def topic_listener(
             _err = traceback.format_exc()
             log(_err)
             sys.exit()
-
 
 def watchdog(obs_date: str = None, test: bool = False):
     """
@@ -490,6 +571,7 @@ def watchdog(obs_date: str = None, test: bool = False):
                     config["kafka"]["zookeeper"],
                     "-list",
                 ]
+                print(f"winter: in kafka_cmd")
             else:
                 # Local test stream
                 kafka_cmd = [
@@ -509,16 +591,9 @@ def watchdog(obs_date: str = None, test: bool = False):
                 datestr = datetime.datetime.utcnow().strftime("%Y%m%d")
             else:
                 datestr = obs_date
-            # as of 20180403, the naming convention is ztf_%Y%m%d_programidN
-            topics_tonight = [
-                t
-                for t in topics
-                if (datestr in t)
-                and ("programid" in t)
-                and ("zuds" not in t)
-                and ("pgir" not in t)
-            ]
-            log(f"Topics: {topics_tonight}")
+            # as of 20220801, the naming convention is winter_%Y%m%d
+            topics_tonight = [t for t in topics if (datestr in t) and ("winter" in t)]
+            log(f"winter: Topics tonight: {topics_tonight}")
 
             for t in topics_tonight:
                 if t not in topics_on_watch:
@@ -526,18 +601,21 @@ def watchdog(obs_date: str = None, test: bool = False):
                     offset_reset = config["kafka"]["default.topic.config"][
                         "auto.offset.reset"
                     ]
+                    log(f'before bootstrap')
                     if not test:
                         bootstrap_servers = config["kafka"]["bootstrap.servers"]
+                        log(f'bootstraped')
                     else:
                         bootstrap_servers = config["kafka"]["bootstrap.test.servers"]
                     group = config["kafka"]["group"]
-                    log(f'ztf: before topics')
+                    log(f'before processors') 
                     topics_on_watch[t] = multiprocessing.Process(
                         target=topic_listener,
                         args=(t, bootstrap_servers, offset_reset, group, test),
                     )
-                    log(f'ztf: after topics processors')
+                    log(f'topic_listener called')
                     topics_on_watch[t].daemon = True
+                    log(f"set daemon to true {topics_on_watch}")
                     topics_on_watch[t].start()
 
                 else:
@@ -567,9 +645,8 @@ def watchdog(obs_date: str = None, test: bool = False):
 
         time.sleep(60)
 
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Kowalski's ZTF Alert Broker")
+    parser = argparse.ArgumentParser(description="Kowalski's WNTR Alert Broker")
     parser.add_argument("--obsdate", help="observing date YYYYMMDD")
     parser.add_argument("--test", help="listen to the test stream", action="store_true")
 

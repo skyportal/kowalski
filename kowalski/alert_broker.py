@@ -130,8 +130,11 @@ class AlertConsumer:
                 # when reaching end of last partition, kill thread and start from beginning
                 _self.num_partitions += 1
                 log(consumer.get_watermark_offsets(part))
+                sys.exit
 
         self.consumer.subscribe([topic], on_assign=on_assign)
+        print(f"Successfully subscribed to {topic}")
+
 
         # set up own mongo client
         self.collection_alerts = config["database"]["collections"][
@@ -161,6 +164,8 @@ class AlertConsumer:
                     )
                 except Exception as e:
                     log(e)
+
+        print(f'Finished AlertConsumer setup')
 
     @staticmethod
     def read_schema_data(bytes_io):
@@ -229,13 +234,14 @@ class AlertConsumer:
                     msg_decoded = self.decode_message(msg)
 
                 for record in msg_decoded:
-                    # submit only unprocessed alerts:
                     if (
                         self.mongo.db[self.collection_alerts].count_documents(
                             {"candid": record["candid"]}, limit=1
                         )
                         == 0
                     ):
+                        print(f"record's candid: {record['candid']}")
+                        print(f"objectId: {record['objectId']}")
                         with timer(
                             f"Submitting alert {record['objectId']} {record['candid']} for processing",
                             self.verbose > 1,
@@ -243,11 +249,13 @@ class AlertConsumer:
                             future = self.dask_client.submit(
                                 self.process_alert, record, self.topic, pure=True
                             )
+                            print(f"Finished process_alert {record['objectId']} {record['candid']}")
                             dask.distributed.fire_and_forget(future)
                             future.release()
                             del future
 
             except Exception as e:
+                print("Error in poll!")
                 log(e)
                 _err = traceback.format_exc()
                 log(_err)
@@ -354,6 +362,7 @@ class AlertWorker:
             raise ValueError(
                 f"Failed to get {self.instrument} instrument_id from SkyPortal"
             )
+        print(f'AlertWorker setup complete')
 
     def api_skyportal(self, method: str, endpoint: str, data: Optional[Mapping] = None):
         """Make an API call to a SkyPortal instance
@@ -583,9 +592,10 @@ class AlertWorker:
             df_light_curve["filter"] = df_light_curve["fid"].apply(
                 lambda x: ztf_filters[x]
             )
-        elif self.instrument == "PGIR":
+        elif self.instrument == "PGIR" or self.instrument == "WNTR":
             # fixme: PGIR uses 2massj, which is not in sncosmo as of 20210803
             #        cspjs seems to be close/good enough as an approximation
+            # 20220818: added WNTR 
             df_light_curve["filter"] = "cspjs"
 
         df_light_curve["magsys"] = "ab"
