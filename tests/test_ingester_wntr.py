@@ -30,6 +30,7 @@ class Filter:
 
         self.access_token = self.get_api_token()
         self.headers = {"Authorization": f"Bearer {self.access_token}"}
+        self.collection = collection
         self.group_id = int(group_id)
         self.filter_id = int(filter_id)
         self.autosave = autosave
@@ -139,9 +140,50 @@ class TestIngester:
         if not path_logs.exists():
             path_logs.mkdir(parents=True, exist_ok=True)
 
-        # TODO for testing SkyPortal connection
-        # if config["misc"]["broker"]:
-            # TODO copy over PGIR Fritz related setup
+        if config["misc"]["broker"]:
+            log("Setting up test groups and filters in Fritz")
+            program = Program(
+                group_name="FRITZ_TEST_WNTR",
+                group_nickname="test-wntr",
+                filter_name="Infraorange transients",
+                stream_ids=[5],
+            )
+            Filter(
+                collection="WNTR_alerts",
+                group_id=program.group_id,
+                filter_id=program.filter_id,
+                pipeline=[{"$match": {"candid": {"$gt": 0}}}],  # pass all
+            )
+
+            program2 = Program(
+                group_name="FRITZ_TEST_WNTR_AUTOSAVE",
+                group_nickname="test2-wntr",
+                filter_name="Infraorange transients",
+                stream_ids=[5],
+            )
+            Filter(
+                collection="WNTR_alerts",
+                group_id=program2.group_id,
+                filter_id=program2.filter_id,
+                autosave=True,
+                pipeline=[{"$match": {"objectId": "WIRC21aaaab"}}],
+            )
+
+            program3 = Program(
+                group_name="FRITZ_TEST_WNTR_UPDATE_ANNOTATIONS",
+                group_nickname="test3-wntr",
+                filter_name="Infraorange transients",
+                stream_ids=[5],
+            )
+            Filter(
+                collection="WNTR_alerts",
+                group_id=program3.group_id,
+                filter_id=program3.filter_id,
+                update_annotations=True,
+                pipeline=[
+                    {"$match": {"objectId": "WIRC21aaaac"}}
+                ],  # there are 2 alerts in the test set for this oid
+            )            
         
         # clean up old Kafka logs
         log("Cleaning up Kafka logs")
@@ -182,7 +224,7 @@ class TestIngester:
 
         # take a nap while it fires up
         time.sleep(3)
-        log(f'Kafka server up!')
+        log('Kafka server up!')
 
         # get kafka topic names with kafka-topics command
         cmd_topics = [
@@ -192,7 +234,7 @@ class TestIngester:
             "-list",
         ]
 
-        log(f'Finding topics...')
+        log('Finding topics...')
         topics = (
             subprocess.run(cmd_topics, stdout=subprocess.PIPE)
             .stdout.decode("utf-8")
@@ -205,7 +247,7 @@ class TestIngester:
         topic_name = f"winter_{date}_test"
 
         if topic_name in topics:
-            log(f'Topic previously created, removing...')
+            log('Topic previously created, removing...')
             # topic previously created? remove first
             cmd_remove_topic = [
                 os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
@@ -215,7 +257,7 @@ class TestIngester:
                 "--topic",
                 topic_name,
             ]
-            # print(kafka_cmd)
+
             remove_topic = (
                 subprocess.run(cmd_remove_topic, stdout=subprocess.PIPE)
                 .stdout.decode("utf-8")
@@ -259,7 +301,6 @@ class TestIngester:
 
         # small number of alerts that come with kowalski
         path_alerts = pathlib.Path("/app/data/wntr_alerts/20220815/")
-        # fixme: ONLY USING THE ARCHIVAL WNTR ALERTS FOR NOW
 
         # push!
         for p in path_alerts.glob("*.avro"):
@@ -291,11 +332,10 @@ class TestIngester:
             n_alerts = mongo.db[collection_alerts].count_documents({})
             n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
 
-            # REMOVE THIS
-            print("WNTR: Testing n_alerts and n_alerts_aux", n_alerts, n_alerts_aux)
             try:
                 assert n_alerts == 5
                 assert n_alerts_aux == 4
+                print('----Passed WNTR ingester tests----')
                 break
             except AssertionError:
                 print(
@@ -362,6 +402,7 @@ class TestIngester:
         collection_alerts_aux = config["database"]["collections"]["alerts_wntr_aux"]
 
         return mongo, collection_alerts, collection_alerts_aux
+
 if __name__ == "__main__":
     testIngest = TestIngester()
     testIngest.test_ingester()

@@ -20,18 +20,8 @@ from alert_broker import (
 )
 from utils import init_db_sync, load_config, log, timer
 
-
 """ load config and secrets """
 config = load_config(config_file="config.yaml")["kowalski"]
-
-# Misc: not in alert_broker_pgir
-# TODO: remove as not needed
-
-import logging
-
-logger = logging.getLogger(__name__)  
-logger.setLevel(logging.INFO)
-
 
 class WNTRAlertConsumer(AlertConsumer, ABC):
     """
@@ -73,10 +63,7 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
         object_id = alert["objectId"]
 
         candidate = alert["candidate"]
-        print(f"winter: {topic} {object_id} {candid} in process_alert")
-        print(f"winter: ----------------------------------------------")
-        print(f"winter: {candidate}")
-        print(f"winter: ----------------------------------------------")
+        print(f"WINTER: {topic} {object_id} {candid} in process_alert")
 
         # get worker running current task
         worker = dask.distributed.get_worker()
@@ -198,23 +185,20 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
 class WNTRAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
         super().__init__(instrument="WNTR", **kwargs)
-        log(f'in WNTR AlertW')
-        # TODO WNTR subclass specific methods
         
         # talking to SkyPortal?
         if not config["misc"]["broker"]:
             return
 
-        
         # get WINTER alert stream id on SP
-        self.stream_id = None
+        self.wntr_stream_id = None
         with timer("Getting WNTR alert stream id from SkyPortal", self.verbose > 1):
             response = self.api_skyportal("GET", "/api/streams")
         if response.json()["status"] == "success" and len(response.json()["data"]) > 0:
             for stream in response.json()["data"]:
                 if "WNTR" in stream.get("name"):
-                    self.stream_id = stream["id"]
-        if self.stream_id is None:
+                    self.wntr_stream_id = stream["id"]
+        if self.wntr_stream_id is None:
             log("Failed to get WNTR alert stream ids from SkyPortal")
             raise ValueError("Failed to get WNTR alert stream ids from SkyPortal")
 
@@ -228,6 +212,7 @@ class WNTRAlertWorker(AlertWorker, ABC):
 
         # load *active* user-defined alert filter templates and pre-populate them
         active_filters = self.get_active_filters()
+
         self.filter_templates = self.make_filter_templates(active_filters)
 
         # set up watchdog for periodic refresh of the filter templates, in case those change
@@ -239,7 +224,6 @@ class WNTRAlertWorker(AlertWorker, ABC):
         log(self.filter_templates)
 
     def get_active_filters(self):
-        # TODO copied from PGIR
         """Fetch user-defined filters from own db marked as active."""
         return list(
             self.mongo.db[config["database"]["collections"]["filters"]].aggregate(
@@ -278,7 +262,6 @@ class WNTRAlertWorker(AlertWorker, ABC):
         )
     
     def make_filter_templates(self, active_filters: Sequence):
-        # TODO update to fit WINTER
         """
         Make filter templates by adding metadata, prepending upstream aggregation stages and setting permissions
 
@@ -439,7 +422,7 @@ class WNTRAlertWorker(AlertWorker, ABC):
         # post photometry
         photometry = {
             "obj_id": alert["objectId"],
-            "stream_ids": [int(self.pgir_stream_id)],
+            "stream_ids": [int(self.wntr_stream_id)],
             "instrument_id": self.instrument_id,
             "mjd": df_photometry["mjd"].tolist(),
             "flux": df_photometry["flux"].tolist(),
@@ -456,17 +439,17 @@ class WNTRAlertWorker(AlertWorker, ABC):
         ):
             with timer(
                 f"Posting photometry of {alert['objectId']} {alert['candid']}, "
-                f"stream_id={self.pgir_stream_id} to SkyPortal",
+                f"stream_id={self.wntr_stream_id} to SkyPortal",
                 self.verbose > 1,
             ):
                 response = self.api_skyportal("PUT", "/api/photometry", photometry)
             if response.json()["status"] == "success":
                 log(
-                    f"Posted {alert['objectId']} photometry stream_id={self.pgir_stream_id} to SkyPortal"
+                    f"Posted {alert['objectId']} photometry stream_id={self.wntr_stream_id} to SkyPortal"
                 )
             else:
                 log(
-                    f"Failed to post {alert['objectId']} photometry stream_id={self.pgir_stream_id} to SkyPortal"
+                    f"Failed to post {alert['objectId']} photometry stream_id={self.wntr_stream_id} to SkyPortal"
                 )
             log(response.json())
 
