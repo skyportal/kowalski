@@ -83,4 +83,4 @@ RUN pip install -r /app/requirements_ingester.txt --no-cache-dir && \
     python generate_supervisord_conf.py ingester
 
 # run container
- CMD /usr/local/bin/supervisord -n -c supervisord_ingester.conf
+CMD /usr/local/bin/supervisord -n -c supervisord_ingester.conf
