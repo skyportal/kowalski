@@ -135,7 +135,6 @@ class AlertConsumer:
         self.consumer.subscribe([topic], on_assign=on_assign)
         print(f"Successfully subscribed to {topic}")
 
-
         # set up own mongo client
         self.collection_alerts = config["database"]["collections"][
             f"alerts_{self.instrument.lower()}"
@@ -165,7 +164,7 @@ class AlertConsumer:
                 except Exception as e:
                     log(e)
 
-        print(f'Finished AlertConsumer setup')
+        print("Finished AlertConsumer setup")
 
     @staticmethod
     def read_schema_data(bytes_io):
@@ -249,7 +248,9 @@ class AlertConsumer:
                             future = self.dask_client.submit(
                                 self.process_alert, record, self.topic, pure=True
                             )
-                            print(f"Finished process_alert {record['objectId']} {record['candid']}")
+                            print(
+                                f"Finished process_alert {record['objectId']} {record['candid']}"
+                            )
                             dask.distributed.fire_and_forget(future)
                             future.release()
                             del future
@@ -362,7 +363,7 @@ class AlertWorker:
             raise ValueError(
                 f"Failed to get {self.instrument} instrument_id from SkyPortal"
             )
-        print(f'AlertWorker setup complete')
+        print("AlertWorker setup complete")
 
     def api_skyportal(self, method: str, endpoint: str, data: Optional[Mapping] = None):
         """Make an API call to a SkyPortal instance
@@ -595,7 +596,7 @@ class AlertWorker:
         elif self.instrument == "PGIR" or self.instrument == "WNTR":
             # fixme: PGIR uses 2massj, which is not in sncosmo as of 20210803
             #        cspjs seems to be close/good enough as an approximation
-            # 20220818: added WNTR 
+            # 20220818: added WNTR
             df_light_curve["filter"] = "cspjs"
 
         df_light_curve["magsys"] = "ab"
