@@ -481,6 +481,12 @@ class Kowalski:
                 "flaky": False,
             },
             {
+                "part": "WINTER alert broker components",
+                "container": "kowalski_ingester_1",
+                "test_script": "test_alert_broker_wntr.py",
+                "flaky": False,
+            },
+            {
                 "part": "PGIR alert ingestion",
                 "container": "kowalski_ingester_1",
                 "test_script": "test_ingester_pgir.py",
@@ -490,6 +496,12 @@ class Kowalski:
                 "part": "ZTF alert ingestion",
                 "container": "kowalski_ingester_1",
                 "test_script": "test_ingester.py",
+                "flaky": False,
+            },
+            {
+                "part": "WINTER alert ingestion",
+                "container": "kowalski_ingester_1",
+                "test_script": "test_ingester_wntr.py",
                 "flaky": False,
             },
             {
