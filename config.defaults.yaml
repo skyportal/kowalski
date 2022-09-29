@@ -454,7 +454,7 @@ kowalski:
                 "classifications": 1,
                 "coordinates": 1,
               },
-          }    
+          }
 
     xmatch:
       ZTF:
@@ -1113,7 +1113,7 @@ kowalski:
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: "PRODUCTION=1"
-      
+
       "program:alert-broker-winter":
         command: /usr/local/bin/python alert_broker_winter.py
         directory: /app
