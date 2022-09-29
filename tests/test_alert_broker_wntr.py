@@ -64,48 +64,44 @@ class TestAlertBrokerWNTR:
     #     scores = self.worker.alert_filter__ml(alert)
     #     log(scores)
 
-    # def test_alert_filter__xmatch(self):
-    #     """Test cross matching with external catalog"""
-    #     alert, _ = self.worker.alert_mongify(self.alert)
-    #     xmatches = self.worker.alert_filter__xmatch(alert)
-    #     assert len(xmatches) > 0
+    def test_alert_filter__xmatch(self):
+        """Test cross matching with external catalog"""
+        alert, _ = self.worker.alert_mongify(self.alert)
+        xmatches = self.worker.alert_filter__xmatch(alert)
+        assert len(xmatches) > 0
 
-    # def test_alert_filter__xmatch_clu(self):
-    #     """Test cross matching with the CLU catalog"""
-    #     alert, _ = self.worker.alert_mongify(self.alert)
-    #     xmatches_clu = self.worker.alert_filter__xmatch_clu(alert)
-    #     assert len(xmatches_clu) > 0
+    def test_alert_filter__xmatch_clu(self):
+        """Test cross matching with the CLU catalog"""
+        alert, _ = self.worker.alert_mongify(self.alert)
+        xmatches_clu = self.worker.alert_filter__xmatch_clu(alert)
+        print(xmatches_clu)
+        assert len(xmatches_clu) > 0
 
-    # def test_alert_filter__user_defined(self):
-    #     """Test pushing an alert through a filter"""
-    #     # prepend upstream aggregation stages:
-    #     upstream_pipeline = config["database"]["filters"][self.worker.collection_alerts]
-    #     pipeline = upstream_pipeline + [
-    #         {
-    #             "$match": {
-    #                 "candidate.drb": {"$gt": 0.5},
-    #             }
-    #         },
-    #         {
-    #             "$addFields": {
-    #                 "annotations.author": "dd",
-    #             }
-    #         },
-    #         {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
-    #     ]
+    def test_alert_filter__user_defined(self):
+        """Test pushing an alert through a filter"""
+        # prepend upstream aggregation stages:
+        upstream_pipeline = config["database"]["filters"][self.worker.collection_alerts]
+        pipeline = upstream_pipeline + [
+            {
+                "$addFields": {
+                    "annotations.author": "dd",
+                }
+            },
+            {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
+        ]
 
-    #     filter_template = {
-    #         "group_id": 1,
-    #         "filter_id": 1,
-    #         "group_name": "test_group",
-    #         "filter_name": "test_filter",
-    #         "fid": "r4nd0m",
-    #         "permissions": [0, 1],
-    #         "autosave": False,
-    #         "update_annotations": False,
-    #         "pipeline": pipeline,
-    #     }
-    #     passed_filters = self.worker.alert_filter__user_defined(
-    #         [filter_template], self.alert
-    #     )
-    #     assert passed_filters is not None
+        filter_template = {
+            "group_id": 1,
+            "filter_id": 1,
+            "group_name": "test_group",
+            "filter_name": "test_filter",
+            "fid": "r4nd0m",
+            "permissions": [0, 1],
+            "autosave": False,
+            "update_annotations": False,
+            "pipeline": pipeline,
+        }
+        passed_filters = self.worker.alert_filter__user_defined(
+            [filter_template], self.alert
+        )
+        assert passed_filters is not None
