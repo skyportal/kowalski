@@ -597,7 +597,8 @@ class AlertWorker:
             # fixme: PGIR uses 2massj, which is not in sncosmo as of 20210803
             #        cspjs seems to be close/good enough as an approximation
             # 20220818: added WNTR
-            df_light_curve["filter"] = "cspjs"
+            # 20220929: new bandpasses have been added to SNCosmo
+            df_light_curve["filter"] = "2massj"
 
         df_light_curve["magsys"] = "ab"
         df_light_curve["mjd"] = df_light_curve["jd"] - 2400000.5
