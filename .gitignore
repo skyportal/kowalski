@@ -6,3 +6,4 @@ data/dumps
 *.dirlock
 docker-compose.yaml
 mongo_key.yaml
+version.txt
