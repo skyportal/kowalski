@@ -2784,7 +2784,7 @@ async def app_factory():
     app.on_cleanup.append(close_mongo)
 
     # use ODMantic to work with structured data such as Filters
-    engine = AIOEngine(motor_client=client, database=config["database"]["db"])
+    engine = AIOEngine(client=client, database=config["database"]["db"])
     # ODM = Object Document Mapper
     app["mongo_odm"] = engine
 

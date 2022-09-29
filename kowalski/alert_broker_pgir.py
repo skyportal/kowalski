@@ -41,7 +41,6 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
         :param topic: Kafka stream topic name for bookkeeping
         :return:
         """
-        print(f'in pgir alert_broker 1')
         candid = alert["candid"]
         object_id = alert["objectId"]
 
@@ -159,7 +158,6 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
             # post to SkyPortal
             alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
 
-        print(f'in pgir alert_broker 2')
         # clean up after thyself
         del alert, prv_candidates
 

@@ -13,35 +13,22 @@ import traceback
 import threading
 from typing import Mapping, Sequence
 
-from alert_broker import (
-    AlertConsumer,
-    AlertWorker,
-    EopError
-)
+from alert_broker import AlertConsumer, AlertWorker, EopError
 from utils import init_db_sync, load_config, log, timer
-
 
 """ load config and secrets """
 config = load_config(config_file="config.yaml")["kowalski"]
-
-# Misc: not in alert_broker_pgir
-# TODO: remove as not needed
-
-import logging
-
-logger = logging.getLogger(__name__)  
-logger.setLevel(logging.INFO)
 
 
 class WNTRAlertConsumer(AlertConsumer, ABC):
     """
     Creates an alert stream Kafka consumer for a given topic,
     reads incoming packets, and ingests stream into database
-    based on applied filters. 
+    based on applied filters.
 
     """
-   
-    def __init__(self, topic:str, dask_client: dask.distributed.Client, **kwargs):
+
+    def __init__(self, topic: str, dask_client: dask.distributed.Client, **kwargs):
         """
         Initializes Kafka consumer.
 
@@ -68,15 +55,10 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
         :param topic: Kafka stream topic name for bookkeeping
         :return:
         """
-        print(f'w: In process alert')
         candid = alert["candid"]
         object_id = alert["objectId"]
 
-        candidate = alert["candidate"]
-        print(f"winter: {topic} {object_id} {candid} in process_alert")
-        print(f"winter: ----------------------------------------------")
-        print(f"winter: {candidate}")
-        print(f"winter: ----------------------------------------------")
+        print(f"WINTER: {topic} {object_id} {candid} in process_alert")
 
         # get worker running current task
         worker = dask.distributed.get_worker()
@@ -84,7 +66,7 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
 
         log(f"winter: {topic} {object_id} {candid} {worker.address}")
 
-        # return if this alert packet has already been processed 
+        # return if this alert packet has already been processed
         # and ingested into collection_alerts:
         if (
             alert_worker.mongo.db[alert_worker.collection_alerts].count_documents(
@@ -96,7 +78,6 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
 
         # candid not in db, ingest decoded avro packet into db
         with timer(f"Mongification of {object_id} {candid}"):
-            print(f'Trying to mongify')
             alert, prv_candidates = alert_worker.alert_mongify(alert)
 
         # future: add ML model filtering here
@@ -111,7 +92,6 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
             {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
             for prv_candidate in prv_candidates
         ]
-
         # cross-match with external catalogs if objectId not in collection_alerts_aux:
         if (
             alert_worker.mongo.db[alert_worker.collection_alerts_aux].count_documents(
@@ -142,10 +122,10 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
                 }
 
             alert_aux = {
-                    "_id": object_id,
-                    "cross_matches": xmatches,
-                    "prv_candidates": prv_candidates,
-                }
+                "_id": object_id,
+                "cross_matches": xmatches,
+                "prv_candidates": prv_candidates,
+            }
 
             with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
                 alert_worker.mongo.insert_one(
@@ -161,10 +141,11 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
                     {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
                     upsert=True,
                 )
-            
+
             # Crossmatch exisiting alert with most recent record in ZTF_alerts and update aux
             with timer(
-                f"Exists in aux: ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+                f"Exists in aux: ZTF Cross-match of {object_id} {candid}",
+                alert_worker.verbose > 1,
             ):
                 xmatches_ztf = alert_worker.alert_filter__xmatch_ztf_alerts(alert)
 
@@ -198,23 +179,20 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
 class WNTRAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
         super().__init__(instrument="WNTR", **kwargs)
-        log(f'in WNTR AlertW')
-        # TODO WNTR subclass specific methods
-        
+
         # talking to SkyPortal?
         if not config["misc"]["broker"]:
             return
 
-        
         # get WINTER alert stream id on SP
-        self.stream_id = None
+        self.wntr_stream_id = None
         with timer("Getting WNTR alert stream id from SkyPortal", self.verbose > 1):
             response = self.api_skyportal("GET", "/api/streams")
         if response.json()["status"] == "success" and len(response.json()["data"]) > 0:
             for stream in response.json()["data"]:
                 if "WNTR" in stream.get("name"):
-                    self.stream_id = stream["id"]
-        if self.stream_id is None:
+                    self.wntr_stream_id = stream["id"]
+        if self.wntr_stream_id is None:
             log("Failed to get WNTR alert stream ids from SkyPortal")
             raise ValueError("Failed to get WNTR alert stream ids from SkyPortal")
 
@@ -228,6 +206,7 @@ class WNTRAlertWorker(AlertWorker, ABC):
 
         # load *active* user-defined alert filter templates and pre-populate them
         active_filters = self.get_active_filters()
+
         self.filter_templates = self.make_filter_templates(active_filters)
 
         # set up watchdog for periodic refresh of the filter templates, in case those change
@@ -239,7 +218,6 @@ class WNTRAlertWorker(AlertWorker, ABC):
         log(self.filter_templates)
 
     def get_active_filters(self):
-        # TODO copied from PGIR
         """Fetch user-defined filters from own db marked as active."""
         return list(
             self.mongo.db[config["database"]["collections"]["filters"]].aggregate(
@@ -276,9 +254,8 @@ class WNTRAlertWorker(AlertWorker, ABC):
                 ]
             )
         )
-    
+
     def make_filter_templates(self, active_filters: Sequence):
-        # TODO update to fit WINTER
         """
         Make filter templates by adding metadata, prepending upstream aggregation stages and setting permissions
 
@@ -423,7 +400,7 @@ class WNTRAlertWorker(AlertWorker, ABC):
             log(str(e))
 
         return xmatches
-        
+
     def alert_put_photometry(self, alert):
         """PUT photometry to SkyPortal
 
@@ -439,7 +416,7 @@ class WNTRAlertWorker(AlertWorker, ABC):
         # post photometry
         photometry = {
             "obj_id": alert["objectId"],
-            "stream_ids": [int(self.pgir_stream_id)],
+            "stream_ids": [int(self.wntr_stream_id)],
             "instrument_id": self.instrument_id,
             "mjd": df_photometry["mjd"].tolist(),
             "flux": df_photometry["flux"].tolist(),
@@ -456,19 +433,20 @@ class WNTRAlertWorker(AlertWorker, ABC):
         ):
             with timer(
                 f"Posting photometry of {alert['objectId']} {alert['candid']}, "
-                f"stream_id={self.pgir_stream_id} to SkyPortal",
+                f"stream_id={self.wntr_stream_id} to SkyPortal",
                 self.verbose > 1,
             ):
                 response = self.api_skyportal("PUT", "/api/photometry", photometry)
             if response.json()["status"] == "success":
                 log(
-                    f"Posted {alert['objectId']} photometry stream_id={self.pgir_stream_id} to SkyPortal"
+                    f"Posted {alert['objectId']} photometry stream_id={self.wntr_stream_id} to SkyPortal"
                 )
             else:
                 log(
-                    f"Failed to post {alert['objectId']} photometry stream_id={self.pgir_stream_id} to SkyPortal"
+                    f"Failed to post {alert['objectId']} photometry stream_id={self.wntr_stream_id} to SkyPortal"
                 )
             log(response.json())
+
 
 class WorkerInitializer(dask.distributed.WorkerPlugin):
     def __init__(self, *args, **kwargs):
@@ -476,6 +454,7 @@ class WorkerInitializer(dask.distributed.WorkerPlugin):
 
     def setup(self, worker: dask.distributed.Worker):
         self.alert_worker = WNTRAlertWorker()
+
 
 def topic_listener(
     topic,
@@ -493,17 +472,13 @@ def topic_listener(
     :param test: when testing, terminate once reached end of partition
     :return:
     """
-    log(f'before dask client')
     # Configure dask client
     dask_client = dask.distributed.Client(
         address=f"{config['dask_wntr']['host']}:{config['dask_wntr']['scheduler_port']}"
     )
-    log(f'after dask client')
     # init each worker with AlertWorker instance
     worker_initializer = WorkerInitializer()
-    log(f'after WorkerInitializer')
     dask_client.register_worker_plugin(worker_initializer, name="worker-init")
-    log(f'after register worker init completed')
     # Configure consumer connection to Kafka broker
     conf = {
         "bootstrap.servers": bootstrap_servers,
@@ -546,6 +521,7 @@ def topic_listener(
             log(_err)
             sys.exit()
 
+
 def watchdog(obs_date: str = None, test: bool = False):
     """
         Watchdog for topic listeners
@@ -571,7 +547,6 @@ def watchdog(obs_date: str = None, test: bool = False):
                     config["kafka"]["zookeeper"],
                     "-list",
                 ]
-                print(f"winter: in kafka_cmd")
             else:
                 # Local test stream
                 kafka_cmd = [
@@ -601,19 +576,15 @@ def watchdog(obs_date: str = None, test: bool = False):
                     offset_reset = config["kafka"]["default.topic.config"][
                         "auto.offset.reset"
                     ]
-                    log(f'before bootstrap')
                     if not test:
                         bootstrap_servers = config["kafka"]["bootstrap.servers"]
-                        log(f'bootstraped')
                     else:
                         bootstrap_servers = config["kafka"]["bootstrap.test.servers"]
                     group = config["kafka"]["group"]
-                    log(f'before processors') 
                     topics_on_watch[t] = multiprocessing.Process(
                         target=topic_listener,
                         args=(t, bootstrap_servers, offset_reset, group, test),
                     )
-                    log(f'topic_listener called')
                     topics_on_watch[t].daemon = True
                     log(f"set daemon to true {topics_on_watch}")
                     topics_on_watch[t].start()
@@ -644,6 +615,7 @@ def watchdog(obs_date: str = None, test: bool = False):
             log(str(_err))
 
         time.sleep(60)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Kowalski's WNTR Alert Broker")

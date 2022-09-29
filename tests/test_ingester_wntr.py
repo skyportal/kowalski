@@ -14,6 +14,7 @@ from utils import init_db_sync, load_config, log, Mongo
 """ load config and secrets """
 config = load_config(config_file="config.yaml")["kowalski"]
 
+
 class Filter:
     def __init__(
         self,
@@ -30,6 +31,7 @@ class Filter:
 
         self.access_token = self.get_api_token()
         self.headers = {"Authorization": f"Bearer {self.access_token}"}
+        self.collection = collection
         self.group_id = int(group_id)
         self.filter_id = int(filter_id)
         self.autosave = autosave
@@ -53,7 +55,6 @@ class Filter:
                 {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
             ]
 
-
         self.fid = self.create()
 
     @staticmethod
@@ -67,7 +68,7 @@ class Filter:
         )
         credentials = a.json()
         token = credentials.get("token", None)
-        print(f'token: {token}')
+        print(f"token: {token}")
 
         return token
 
@@ -92,13 +93,13 @@ class Filter:
         )
         assert resp.status_code == requests.codes.ok
         result = resp.json()
-        print(f'result: {result}')
+        print(f"result: {result}")
         assert result["status"] == "success"
         assert "data" in result
         assert "fid" in result["data"]
         fid = result["data"]["fid"]
-        print(f'fid: {fid}')
-        return fid     
+        print(f"fid: {fid}")
+        return fid
 
     def remove(self):
         resp = requests.delete(
@@ -117,6 +118,7 @@ class Filter:
 
         self.fid = None
 
+
 def delivery_report(err, msg):
     """Called once for each message produced to indicate delivery result.
     Triggered by poll() or flush()."""
@@ -125,10 +127,10 @@ def delivery_report(err, msg):
     else:
         log(f"Message delivered to {msg.topic()} [{msg.partition()}]")
 
+
 class TestIngester:
-    """
-    
-    """
+    """ """
+
     def test_ingester(self):
         init_db_sync(config=config, verbose=True)
 
@@ -139,10 +141,51 @@ class TestIngester:
         if not path_logs.exists():
             path_logs.mkdir(parents=True, exist_ok=True)
 
-        # TODO for testing SkyPortal connection
-        # if config["misc"]["broker"]:
-            # TODO copy over PGIR Fritz related setup
-        
+        if config["misc"]["broker"]:
+            log("Setting up test groups and filters in Fritz")
+            program = Program(
+                group_name="FRITZ_TEST_WNTR",
+                group_nickname="test-wntr",
+                filter_name="Infraorange transients",
+                stream_ids=[5],
+            )
+            Filter(
+                collection="WNTR_alerts",
+                group_id=program.group_id,
+                filter_id=program.filter_id,
+                pipeline=[{"$match": {"candid": {"$gt": 0}}}],  # pass all
+            )
+
+            program2 = Program(
+                group_name="FRITZ_TEST_WNTR_AUTOSAVE",
+                group_nickname="test2-wntr",
+                filter_name="Infraorange transients",
+                stream_ids=[5],
+            )
+            Filter(
+                collection="WNTR_alerts",
+                group_id=program2.group_id,
+                filter_id=program2.filter_id,
+                autosave=True,
+                pipeline=[{"$match": {"objectId": "WIRC21aaaab"}}],
+            )
+
+            program3 = Program(
+                group_name="FRITZ_TEST_WNTR_UPDATE_ANNOTATIONS",
+                group_nickname="test3-wntr",
+                filter_name="Infraorange transients",
+                stream_ids=[5],
+            )
+            Filter(
+                collection="WNTR_alerts",
+                group_id=program3.group_id,
+                filter_id=program3.filter_id,
+                update_annotations=True,
+                pipeline=[
+                    {"$match": {"objectId": "WIRC21aaaac"}}
+                ],  # there are 2 alerts in the test set for this oid
+            )
+
         # clean up old Kafka logs
         log("Cleaning up Kafka logs")
         subprocess.run(["rm", "-rf", path_logs / "kafka-logs", "/tmp/zookeeper"])
@@ -165,7 +208,7 @@ class TestIngester:
         # take a nap while it fires up
         time.sleep(3)
 
-        log(f'Starting up Kafka server')
+        log("Starting up Kafka server")
         # start the Kafka server:
         cmd_kafka_server = [
             os.path.join(config["path"]["kafka"], "bin", "kafka-server-start.sh"),
@@ -173,16 +216,13 @@ class TestIngester:
             os.path.join(config["path"]["kafka"], "config", "server.properties"),
         ]
 
-        with open(
-            os.path.join(config["path"]["logs"], "kafka_server.stdout"), "w"
-        ) as stdout_kafka_server:
+        with open(os.path.join(config["path"]["logs"], "kafka_server.stdout"), "w"):
             # p_kafka_server = subprocess.Popen(cmd_kafka_server, stdout=stdout_kafka_server, stderr=subprocess.STDOUT)
-            # p_kafka_server =
             subprocess.run(cmd_kafka_server)
 
         # take a nap while it fires up
         time.sleep(3)
-        log(f'Kafka server up!')
+        log("Kafka server up!")
 
         # get kafka topic names with kafka-topics command
         cmd_topics = [
@@ -192,7 +232,7 @@ class TestIngester:
             "-list",
         ]
 
-        log(f'Finding topics...')
+        log("Finding topics...")
         topics = (
             subprocess.run(cmd_topics, stdout=subprocess.PIPE)
             .stdout.decode("utf-8")
@@ -205,7 +245,7 @@ class TestIngester:
         topic_name = f"winter_{date}_test"
 
         if topic_name in topics:
-            log(f'Topic previously created, removing...')
+            log("Topic previously created, removing...")
             # topic previously created? remove first
             cmd_remove_topic = [
                 os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
@@ -215,7 +255,7 @@ class TestIngester:
                 "--topic",
                 topic_name,
             ]
-            # print(kafka_cmd)
+
             remove_topic = (
                 subprocess.run(cmd_remove_topic, stdout=subprocess.PIPE)
                 .stdout.decode("utf-8")
@@ -249,7 +289,7 @@ class TestIngester:
                     stdout=stdout_create_topic,
                     stderr=subprocess.STDOUT,
                 )
-        
+
         log("Starting up Kafka Producer")
 
         # spin up Kafka producer
@@ -259,7 +299,6 @@ class TestIngester:
 
         # small number of alerts that come with kowalski
         path_alerts = pathlib.Path("/app/data/wntr_alerts/20220815/")
-        # fixme: ONLY USING THE ARCHIVAL WNTR ALERTS FOR NOW
 
         # push!
         for p in path_alerts.glob("*.avro"):
@@ -277,7 +316,7 @@ class TestIngester:
                 # Wait for any outstanding messages to be delivered and delivery report
                 # callbacks to be triggered.
         producer.flush()
-        
+
         # digest and ingest
         mongo, collection_alerts, collection_alerts_aux = self.digest_and_ingest(date)
 
@@ -291,11 +330,10 @@ class TestIngester:
             n_alerts = mongo.db[collection_alerts].count_documents({})
             n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
 
-            # REMOVE THIS
-            print("WNTR: Testing n_alerts and n_alerts_aux", n_alerts, n_alerts_aux)
             try:
                 assert n_alerts == 5
                 assert n_alerts_aux == 4
+                print("----Passed WNTR ingester tests----")
                 break
             except AssertionError:
                 print(
@@ -306,11 +344,8 @@ class TestIngester:
                 time.sleep(30)
                 continue
 
-
-
     def digest_and_ingest(self, date):
         # digest and ingest
-        log(f'Calling watchdog')
         watchdog(obs_date=date, test=True)
         log("Digested and ingested: all done!")
 
@@ -362,6 +397,8 @@ class TestIngester:
         collection_alerts_aux = config["database"]["collections"]["alerts_wntr_aux"]
 
         return mongo, collection_alerts, collection_alerts_aux
+
+
 if __name__ == "__main__":
     testIngest = TestIngester()
     testIngest.test_ingester()
