@@ -353,15 +353,15 @@ KOWALSKI_APP_PATH=../ KOWALSKI_DATA_PATH=../data python -m pytest -s ../tools/is
 To add a new alert stream to kowalski, see the PR associated with the addition of WINTER to Kowalski.
 A brief summary of the changes required (to add WINTER into Kowalski, but hopefully can be extended to any other survey) is given below -
 1. A new ```kowalski/alert_broker_<winter>.py``` needs to be created for the new alert stream. This can be modelled off the existing alert_broker_ztf.py or alert_broker_pgir.py scripts, with the following main changes -
-   
+
    a. ```watchdog``` needs to be pointed to pull from the correct topic associated with the new stream
-   
+
    b. ```topic_listener``` needs to be updated to use the correct dask-ports associated with the new stream from the config file  (every alert stream should have different dask ports to avoid conflicts). ```topic_listener``` also needs to be updated to use the ```<WNTR>AlertConsumer``` asociated with the new stream.
-   
+
    c. ```<WNTR>AlertConsumer``` needs to be updated per the requirements of the survey. For example, WINTER does not require MLing prior to ingestion, so that step is excluded unlike in the ```ZTFAlertConsumer```. The ```WNTRAlertConsumer``` also does a cross-match to the ZTF alert stream, a step that is obviously not present in ```ZTFAlertConsumer```.
-   
+
    d. ```<WNTR>AlertWorker``` needs to be updated to use the correct stream from SkyPortal. ```alert_filter__xmatch_ztf_alerts``` needs to be updated with the new survey-specific cross-match  radius (2 arcsec for WINTER).
-   
+
 2. In ```kowalski/alert_broker.py```, ```make_photometry``` needs to be updated with the filterlist and zeropoint system appropriate for the new stream.
 
 3. A new ```kowalski/dask_cluster_<winter>,py``` needs to be created, modeled on ```dask_cluster.py``` but using the ports for the new stream from the config file.
