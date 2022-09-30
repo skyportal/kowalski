@@ -593,12 +593,17 @@ class AlertWorker:
             df_light_curve["filter"] = df_light_curve["fid"].apply(
                 lambda x: ztf_filters[x]
             )
-        elif self.instrument == "PGIR" or self.instrument == "WNTR":
+        elif self.instrument == "PGIR":
             # fixme: PGIR uses 2massj, which is not in sncosmo as of 20210803
             #        cspjs seems to be close/good enough as an approximation
+            df_light_curve["filter"] = "cspjs"
+        elif self.instrument == "WNTR":
             # 20220818: added WNTR
-            # 20220929: new bandpasses have been added to SNCosmo
-            df_light_curve["filter"] = "2massj"
+            # 20220929: nir bandpasses have been added to sncosmo
+            nir_filters = {0: "ps1::y", 1: "2massj", 2: "2massh", 3: "2massks"}
+            df_light_curve["filter"] = df_light_curve["fid"].apply(
+                lambda x: nir_filters[x]
+            )
 
         df_light_curve["magsys"] = "ab"
         df_light_curve["mjd"] = df_light_curve["jd"] - 2400000.5
