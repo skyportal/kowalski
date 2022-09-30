@@ -346,7 +346,7 @@ class WNTRAlertWorker(AlertWorker, ABC):
         xmatches = dict()
 
         # cone search radius in arcsec:
-        cone_search_radius_ztf = 8.0
+        cone_search_radius_ztf = 2.0
         # convert arcsec to rad:
         PI = 3.141592653589793
         cone_search_radius_ztf *= PI / (180.0 * 3600)

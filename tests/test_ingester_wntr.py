@@ -10,6 +10,11 @@ from alert_broker_winter import watchdog
 from test_ingester import Program
 from utils import init_db_sync, load_config, log, Mongo
 
+"""
+Essentially the same as the ZTF ingester tests (test_ingester.py), except -
+1. Only a small number of test WINTER/WIRC alerts are used. These alerts are stored in data/, as opposed to ZTF test_ingester.py that pulls alerts from googleapis.
+2. Collections and Skyportal programs and filters relevant to WINTER are used instead of the ztf ones.
+"""
 
 """ load config and secrets """
 config = load_config(config_file="config.yaml")["kowalski"]

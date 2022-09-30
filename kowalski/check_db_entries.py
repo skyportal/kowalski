@@ -18,7 +18,7 @@ if __name__ == "__main__":
     parser.add_argument("--count", action="store_true")
     parser.add_argument("--clear", action="store_true")
     parser.add_argument("--coll", default="all", type=str)
-
+    parser.add_argument("--find", action="store_true")
     args = parser.parse_args()
 
     if args.coll == "all":
@@ -47,3 +47,9 @@ if __name__ == "__main__":
 
             mongo.db[collection_alerts].remove({})
             mongo.db[collection_alerts_aux].remove({})
+
+    if args.find:
+        for srv in surveys:
+            collection_alerts = config["database"]["collections"][f"alerts_{srv}"]
+            cursor = mongo.db[collection_alerts].find()
+            print([r for r in cursor])
