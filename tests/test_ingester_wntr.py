@@ -98,12 +98,10 @@ class Filter:
         )
         assert resp.status_code == requests.codes.ok
         result = resp.json()
-        print(f"result: {result}")
         assert result["status"] == "success"
         assert "data" in result
         assert "fid" in result["data"]
         fid = result["data"]["fid"]
-        print(f"fid: {fid}")
         return fid
 
     def remove(self):
