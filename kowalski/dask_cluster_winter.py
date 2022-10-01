@@ -9,6 +9,11 @@ config = load_config(config_file="config.yaml")["kowalski"]
 
 
 if __name__ == "__main__":
+    if "dask_wntr" not in config.keys():
+        log(
+            "dask_wntr not found in config file, please update the config file accordingly."
+        )
+        exit(1)
 
     cluster = LocalCluster(
         threads_per_worker=config["dask_wntr"]["threads_per_worker"],
