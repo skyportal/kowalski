@@ -58,6 +58,8 @@ class TestAlertBrokerWNTR:
         ]:
             thumb = self.worker.make_thumbnail(alert, ttype, istrument_type)
             assert len(thumb.get("data", [])) > 0
+
+    def test_alert_filter__xmatch(self):
         """Test cross matching with external catalog"""
         alert, _ = self.worker.alert_mongify(self.alert)
         xmatches = self.worker.alert_filter__xmatch(alert)
