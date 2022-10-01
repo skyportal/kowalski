@@ -130,10 +130,9 @@ class AlertConsumer:
                 # when reaching end of last partition, kill thread and start from beginning
                 _self.num_partitions += 1
                 log(consumer.get_watermark_offsets(part))
-                sys.exit
 
         self.consumer.subscribe([topic], on_assign=on_assign)
-        print(f"Successfully subscribed to {topic}")
+        log(f"Successfully subscribed to {topic}")
 
         # set up own mongo client
         self.collection_alerts = config["database"]["collections"][
@@ -164,7 +163,7 @@ class AlertConsumer:
                 except Exception as e:
                     log(e)
 
-        print("Finished AlertConsumer setup")
+        log("Finished AlertConsumer setup")
 
     @staticmethod
     def read_schema_data(bytes_io):
@@ -239,17 +238,12 @@ class AlertConsumer:
                         )
                         == 0
                     ):
-                        print(f"record's candid: {record['candid']}")
-                        print(f"objectId: {record['objectId']}")
                         with timer(
                             f"Submitting alert {record['objectId']} {record['candid']} for processing",
                             self.verbose > 1,
                         ):
                             future = self.dask_client.submit(
                                 self.process_alert, record, self.topic, pure=True
-                            )
-                            print(
-                                f"Finished process_alert {record['objectId']} {record['candid']}"
                             )
                             dask.distributed.fire_and_forget(future)
                             future.release()
@@ -363,7 +357,7 @@ class AlertWorker:
             raise ValueError(
                 f"Failed to get {self.instrument} instrument_id from SkyPortal"
             )
-        print("AlertWorker setup complete")
+        log("AlertWorker setup complete")
 
     def api_skyportal(self, method: str, endpoint: str, data: Optional[Mapping] = None):
         """Make an API call to a SkyPortal instance
@@ -553,7 +547,6 @@ class AlertWorker:
             # pad to 63x63 if smaller
             shape = cutout_dict[cutout].shape
             if shape != (63, 63):
-                # print(f'Shape of {candid}/{cutout}: {shape}, padding to (63, 63)')
                 cutout_dict[cutout] = np.pad(
                     cutout_dict[cutout],
                     [(0, 63 - shape[0]), (0, 63 - shape[1])],
