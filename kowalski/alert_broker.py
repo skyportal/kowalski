@@ -132,6 +132,7 @@ class AlertConsumer:
                 log(consumer.get_watermark_offsets(part))
 
         self.consumer.subscribe([topic], on_assign=on_assign)
+        log(f"Successfully subscribed to {topic}")
 
         # set up own mongo client
         self.collection_alerts = config["database"]["collections"][
@@ -161,6 +162,8 @@ class AlertConsumer:
                     )
                 except Exception as e:
                     log(e)
+
+        log("Finished AlertConsumer setup")
 
     @staticmethod
     def read_schema_data(bytes_io):
@@ -229,7 +232,6 @@ class AlertConsumer:
                     msg_decoded = self.decode_message(msg)
 
                 for record in msg_decoded:
-                    # submit only unprocessed alerts:
                     if (
                         self.mongo.db[self.collection_alerts].count_documents(
                             {"candid": record["candid"]}, limit=1
@@ -248,6 +250,7 @@ class AlertConsumer:
                             del future
 
             except Exception as e:
+                print("Error in poll!")
                 log(e)
                 _err = traceback.format_exc()
                 log(_err)
@@ -354,6 +357,7 @@ class AlertWorker:
             raise ValueError(
                 f"Failed to get {self.instrument} instrument_id from SkyPortal"
             )
+        log("AlertWorker setup complete")
 
     def api_skyportal(self, method: str, endpoint: str, data: Optional[Mapping] = None):
         """Make an API call to a SkyPortal instance
@@ -543,7 +547,6 @@ class AlertWorker:
             # pad to 63x63 if smaller
             shape = cutout_dict[cutout].shape
             if shape != (63, 63):
-                # print(f'Shape of {candid}/{cutout}: {shape}, padding to (63, 63)')
                 cutout_dict[cutout] = np.pad(
                     cutout_dict[cutout],
                     [(0, 63 - shape[0]), (0, 63 - shape[1])],
@@ -587,6 +590,13 @@ class AlertWorker:
             # fixme: PGIR uses 2massj, which is not in sncosmo as of 20210803
             #        cspjs seems to be close/good enough as an approximation
             df_light_curve["filter"] = "cspjs"
+        elif self.instrument == "WNTR":
+            # 20220818: added WNTR
+            # 20220929: nir bandpasses have been added to sncosmo
+            nir_filters = {0: "ps1::y", 1: "2massj", 2: "2massh", 3: "2massks"}
+            df_light_curve["filter"] = df_light_curve["fid"].apply(
+                lambda x: nir_filters[x]
+            )
 
         df_light_curve["magsys"] = "ab"
         df_light_curve["mjd"] = df_light_curve["jd"] - 2400000.5

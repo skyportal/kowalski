@@ -347,3 +347,27 @@ and running:
 ```bash
 KOWALSKI_APP_PATH=../ KOWALSKI_DATA_PATH=../data python -m pytest -s ../tools/istarmap.py ../tests/test_tools.py
 ```
+
+### Add a new alert stream to Kowalski
+
+To add a new alert stream to kowalski, see the [PR](https://github.com/skyportal/kowalski/pull/174) associated with the addition of WINTER to Kowalski.
+A brief summary of the changes required (to add WINTER into Kowalski, but hopefully can be extended to any other survey) is given below -
+1. A new `kowalski/alert_broker_<winter>.py` needs to be created for the new alert stream. This can be modelled off the existing alert_broker_ztf.py or alert_broker_pgir.py scripts, with the following main changes -
+
+   a. `watchdog` needs to be pointed to pull from the correct topic associated with the new stream
+
+   b. `topic_listener` needs to be updated to use the correct dask-ports associated with the new stream from the config file  (every alert stream should have different dask ports to avoid conflicts). `topic_listener` also needs to be updated to use the `<WNTR>AlertConsumer` asociated with the new stream.
+
+   c. `<WNTR>AlertConsumer` needs to be updated per the requirements of the survey. For example, WINTER does not require MLing prior to ingestion, so that step is excluded unlike in the `ZTFAlertConsumer`. The `WNTRAlertConsumer` also does a cross-match to the ZTF alert stream, a step that is obviously not present in `ZTFAlertConsumer`.
+
+   d. `<WNTR>AlertWorker` needs to be updated to use the correct stream from SkyPortal. `alert_filter__xmatch_ztf_alerts` needs to be updated with the new survey-specific cross-match  radius (2 arcsec for WINTER).
+
+2. In `kowalski/alert_broker.py`, `make_photometry` needs to be updated with the filterlist and zeropoint system appropriate for the new stream.
+
+3. A new `kowalski/dask_cluster_<winter>,py` needs to be created, modeled on `dask_cluster.py` but using the ports for the new stream from the config file.
+
+4. The config file `config.defaults.yaml` needs to be updated to include the collections, upstream filters, crossmatches, dask ports for the new stream. No two streams should use the same ports for dask to avoid conflicts. Entries also need to be made in the `supervisord` section of the config file so that `alert_broker_<winter>.py` and `dask_cluster_<winter>.py` can be run through supervisor.
+
+5. Some alerts need to be added to `data/` for testing. Tests for alert ingestion (`tests/test_ingester_<wntr>.py`) and alert processing (`tests/test_alert_broker_wntr.py`) can be modeled on the ZTF tests, with appropriate changes for the new stream.
+
+6. Need to edit `ingester.Dockerfile` so that all new files are copied into the docker container.
