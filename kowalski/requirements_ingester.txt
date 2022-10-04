@@ -30,3 +30,4 @@ tables==3.6.1
 tensorflow==2.7.2
 tqdm==4.62.2
 uvloop==0.16.0
+pyopenssl==21.0.0
