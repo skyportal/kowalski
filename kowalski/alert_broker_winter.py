@@ -7,7 +7,7 @@ import datetime
 import multiprocessing
 import os
 
-# import subprocess
+import subprocess
 import sys
 import time
 import traceback
@@ -539,38 +539,37 @@ def watchdog(obs_date: str = None, test: bool = False):
     while True:
 
         try:
-            # get kafka topic names with kafka-topics command
-            # if not test:
-            #    # Production Kafka stream at IPAC
-            #    kafka_cmd = [
-            #        os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-            #        "--zookeeper",
-            #        config["kafka"]["zookeeper"],
-            #        "-list",
-            #    ]
-            # else:
-            #    # Local test stream
-            #    kafka_cmd = [
-            #        os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-            #        "--zookeeper",
-            #        config["kafka"]["zookeeper.test"],
-            #        "-list",
-            #    ]
-
-            # topics = (
-            #    subprocess.run(kafka_cmd, stdout=subprocess.PIPE)
-            #    .stdout.decode("utf-8")
-            #    .split("\n")[:-1]
-            # )
 
             if obs_date is None:
                 datestr = datetime.datetime.utcnow().strftime("%Y%m%d")
             else:
                 datestr = obs_date
-            # as of 20220801, the naming convention is winter_%Y%m%
-            topics_tonight = [f"winter_{datestr}"]
 
-            # topics_tonight = [t for t in topics if (datestr in t) and ("winter" in t)]
+            # get kafka topic names with kafka-topics command
+            if not test:
+                # Production Kafka stream at IPAC
+
+                # as of 20220801, the naming convention is winter_%Y%m%
+                topics_tonight = [f"winter_{datestr}"]
+            else:
+                # Local test stream
+                kafka_cmd = [
+                    os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
+                    "--zookeeper",
+                    config["kafka"]["zookeeper.test"],
+                    "-list",
+                ]
+
+                topics = (
+                    subprocess.run(kafka_cmd, stdout=subprocess.PIPE)
+                    .stdout.decode("utf-8")
+                    .split("\n")[:-1]
+                )
+
+                # as of 20220801, the naming convention is winter_%Y%m%
+                topics_tonight = [
+                    t for t in topics if (datestr in t) and ("winter" in t)
+                ]
             log(f"winter: Topics tonight: {topics_tonight}")
 
             for t in topics_tonight:

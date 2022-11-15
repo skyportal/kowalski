@@ -7,7 +7,7 @@ import datetime
 import multiprocessing
 import os
 
-# import subprocess
+import subprocess
 import sys
 import time
 import traceback
@@ -527,38 +527,33 @@ def watchdog(obs_date: str = None, test: bool = False):
     while True:
 
         try:
-            # get kafka topic names with kafka-topics command
-            # if not test:
-            #    # Production Kafka stream at IPAC
-            #    kafka_cmd = [
-            #        os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-            #        "--zookeeper",
-            #        config["kafka"]["zookeeper"],
-            #        "-list",
-            #    ]
-            # else:
-            #    # Local test stream
-            #    kafka_cmd = [
-            #        os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-            #        "--zookeeper",
-            #        config["kafka"]["zookeeper.test"],
-            #        "-list",
-            #    ]
-
-            # topics = (
-            #    subprocess.run(kafka_cmd, stdout=subprocess.PIPE)
-            #    .stdout.decode("utf-8")
-            #    .split("\n")[:-1]
-            # )
 
             if obs_date is None:
                 datestr = datetime.datetime.utcnow().strftime("%Y%m%d")
             else:
                 datestr = obs_date
-            # as of 20210722, the naming convention is pgir_%Y%m%d_programidN
-            topics_tonight = [f"pgir_{datestr}"]
 
-            # topics_tonight = [t for t in topics if (datestr in t) and ("pgir" in t)]
+            # get kafka topic names with kafka-topics command
+            if not test:
+                # as of 20210722, the naming convention is pgir_%Y%m%d_programidN
+                topics_tonight = [f"pgir_{datestr}"]
+
+            else:
+                # Local test stream
+                kafka_cmd = [
+                    os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
+                    "--zookeeper",
+                    config["kafka"]["zookeeper.test"],
+                    "-list",
+                ]
+
+                topics = (
+                    subprocess.run(kafka_cmd, stdout=subprocess.PIPE)
+                    .stdout.decode("utf-8")
+                    .split("\n")[:-1]
+                )
+
+                topics_tonight = [t for t in topics if (datestr in t) and ("pgir" in t)]
             log(f"Topics: {topics_tonight}")
 
             for t in topics_tonight:
