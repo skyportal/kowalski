@@ -6,6 +6,7 @@ import dask.distributed
 import datetime
 import multiprocessing
 import os
+
 import subprocess
 import sys
 import time
@@ -470,15 +471,21 @@ def watchdog(obs_date: str = None, test: bool = False):
     while True:
 
         try:
+
+            if obs_date is None:
+                datestr = datetime.datetime.utcnow().strftime("%Y%m%d")
+            else:
+                datestr = obs_date
+
             # get kafka topic names with kafka-topics command
             if not test:
                 # Production Kafka stream at IPAC
-                kafka_cmd = [
-                    os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-                    "--zookeeper",
-                    config["kafka"]["zookeeper"],
-                    "-list",
-                ]
+
+                # as of 20180403, the naming convention is ztf_%Y%m%d_programidN
+                topics_tonight = []
+                for stream in [1, 2, 3]:
+                    topics_tonight.append(f"ztf_{datestr}_programid{stream}")
+
             else:
                 # Local test stream
                 kafka_cmd = [
@@ -488,25 +495,20 @@ def watchdog(obs_date: str = None, test: bool = False):
                     "-list",
                 ]
 
-            topics = (
-                subprocess.run(kafka_cmd, stdout=subprocess.PIPE)
-                .stdout.decode("utf-8")
-                .split("\n")[:-1]
-            )
+                topics = (
+                    subprocess.run(kafka_cmd, stdout=subprocess.PIPE)
+                    .stdout.decode("utf-8")
+                    .split("\n")[:-1]
+                )
 
-            if obs_date is None:
-                datestr = datetime.datetime.utcnow().strftime("%Y%m%d")
-            else:
-                datestr = obs_date
-            # as of 20180403, the naming convention is ztf_%Y%m%d_programidN
-            topics_tonight = [
-                t
-                for t in topics
-                if (datestr in t)
-                and ("programid" in t)
-                and ("zuds" not in t)
-                and ("pgir" not in t)
-            ]
+                topics_tonight = [
+                    t
+                    for t in topics
+                    if (datestr in t)
+                    and ("programid" in t)
+                    and ("zuds" not in t)
+                    and ("pgir" not in t)
+                ]
             log(f"Topics: {topics_tonight}")
 
             for t in topics_tonight:
