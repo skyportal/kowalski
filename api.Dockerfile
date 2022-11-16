@@ -16,7 +16,7 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py",\
 WORKDIR /app
 
 # install python libs and generate supervisord config file
-RUN pip install -r /app/requirements_api.txt --no-cache-dir && \
+RUN pip install -r /app/requirements_api.txt --no-cache-dir --use-feature=2020-resolver && \
     python generate_supervisord_conf.py api
 
 # run container
