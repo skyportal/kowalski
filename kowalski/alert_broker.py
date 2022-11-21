@@ -857,12 +857,15 @@ class AlertWorker:
                 alpha1, delta01 = galaxy["ra"], galaxy["dec"]
 
                 redshift = galaxy["z"]
-                # By default, set the cross-match radius to 30 kpc at the redshift of the host galaxy
-                cm_radius = 30.0 * (0.05 / redshift) / 3600
+
                 if redshift < 0.01:
                     # for nearby galaxies and galaxies with negative redshifts, do a 5 arc-minute cross-match
                     # (cross-match radius would otherwise get un-physically large for nearby galaxies)
                     cm_radius = 300.0 / 3600
+
+                else:
+                    # For distant galaxies, set the cross-match radius to 30 kpc at the redshift of the host galaxy
+                    cm_radius = 30.0 * (0.05 / redshift) / 3600
 
                 in_galaxy = in_ellipse(ra, dec, alpha1, delta01, cm_radius, 1, 0)
 
