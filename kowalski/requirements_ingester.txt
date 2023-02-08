@@ -3,7 +3,7 @@ astropy==4.3.1
 bcrypt==3.2.0
 beautifulsoup4==4.10.0
 confluent_kafka==1.7.0
-cryptography==3.4.8
+cryptography==39.0.1
 dask==2021.10.0
 distributed==2021.10.0
 fastavro==1.4.4
