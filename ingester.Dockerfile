@@ -79,6 +79,7 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
 WORKDIR /app
 
 # install python libs and generate supervisord config file
+RUN pip install --upgrade pip
 RUN pip install -r /app/requirements_ingester.txt --no-cache-dir && \
     python generate_supervisord_conf.py ingester
 
