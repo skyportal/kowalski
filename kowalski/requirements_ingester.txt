@@ -1,5 +1,5 @@
 aiohttp==3.7.4
-astropy==4.3.1
+astropy==5.2.1
 bcrypt==3.2.0
 beautifulsoup4==4.10.0
 confluent_kafka==1.7.0
@@ -10,7 +10,7 @@ fastavro==1.4.4
 fire==0.4.0
 gsutil==4.67
 gunicorn==20.1.0
-h5py==3.1.0
+h5py==3.8.0
 matplotlib==3.4.3
 motor==2.5.1
 numba==0.55.2
@@ -27,7 +27,7 @@ pyyaml==5.4.1
 requests==2.25.1
 slack_sdk==3.10.1
 supervisor==4.2.2
-tables==3.6.1
-tensorflow==2.9.3
+tables==3.7.0
+tensorflow==2.11.0
 tqdm==4.62.2
 uvloop==0.16.0
