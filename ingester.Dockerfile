@@ -1,4 +1,4 @@
-FROM python:3.7
+FROM python:3.8
 
 ARG kafka_version=2.13-2.5.0
 ARG braai_version=d6_m9
@@ -79,7 +79,7 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
 WORKDIR /app
 
 # install python libs and generate supervisord config file
-RUN pip install -r /app/requirements_ingester.txt --no-cache-dir --use-feature=2020-resolver && \
+RUN pip install -r /app/requirements_ingester.txt --no-cache-dir && \
     python generate_supervisord_conf.py ingester
 
 # run container
