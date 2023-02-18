@@ -555,8 +555,8 @@ def watchdog(obs_date: str = None, test: bool = False):
                 # Local test stream
                 kafka_cmd = [
                     os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-                    "--zookeeper",
-                    config["kafka"]["zookeeper.test"],
+                    "--bootstrap-server",
+                    config["kafka"]["bootstrap.test.servers"],
                     "-list",
                 ]
 

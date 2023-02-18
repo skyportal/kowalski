@@ -92,7 +92,7 @@ class Filter:
         )
         assert resp.status_code == requests.codes.ok
         result = resp.json()
-        # print(result)
+
         assert result["status"] == "success"
         assert "data" in result
         assert "fid" in result["data"]
@@ -241,8 +241,8 @@ class TestIngester:
         # get kafka topic names with kafka-topics command
         cmd_topics = [
             os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-            "--zookeeper",
-            config["kafka"]["zookeeper.test"],
+            "--bootstrap-server",
+            config["kafka"]["bootstrap.test.servers"],
             "-list",
         ]
 
@@ -261,13 +261,13 @@ class TestIngester:
             # topic previously created? remove first
             cmd_remove_topic = [
                 os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-                "--zookeeper",
-                config["kafka"]["zookeeper.test"],
+                "--bootstrap-server",
+                config["kafka"]["bootstrap.test.servers"],
                 "--delete",
                 "--topic",
                 topic_name,
             ]
-            # print(kafka_cmd)
+
             remove_topic = (
                 subprocess.run(cmd_remove_topic, stdout=subprocess.PIPE)
                 .stdout.decode("utf-8")

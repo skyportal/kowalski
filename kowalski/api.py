@@ -30,7 +30,7 @@ import pathlib
 from pydantic import root_validator
 from sshtunnel import SSHTunnelForwarder
 import traceback
-from typing import List, Mapping, Optional, Sequence, Union
+from typing import List, Mapping, Optional, Sequence, Union, Any
 from utils import (
     add_admin,
     check_password_hash,
@@ -695,10 +695,10 @@ ANGULAR_UNITS = ("arcsec", "arcmin", "deg", "rad")
 class Query(Model, ABC):
     """Data model for queries for streamlined validation"""
 
-    query_type: str
-    query: Mapping
-    kwargs: dict = dict()
-    user: str
+    query_type: Optional[str] = Field(default=None)
+    query: Optional[Any] = Field(default=None)
+    kwargs: Optional[dict] = Field(default=dict())
+    user: str = Field(default=None)
 
     @staticmethod
     def construct_filter(query: Mapping):
@@ -1495,8 +1495,8 @@ class Filter(Model, ABC):
 
     filter_id: int = Field(ge=1)
     group_id: int = Field(ge=1)
-    catalog: str
-    permissions: List
+    catalog: str = Field(default=None)
+    permissions: list = Field(default=list())
     autosave: bool = False
     active: bool = True
     update_annotations: bool = False

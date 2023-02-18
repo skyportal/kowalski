@@ -291,16 +291,17 @@ class Mongo:
         self.password = password
         self.replica_set = replica_set
 
-        pymongo_client_arguments = {
-            "host": self.host,
-            "port": self.port,
-        }
+        conn_string = "mongodb://"
+        if self.username is not None and self.password is not None:
+            conn_string += f"{self.username}:{self.password}@"
+        conn_string += f"{self.host}:{self.port}"
+        if db is not None:
+            conn_string += f"/{db}"
         if self.replica_set is not None:
-            pymongo_client_arguments["replicaset"] = self.replica_set
-        self.client = pymongo.MongoClient(**pymongo_client_arguments)
-        self.db = self.client[db]
-        # authenticate
-        self.db.authenticate(self.username, self.password)
+            conn_string += f"?replicaSet={self.replica_set}"
+
+        self.client = pymongo.MongoClient(conn_string)
+        self.db = self.client.get_database(db)
 
         self.verbose = verbose
 

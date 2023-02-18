@@ -34,7 +34,7 @@ kowalski:
     queries: "/data/queries"
     tess: "/data/tess"
     tmp: "/_tmp"
-    kafka: "/kafka_2.13-2.5.0"
+    kafka: "/kafka_2.13-3.4.0"
 
   kafka:
     default.topic.config:

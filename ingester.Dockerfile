@@ -1,6 +1,6 @@
-FROM python:3.7
+FROM python:3.10
 
-ARG kafka_version=2.13-2.5.0
+ARG kafka_version=2.13-3.4.0
 ARG braai_version=d6_m9
 ARG acai_h_version=d1_dnn_20201130
 ARG acai_v_version=d1_dnn_20201130
@@ -15,7 +15,7 @@ ARG acai_b_version=d1_dnn_20201130
 # Install jdk, mkdirs, fetch and install Kafka
 RUN apt-get update && apt-get install -y default-jdk && \
     mkdir -p /app /app/models_pgir /data /data/logs /_tmp /kafka && \
-    wget https://storage.googleapis.com/ztf-fritz/kafka_$kafka_version.tgz -O /kafka/kafka_$kafka_version.tgz && \
+    wget https://downloads.apache.org/kafka/3.4.0/kafka_$kafka_version.tgz -O /kafka/kafka_$kafka_version.tgz && \
     tar -xzf /kafka/kafka_$kafka_version.tgz
 
 # Kafka:
@@ -78,8 +78,11 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
 # change working directory to /app
 WORKDIR /app
 
+# update pip
+RUN pip install --upgrade pip
+
 # install python libs and generate supervisord config file
-RUN pip install -r /app/requirements_ingester.txt --no-cache-dir --use-feature=2020-resolver && \
+RUN pip install -r /app/requirements_ingester.txt --no-cache-dir && \
     python generate_supervisord_conf.py ingester
 
 # run container
