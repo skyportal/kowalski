@@ -1,6 +1,7 @@
 FROM python:3.10
 
-ARG kafka_version=2.13-3.4.0
+ARG scala_version=2.13
+ARG kafka_version=3.4.0
 ARG braai_version=d6_m9
 ARG acai_h_version=d1_dnn_20201130
 ARG acai_v_version=d1_dnn_20201130
@@ -15,15 +16,15 @@ ARG acai_b_version=d1_dnn_20201130
 # Install jdk, mkdirs, fetch and install Kafka
 RUN apt-get update && apt-get install -y default-jdk && \
     mkdir -p /app /app/models_pgir /data /data/logs /_tmp /kafka && \
-    wget https://downloads.apache.org/kafka/3.4.0/kafka_$kafka_version.tgz -O /kafka/kafka_$kafka_version.tgz && \
-    tar -xzf /kafka/kafka_$kafka_version.tgz
+    wget https://downloads.apache.org/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz -O /kafka/kafka_$scala_version-$kafka_version.tgz && \
+    tar -xzf /kafka/kafka_$scala_version-$kafka_version.tgz
 
 # Kafka:
-#ADD http://apache.claz.org/kafka/2.5.0/kafka_$kafka_version.tgz /kafka
-#RUN tar -xzf /kafka/kafka_$kafka_version.tgz
+#ADD http://apache.claz.org/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz /kafka
+#RUN tar -xzf /kafka/kafka_$scala_version-$kafka_version.tgz
 
 # Kafka test-server properties:
-COPY kowalski/server.properties /kafka_$kafka_version/config/
+COPY kowalski/server.properties /kafka_$scala_version-$kafka_version/config/
 
 # ML models <model_name>.<tag>.<extensions>:
 ADD https://github.com/dmitryduev/braai/raw/master/models/braai_$braai_version.h5 /app/models/braai.$braai_version.h5

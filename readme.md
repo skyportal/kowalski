@@ -289,9 +289,10 @@ pip install -r kowalski/requirements_ingester.txt
 The ingester requires kafka, which can be installed with:
 
 ```bash
-export kafka_version=2.13-3.4.0
-wget https://downloads.apache.org/kafka/3.4.0/kafka_$kafka_version.tgz
-tar -xzf kafka_$kafka_version.tgz
+export scala_version=2.13
+export kafka_version=3.4.0
+wget https://downloads.apache.org/kafka/3.4.0/kafka_$scala_version-$kafka_version.tgz
+tar -xzf kafka_$scala_version-$kafka_version.tgz
 ```
 
 Installed in this way, path.kafka in the config should be set to ./kafka_2.13-3.4.0.

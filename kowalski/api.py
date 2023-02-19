@@ -695,10 +695,10 @@ ANGULAR_UNITS = ("arcsec", "arcmin", "deg", "rad")
 class Query(Model, ABC):
     """Data model for queries for streamlined validation"""
 
-    query_type: Optional[str] = Field(default=None)
-    query: Optional[Any] = Field(default=None)
-    kwargs: Optional[dict] = Field(default=dict())
-    user: str = Field(default=None)
+    query_type: str
+    query: Optional[Any]
+    kwargs: dict = dict()
+    user: str
 
     @staticmethod
     def construct_filter(query: Mapping):
@@ -1495,8 +1495,8 @@ class Filter(Model, ABC):
 
     filter_id: int = Field(ge=1)
     group_id: int = Field(ge=1)
-    catalog: str = Field(default=None)
-    permissions: list = Field(default=list())
+    catalog: str
+    permissions: List[int] = list()
     autosave: bool = False
     active: bool = True
     update_annotations: bool = False
