@@ -1,8 +1,10 @@
+import os
 from utils import Mongo
 from utils import load_config
 import argparse
 
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 mongo = Mongo(
     host=config["database"]["host"],
     port=config["database"]["port"],
