@@ -302,8 +302,23 @@ tar -xzf kafka_$scala_version-$kafka_version.tgz
 
 Installed in this way, path.kafka in the config should be set to ./kafka_2.13-3.4.0.
 
-Then, you need to copy the `kowalsk/server.properties` file to the `kafka_2.13-3.4.0/config` directory, replacing the existing file.
+Then, you need to copy the `kowalski/server.properties` file to the `kafka_$scala_version-$kafka_version/config` directory, replacing the existing file.
 When running locally, you should change said `server.properties` file to set `log.dirs=/data/logs/kafka-logs` to `log.dirs=./data/logs/kafka-logs` instead (the addition here is the `.` at the beginning of the path) to avoid permission issues.
+
+Moreover, the ingester needs the different models to be downloaded. To do so, run:
+
+```bash
+mkdir models && cd models && \
+braai_version=d6_m9 && acai_h_version=d1_dnn_20201130 && \
+acai_v_version=d1_dnn_20201130 && acai_o_version=d1_dnn_20201130 && \
+acai_n_version=d1_dnn_20201130 && acai_b_version=d1_dnn_20201130 && \
+wget https://github.com/dmitryduev/braai/raw/master/models/braai_$braai_version.h5 -O braai.$braai_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_h.$acai_h_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_v.$acai_v_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_o.$acai_o_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_n.$acai_n_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_b.$acai_b_version.h5
+```
 
 Next, you need to start the dask scheduler and workers:
 
