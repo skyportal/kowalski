@@ -59,6 +59,7 @@ kowalski:
     username: "ztf"
     # fixme: use strong password if exposing the database to the world
     password: "ztf"
+    srv: False
 
     build_indexes: True
 

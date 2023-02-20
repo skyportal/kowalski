@@ -10,6 +10,7 @@ mongo = Mongo(
     username=config["database"]["username"],
     password=config["database"]["password"],
     db=config["database"]["db"],
+    srv=config["database"]["srv"],
     verbose=True,
 )
 

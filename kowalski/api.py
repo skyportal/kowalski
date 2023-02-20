@@ -2750,14 +2750,26 @@ async def app_factory():
     await init_db(config=config)
 
     # Database connection
-    mongodb_connection_string = (
-        f"mongodb://{config['database']['admin_username']}:{config['database']['admin_password']}@"
-        + f"{config['database']['host']}:{config['database']['port']}"
-    )
+    if config["database"]["srv"] is True:
+        conn_string = "mongodb+srv://"
+    else:
+        conn_string = "mongodb://"
+
+    if (
+        config["database"]["admin_username"] is not None
+        and config["database"]["admin_password"] is not None
+    ):
+        conn_string += f"{config['database']['admin_username']}:{config['database']['admin_password']}@"
+
+    conn_string += f"{config['database']['host']}"
+    if config["database"]["srv"] is not True:
+        conn_string += f":{config['database']['port']}"
+
     if config["database"]["replica_set"] is not None:
-        mongodb_connection_string += f"/?replicaSet={config['database']['replica_set']}"
+        conn_string += f"/?replicaSet={config['database']['replica_set']}"
+
     client = AsyncIOMotorClient(
-        mongodb_connection_string,
+        conn_string,
         maxPoolSize=config["database"]["max_pool_size"],
     )
     mongo = client[config["database"]["db"]]

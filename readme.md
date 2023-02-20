@@ -291,7 +291,7 @@ The ingester requires kafka, which can be installed with:
 ```bash
 export scala_version=2.13
 export kafka_version=3.4.0
-wget https://downloads.apache.org/kafka/3.4.0/kafka_$scala_version-$kafka_version.tgz
+wget https://downloads.apache.org/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz
 tar -xzf kafka_$scala_version-$kafka_version.tgz
 ```
 

@@ -50,6 +50,7 @@ def get_ops():
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
+        srv=config["database"]["srv"],
         verbose=0,
     )
     print(f"{time_stamp()}: Successfully connected.")

@@ -38,6 +38,7 @@ def process_file(file, collection, batch_size):
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
+        srv=config["database"]["srv"],
         verbose=0,
     )
     log("Successfully connected")
@@ -136,6 +137,7 @@ def run(
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
+        srv=config["database"]["srv"],
     )
     log("Successfully connected")
 
