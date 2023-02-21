@@ -1,12 +1,11 @@
 import os
-import string
 import random
+import string
 from typing import List
-import pytest
 
+import pytest
 from api import app_factory
 from utils import load_config, uid
-
 
 KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
 config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]

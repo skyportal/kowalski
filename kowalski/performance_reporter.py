@@ -1,19 +1,18 @@
-import os
+import argparse
 import datetime
+import os
 import pathlib
 import re
-from collections import defaultdict
-import argparse
-import time
 import sys
+import time
 import traceback
+from collections import defaultdict
 
-from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.backends.backend_pdf import PdfPages
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-
 from utils import load_config, log
 
 """ load config and secrets """

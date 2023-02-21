@@ -1,7 +1,7 @@
 import os
+
 import fastavro
 import pytest
-
 from alert_broker_winter import WNTRAlertWorker
 from utils import load_config, log
 

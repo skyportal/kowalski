@@ -1,36 +1,38 @@
-from abc import ABC
-from aiohttp import web, ClientSession
-from aiohttp_swagger3 import SwaggerDocs, ReDocUiSettings
-from astropy.io import fits
-from astropy.visualization import (
-    AsymmetricPercentileInterval,
-    MinMaxInterval,
-    ZScaleInterval,
-    LinearStretch,
-    LogStretch,
-    AsinhStretch,
-    SqrtStretch,
-    ImageNormalize,
-)
-from ast import literal_eval
-from bson.json_util import dumps, loads
 import datetime
 import gzip
 import io
-import jwt
-from matplotlib.colors import LogNorm
-import matplotlib.pyplot as plt
-from middlewares import auth_middleware, error_middleware, auth_required, admin_required
-from motor.motor_asyncio import AsyncIOMotorClient
-from multidict import MultiDict
-import numpy as np
-from odmantic import AIOEngine, EmbeddedModel, Field, Model
 import os
 import pathlib
+import traceback
+from abc import ABC
+from ast import literal_eval
+from typing import Any, List, Mapping, Optional, Sequence, Union
+
+import jwt
+import matplotlib.pyplot as plt
+import numpy as np
+import uvloop
+from aiohttp import ClientSession, web
+from aiohttp_swagger3 import ReDocUiSettings, SwaggerDocs
+from astropy.io import fits
+from astropy.visualization import (
+    AsinhStretch,
+    AsymmetricPercentileInterval,
+    ImageNormalize,
+    LinearStretch,
+    LogStretch,
+    MinMaxInterval,
+    SqrtStretch,
+    ZScaleInterval,
+)
+from bson.json_util import dumps, loads
+from matplotlib.colors import LogNorm
+from middlewares import admin_required, auth_middleware, auth_required, error_middleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from multidict import MultiDict
+from odmantic import AIOEngine, EmbeddedModel, Field, Model
 from pydantic import root_validator
 from sshtunnel import SSHTunnelForwarder
-import traceback
-from typing import List, Mapping, Optional, Sequence, Union, Any
 from utils import (
     add_admin,
     check_password_hash,
@@ -41,8 +43,6 @@ from utils import (
     radec_str2geojson,
     uid,
 )
-import uvloop
-
 
 KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
 KOWALSKI_PATH = os.environ.get("KOWALSKI_PATH", "./")

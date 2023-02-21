@@ -1,34 +1,36 @@
 __all__ = ["AlertConsumer", "AlertWorker", "EopError"]
 
+import base64
+import datetime
+import gzip
+import io
+import os
+import pathlib
+import sys
+import traceback
 from ast import literal_eval
+from copy import deepcopy
+from typing import Mapping, Optional, Sequence
+
+import confluent_kafka
+import dask.distributed
+import fastavro
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import requests
 from astropy.io import fits
 from astropy.visualization import (
     AsymmetricPercentileInterval,
+    ImageNormalize,
     LinearStretch,
     LogStretch,
-    ImageNormalize,
 )
-import base64
-import confluent_kafka
-from copy import deepcopy
-import dask.distributed
-import datetime
-import fastavro
-import gzip
-import io
-import matplotlib.pyplot as plt
-import numpy as np
-import os
-import pandas as pd
-import pathlib
-import requests
 from requests.packages.urllib3.util.retry import Retry
-import sys
-
-import traceback
-from typing import Mapping, Optional, Sequence
-
 from utils import (
+    Mongo,
+    TimeoutHTTPAdapter,
+    ZTFAlert,
     deg2dms,
     deg2hms,
     great_circle_distance,
@@ -36,12 +38,9 @@ from utils import (
     load_config,
     log,
     memoize,
-    Mongo,
     radec2lb,
     time_stamp,
     timer,
-    TimeoutHTTPAdapter,
-    ZTFAlert,
 )
 
 # Tensorflow is problematic for Mac's currently, so we can add an option to disable it

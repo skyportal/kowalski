@@ -1,16 +1,15 @@
 import os
-import pytest
 from random import randrange
 
+import pytest
 from ingest_igaps import run as run_igaps
 from ingest_ptf_matchfiles import run as run_ptf_matchfiles
 from ingest_vlass import run as run_vlass
 from ingest_ztf_matchfiles import run as run_ztf_matchfiles
 from ingest_ztf_public import run as run_ztf_public
-from ingest_ztf_source_features import run as run_ztf_source_features
 from ingest_ztf_source_classifications import run as run_ztf_source_classifications
-from utils import get_default_args, load_config, log, Mongo
-
+from ingest_ztf_source_features import run as run_ztf_source_features
+from utils import Mongo, get_default_args, load_config, log
 
 """ load config and secrets """
 KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")

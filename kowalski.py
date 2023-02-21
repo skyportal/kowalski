@@ -1,22 +1,22 @@
 #!/usr/bin/env python
 import bz2
-from contextlib import contextmanager
 import datetime
-from deepdiff import DeepDiff
-from distutils.version import LooseVersion as Version
-import fire
 import pathlib
-from pprint import pprint
-import questionary
 import re
 import secrets
 import string
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
+from distutils.version import LooseVersion as Version
+from pprint import pprint
 from typing import Optional, Sequence
-import yaml
 
+import fire
+import questionary
+import yaml
+from deepdiff import DeepDiff
 
 dependencies = {
     "python": (
