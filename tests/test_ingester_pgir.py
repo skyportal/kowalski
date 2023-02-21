@@ -1,15 +1,14 @@
-from confluent_kafka import Producer
 import datetime
 import os
 import pathlib
-import requests
 import subprocess
 import time
 
+import requests
 from alert_broker_pgir import watchdog
+from confluent_kafka import Producer
 from test_ingester import Program
-from utils import init_db_sync, load_config, log, Mongo
-
+from utils import Mongo, init_db_sync, load_config, log
 
 """ load config and secrets """
 KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")

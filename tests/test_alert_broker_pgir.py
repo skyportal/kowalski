@@ -1,7 +1,7 @@
 import os
+
 import fastavro
 import pytest
-
 from alert_broker_pgir import PGIRAlertWorker
 from utils import load_config, log
 

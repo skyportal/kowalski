@@ -1,7 +1,7 @@
-import fastavro
 import os
-import pytest
 
+import fastavro
+import pytest
 from alert_broker_ztf import ZTFAlertWorker
 from utils import load_config, log
 

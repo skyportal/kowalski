@@ -1,21 +1,15 @@
 import argparse
 import datetime
 import json
-import pytz
-import requests
 import os
 import sys
 import time
 import traceback
+
+import pytz
+import requests
 import tqdm
-
-from utils import (
-    load_config,
-    log,
-    Mongo,
-    radec_str2geojson,
-)
-
+from utils import Mongo, load_config, log, radec_str2geojson
 
 """ load config and secrets """
 KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
