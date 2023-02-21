@@ -17,7 +17,8 @@ Essentially the same as the ZTF ingester tests (test_ingester.py), except -
 """
 
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 class Filter:
@@ -301,7 +302,7 @@ class TestIngester:
         )
 
         # small number of alerts that come with kowalski
-        path_alerts = pathlib.Path("/app/data/wntr_alerts/20220815/")
+        path_alerts = pathlib.Path(f"{KOWALSKI_APP_PATH}/data/wntr_alerts/20220815/")
 
         # push!
         for p in path_alerts.glob("*.avro"):
@@ -394,6 +395,7 @@ class TestIngester:
             username=config["database"]["username"],
             password=config["database"]["password"],
             db=config["database"]["db"],
+            srv=config["database"]["srv"],
             verbose=True,
         )
         collection_alerts = config["database"]["collections"]["alerts_wntr"]

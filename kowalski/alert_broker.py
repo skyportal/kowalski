@@ -146,6 +146,7 @@ class AlertConsumer:
             username=config["database"]["username"],
             password=config["database"]["password"],
             db=config["database"]["db"],
+            srv=config["database"]["srv"],
             verbose=self.verbose,
         )
 
@@ -291,6 +292,7 @@ class AlertWorker:
             username=config["database"]["username"],
             password=config["database"]["password"],
             db=config["database"]["db"],
+            srv=config["database"]["srv"],
             verbose=self.verbose,
         )
 
@@ -300,9 +302,42 @@ class AlertWorker:
         if USE_TENSORFLOW:
             for model in config["ml_models"].get(self.instrument, []):
                 try:
+                    if not set(
+                        config["ml_models"][self.instrument][model].keys()
+                    ).issubset({"version", "features", "triplet"}):
+                        raise ValueError(
+                            f"Invalid keys in config['ml_models']['{self.instrument}']['{model}'], must be 'version', 'features' and 'triplet'"
+                        )
+
                     model_version = config["ml_models"][self.instrument][model][
                         "version"
                     ]
+                    model_features = config["ml_models"][self.instrument][model].get(
+                        "features", False
+                    )
+                    model_triplet = config["ml_models"][self.instrument][model].get(
+                        "triplet", False
+                    )
+
+                    if model_features is False and model_triplet is False:
+                        raise ValueError(
+                            f"Either 'features' or 'triplet' must be set to True in config['ml_models']['{self.instrument}']['{model}']"
+                        )
+                    if not isinstance(model_features, bool) and not isinstance(
+                        model_features, list
+                    ):
+                        raise ValueError(
+                            f"model_features must be either a bool or a list, got {type(model_features)}"
+                        )
+                    if not isinstance(model_triplet, bool):
+                        raise ValueError(
+                            f"model_triplet must be a bool, got {type(model_triplet)}"
+                        )
+                    if not isinstance(model_version, str) or model_version == "":
+                        raise ValueError(
+                            f"model_version must be a non empty string, got {type(model_version)}"
+                        )
+
                     # todo: allow other formats such as SavedModel
                     model_filepath = os.path.join(
                         config["path"][f"ml_models_{self.instrument.lower()}"],
@@ -311,6 +346,8 @@ class AlertWorker:
                     self.ml_models[model] = {
                         "model": load_model(model_filepath),
                         "version": model_version,
+                        "features": model_features,
+                        "triplet": model_triplet,
                     }
                 except Exception as e:
                     log(f"Error loading ML model {model}: {str(e)}")
@@ -684,23 +721,32 @@ class AlertWorker:
                     features = np.expand_dims(ztf_alert.data["features"], axis=[0, -1])
                     triplet = np.expand_dims(ztf_alert.data["triplet"], axis=[0])
 
-                # braai
-                if "braai" in self.ml_models.keys():
-                    with timer("braai"):
-                        braai = self.ml_models["braai"]["model"].predict(x=triplet)[0]
-                        scores["braai"] = float(braai)
-                        scores["braai_version"] = self.ml_models["braai"]["version"]
-                # acai
-                for model_name in ("acai_h", "acai_v", "acai_o", "acai_n", "acai_b"):
-                    if model_name in self.ml_models.keys():
-                        with timer(model_name):
-                            score = self.ml_models[model_name]["model"].predict(
-                                [features, triplet]
-                            )[0]
-                            scores[model_name] = float(score)
-                            scores[f"{model_name}_version"] = self.ml_models[
-                                model_name
-                            ]["version"]
+                for model_name in self.ml_models.keys():
+                    inputs = []
+                    if self.ml_models[model_name]["features"] is True:
+                        inputs.append(features)
+                    elif (
+                        len(self.ml_models[model_name]["features"]) > 0
+                        if isinstance(self.ml_models[model_name]["features"], list)
+                        else False
+                    ):
+                        inputs.append(
+                            ztf_alert.make_features(
+                                self.ml_models[model_name]["features"]
+                            )
+                        )
+                    if self.ml_models[model_name]["triplet"] is True:
+                        inputs.append(triplet)
+                    if len(inputs) == 1:
+                        inputs = inputs[0]
+
+                    with timer(model_name):
+                        score = self.ml_models[model_name]["model"].predict(x=inputs)[0]
+                        scores[model_name] = float(score)
+                        scores[f"{model_name}_version"] = self.ml_models[model_name][
+                            "version"
+                        ]
+
             except Exception as e:
                 log(str(e))
 

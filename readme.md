@@ -225,7 +225,14 @@ code and `flake8` to verify that code complies with [PEP8](https://www.python.or
 
 ## Building and deploying locally
 
-When developing, it can be useful to just run kowalski directly.
+When developing, it can be useful to just run kowalski directly (without docker), so that you can edit the code and see the changes immediately.
+When doing so, it is important to have correct paths to the config file and the server.properties file.
+To help with this, we provide a `config.local.yaml`, that you can rename to `config.yaml` and edit to your needs.
+
+You will need to edit the `database` section to point to your local mongodb instance, or to a mongodb atlas cluster, in which case you should set `database.srv` to `true`, and `database.replica_set` to the name of your cluster or simply `null`.
+If you are using a mongodb atlas cluster, kowalski won't be able to create admin users, so you will need to do so manually on the cluster's web interface. You will need to create 2 users: admin user and user, based on what usernames and passwords you've set in the config file.
+
+When it comes to the changes to the `server.properties` file, those will be discussed in the `Alert Broker and Ingester` section.
 
 ### API
 
@@ -241,9 +248,7 @@ Just as described above, the config file must be created:
 cp config.defaults.yaml config.yaml
 ```
 
-When running locally, it is likely that database.host should be 127.0.0.1 or similar. For simplicity, we also set database.replica_set to null.
-
-We need to set the admin and user roles for the database. To do so, login to mongdb and set (using the default values from the config):
+When running mongodb locally **(not on mongodb atlas or other distant servers)**, it is likely that database.host should be 127.0.0.1 or similar. For simplicity, we also set database.replica_set to null. We also need to set the admin and user roles for the database. To do so, login to mongdb and set (using the default values from the config):
 
 ```bash
 mongosh --host 127.0.0.1 --port 27017
@@ -297,12 +302,44 @@ tar -xzf kafka_$scala_version-$kafka_version.tgz
 
 Installed in this way, path.kafka in the config should be set to ./kafka_2.13-3.4.0.
 
+Then, you need to copy the `kowalski/server.properties` file to the `kafka_$scala_version-$kafka_version/config` directory, replacing the existing file.
+When running locally, you should change said `server.properties` file to set `log.dirs=/data/logs/kafka-logs` to `log.dirs=./data/logs/kafka-logs` instead (the addition here is the `.` at the beginning of the path) to avoid permission issues.
+
+Moreover, the ingester needs the different models to be downloaded. To do so, run:
+
+```bash
+cd kowalski && mkdir models && cd models && \
+braai_version=d6_m9 && acai_h_version=d1_dnn_20201130 && \
+acai_v_version=d1_dnn_20201130 && acai_o_version=d1_dnn_20201130 && \
+acai_n_version=d1_dnn_20201130 && acai_b_version=d1_dnn_20201130 && \
+wget https://github.com/dmitryduev/braai/raw/master/models/braai_$braai_version.h5 -O braai.$braai_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_h.$acai_h_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_v.$acai_v_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_o.$acai_o_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_n.$acai_n_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_b.$acai_b_version.h5
+```
+
+Next, you need to start the dask scheduler and workers:
+
+```bash
+KOWALSKI_APP_PATH=./ python kowalski/dask_cluster.py
+```
+
+If you have a GPU available, tensorflow might use it by default. However, you might run into some issue running the ml models when following the instructions below if you GPU does not have much memory. To avoid this, you can set the environment variable `CUDA_VISIBLE_DEVICES=-1` before running the dask cluster:
+
+```bash
+CUDA_VISIBLE_DEVICES=-1 KOWALSKI_APP_PATH=./ python kowalski/dask_cluster.py
+```
+
+
 The broker can then be run with
 ```bash
 KOWALSKI_APP_PATH=./ python kowalski/alert_broker_ztf.py
 ```
 
 Then tests can be run by going into the kowalski/ directory
+*(when running the tests, you do not need to start the broker as instructed in the previous step. The tests will take care of it)*
 
 ```bash
 cd kowalski
@@ -311,14 +348,14 @@ cd kowalski
 and running:
 
 ```bash
-KOWALSKI_APP_PATH=../ KOWALSKI_DATA_PATH=../data python -m pytest -s alert_broker_ztf.py ../tests/test_alert_broker_ztf.py
+KOWALSKI_APP_PATH=../ python -m pytest -s alert_broker_ztf.py ../tests/test_alert_broker_ztf.py
 ```
 
 We also provide an option `USE_TENSORFLOW=False` for users who cannot install Tensorflow for whatever reason.
 
 To test the ingester, path.logs in the config should be set to ./data/logs/.
 
-Then tests can be run by going into the kowalski/ directory
+Then tests can be run by going into the kowalski/ directory (similarly to the broker tests, you do not need to star the broker manually as instructed in the previous step. The tests will take care of it)
 
 ```bash
 cd kowalski
@@ -327,8 +364,20 @@ cd kowalski
 and running:
 
 ```bash
-KOWALSKI_APP_PATH=../ KOWALSKI_DATA_PATH=../data python -m pytest ../tests/test_ingester.py
+PYTHONPATH=. KOWALSKI_APP_PATH=../ python -m pytest ../tests/test_ingester.py
 ```
+
+The ingester tests can take a while to complete, be patient! If they encounter an error with kafka, it is likely that you did not modify the `server.properties` file as instructed above, meaning that the kafka logs can't be created, which blocks the test without showing an error.
+
+If that happens, you can simply run the ingester without pytest so that you can see the logs and debug the issue:
+
+```bash
+PYTHONPATH=. KOWALSKI_APP_PATH=../ python ../tests/test_ingester.py
+```
+
+Another common problem is that if you stop the ingester test while its running or if it fails, it might leave a lock file in the kafka logs directory, which will prevent kafka from starting the next time you try to do so. If that happens, you can: delete the lock file, or simply retry starting the test, as a failed test attempt is supposed to remove the lock file. Then, the test should work on the following attempt.
+
+We stronly advise you to open the `server.log` file found in /kakfa_$scala_version-$kafka_version/logs/ to see what is going on with the kafka server. It will be particularly useful if you encounter errors with the ingester tests or the broker.
 
 ### Tools
 
@@ -346,7 +395,7 @@ cd kowalski
 
 and running:
 ```bash
-KOWALSKI_APP_PATH=../ KOWALSKI_DATA_PATH=../data python -m pytest -s ../tools/istarmap.py ../tests/test_tools.py
+KOWALSKI_APP_PATH=../ python -m pytest -s ../tools/istarmap.py ../tests/test_tools.py
 ```
 
 ### Add a new alert stream to Kowalski

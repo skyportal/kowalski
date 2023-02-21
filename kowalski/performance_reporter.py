@@ -1,3 +1,4 @@
+import os
 import datetime
 import pathlib
 import re
@@ -16,7 +17,8 @@ from slack_sdk.errors import SlackApiError
 from utils import load_config, log
 
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 action_patterns = {
     "Mongification": "mongification",

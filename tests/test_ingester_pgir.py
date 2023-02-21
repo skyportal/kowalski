@@ -12,7 +12,8 @@ from utils import init_db_sync, load_config, log, Mongo
 
 
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 class Filter:
@@ -310,7 +311,7 @@ class TestIngester:
         )
 
         # small number of alerts that come with kowalski
-        path_alerts = pathlib.Path("/app/data/pgir_alerts/20210629/")
+        path_alerts = pathlib.Path(f"{KOWALSKI_APP_PATH}/data/pgir_alerts/20210629/")
         # fixme: ONLY USING THE ARCHIVAL PGIR ALERTS FOR NOW
 
         # push!
@@ -378,6 +379,7 @@ class TestIngester:
             username=config["database"]["username"],
             password=config["database"]["password"],
             db=config["database"]["db"],
+            srv=config["database"]["srv"],
             verbose=True,
         )
         collection_alerts = config["database"]["collections"]["alerts_pgir"]

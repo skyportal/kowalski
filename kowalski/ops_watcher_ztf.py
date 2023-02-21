@@ -10,7 +10,8 @@ from utils import datetime_to_jd, load_config, Mongo, radec_str2geojson, time_st
 
 
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 def mongify(doc):
@@ -50,6 +51,7 @@ def get_ops():
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
+        srv=config["database"]["srv"],
         verbose=0,
     )
     print(f"{time_stamp()}: Successfully connected.")

@@ -1,3 +1,4 @@
+import os
 import fastavro
 import pytest
 
@@ -5,7 +6,8 @@ from alert_broker_winter import WNTRAlertWorker
 from utils import load_config, log
 
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 @pytest.fixture(autouse=True, scope="class")
@@ -23,7 +25,7 @@ def alert_fixture(request):
     # candid = 2459303860002
     candid = 2459362710041  # candidate with a prv_candidate field
     request.cls.candid = candid
-    sample_avro = f"/app/data/wntr_alerts/20220815/{candid}.avro"
+    sample_avro = f"{KOWALSKI_APP_PATH}/data/wntr_alerts/20220815/{candid}.avro"
     with open(sample_avro, "rb") as f:
         for record in fastavro.reader(f):
             request.cls.alert = record

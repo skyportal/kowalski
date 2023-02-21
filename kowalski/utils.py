@@ -179,73 +179,96 @@ async def init_db(config, verbose=True):
     """
     Initialize db if necessary: create the sole non-admin user
     """
-    motor_client_arguments = {
-        "username": config["database"]["admin_username"],
-        "password": config["database"]["admin_password"],
-        "host": config["database"]["host"],
-        "port": config["database"]["port"],
-    }
+    if config["database"]["srv"] is True:
+        conn_string = "mongodb+srv://"
+    else:
+        conn_string = "mongodb://"
+
+    if (
+        config["database"]["admin_username"] is not None
+        and config["database"]["admin_password"] is not None
+    ):
+        conn_string += f"{config['database']['admin_username']}:{config['database']['admin_password']}@"
+
+    conn_string += f"{config['database']['host']}"
+    if config["database"]["srv"] is not True:
+        conn_string += f":{config['database']['port']}"
+
     if config["database"]["replica_set"] is not None:
-        motor_client_arguments["replicaset"] = config["database"]["replica_set"]
-    _client = AsyncIOMotorClient(**motor_client_arguments)
+        conn_string += f"/?replicaSet={config['database']['replica_set']}"
 
-    # _id: db_name.user_name
-    user_ids = []
-    async for _u in _client.admin.system.users.find({}, {"_id": 1}):
-        user_ids.append(_u["_id"])
+    _client = AsyncIOMotorClient(conn_string)
 
-    db_name = config["database"]["db"]
-    username = config["database"]["username"]
+    # to fix: on srv (like atlas) we can't do this
+    if config["database"]["srv"] is not True:
+        user_ids = []
+        async for _u in _client.admin.system.users.find({}, {"_id": 1}):
+            user_ids.append(_u["_id"])
 
-    _mongo = _client[db_name]
+        db_name = config["database"]["db"]
+        username = config["database"]["username"]
 
-    if f"{db_name}.{username}" not in user_ids:
-        await _mongo.command(
-            "createUser",
-            config["database"]["username"],
-            pwd=config["database"]["password"],
-            roles=["readWrite"],
-        )
-        if verbose:
-            print("Successfully initialized db")
+        _mongo = _client[db_name]
 
-    _mongo.client.close()
+        if f"{db_name}.{username}" not in user_ids:
+            await _mongo.command(
+                "createUser",
+                config["database"]["username"],
+                pwd=config["database"]["password"],
+                roles=["readWrite"],
+            )
+            if verbose:
+                print("Successfully initialized db")
+
+        _mongo.client.close()
 
 
 def init_db_sync(config, verbose=False):
     """
     Initialize db if necessary: create the sole non-admin user
     """
-    pymongo_client_arguments = {
-        "username": config["database"]["admin_username"],
-        "password": config["database"]["admin_password"],
-        "host": config["database"]["host"],
-        "port": config["database"]["port"],
-    }
+    if config["database"]["srv"] is True:
+        conn_string = "mongodb+srv://"
+    else:
+        conn_string = "mongodb://"
+
+    if (
+        config["database"]["admin_username"] is not None
+        and config["database"]["admin_password"] is not None
+    ):
+        conn_string += f"{config['database']['admin_username']}:{config['database']['admin_password']}@"
+
+    conn_string += f"{config['database']['host']}"
+    if config["database"]["srv"] is not True:
+        conn_string += f":{config['database']['port']}"
+
     if config["database"]["replica_set"] is not None:
-        pymongo_client_arguments["replicaset"] = config["database"]["replica_set"]
-    client = pymongo.MongoClient(**pymongo_client_arguments)
+        conn_string += f"/?replicaSet={config['database']['replica_set']}"
 
-    user_ids = []
-    for _u in client.admin.system.users.find({}, {"_id": 1}):
-        user_ids.append(_u["_id"])
+    client = pymongo.MongoClient(conn_string)
 
-    db_name = config["database"]["db"]
-    username = config["database"]["username"]
+    # to fix: on srv (like atlas) we can't do this
+    if config["database"]["srv"] is not True:
+        user_ids = []
+        for _u in client.admin.system.users.find({}, {"_id": 1}):
+            user_ids.append(_u["_id"])
 
-    _mongo = client[db_name]
+        db_name = config["database"]["db"]
+        username = config["database"]["username"]
 
-    if f"{db_name}.{username}" not in user_ids:
-        _mongo.command(
-            "createUser",
-            config["database"]["username"],
-            pwd=config["database"]["password"],
-            roles=["readWrite"],
-        )
-        if verbose:
-            log("Successfully initialized db")
+        _mongo = client[db_name]
 
-    _mongo.client.close()
+        if f"{db_name}.{username}" not in user_ids:
+            _mongo.command(
+                "createUser",
+                config["database"]["username"],
+                pwd=config["database"]["password"],
+                roles=["readWrite"],
+            )
+            if verbose:
+                log("Successfully initialized db")
+
+        _mongo.client.close()
 
 
 async def add_admin(_mongo, config):
@@ -282,6 +305,7 @@ class Mongo:
         username: str = None,
         password: str = None,
         db: str = None,
+        srv: bool = False,
         verbose=0,
         **kwargs,
     ):
@@ -291,12 +315,22 @@ class Mongo:
         self.password = password
         self.replica_set = replica_set
 
-        conn_string = "mongodb://"
+        if srv is True:
+            conn_string = "mongodb+srv://"
+        else:
+            conn_string = "mongodb://"
+
         if self.username is not None and self.password is not None:
             conn_string += f"{self.username}:{self.password}@"
-        conn_string += f"{self.host}:{self.port}"
+
+        if srv is True:
+            conn_string += f"{self.host}"
+        else:
+            conn_string += f"{self.host}:{self.port}"
+
         if db is not None:
             conn_string += f"/{db}"
+
         if self.replica_set is not None:
             conn_string += f"?replicaSet={self.replica_set}"
 
@@ -1096,6 +1130,35 @@ def ccd_quad_to_rc(ccd: int, quad: int) -> int:
     return rc
 
 
+ZTF_ALERT_NUMERICAL_FEATURES = (
+    "drb",
+    "diffmaglim",
+    "ra",
+    "dec",
+    "magpsf",
+    "sigmapsf",
+    "chipsf",
+    "fwhm",
+    "sky",
+    "chinr",
+    "sharpnr",
+    "sgscore1",
+    "distpsnr1",
+    "sgscore2",
+    "distpsnr2",
+    "sgscore3",
+    "distpsnr3",
+    "ndethist",
+    "ncovhist",
+    "scorr",
+    "nmtchps",
+    "clrcoeff",
+    "clrcounc",
+    "neargaia",
+    "neargaiabright",
+)
+
+
 class ZTFAlert:
     def __init__(self, alert, label=None, **kwargs):
         self.kwargs = kwargs
@@ -1106,36 +1169,7 @@ class ZTFAlert:
 
         triplet_normalize = kwargs.get("triplet_normalize", True)
         to_tpu = kwargs.get("to_tpu", False)
-        feature_names = kwargs.get(
-            "feature_names",
-            (
-                "drb",
-                "diffmaglim",
-                "ra",
-                "dec",
-                "magpsf",
-                "sigmapsf",
-                "chipsf",
-                "fwhm",
-                "sky",
-                "chinr",
-                "sharpnr",
-                "sgscore1",
-                "distpsnr1",
-                "sgscore2",
-                "distpsnr2",
-                "sgscore3",
-                "distpsnr3",
-                "ndethist",
-                "ncovhist",
-                "scorr",
-                "nmtchps",
-                "clrcoeff",
-                "clrcounc",
-                "neargaia",
-                "neargaiabright",
-            ),
-        )
+        feature_names = kwargs.get("feature_names", ZTF_ALERT_NUMERICAL_FEATURES)
         feature_norms = kwargs.get("feature_norms", None)
         # dmdt_up_to_candidate_jd = kwargs.get("dmdt_up_to_candidate_jd", True)
 
@@ -1195,6 +1229,10 @@ class ZTFAlert:
         features = []
         if feature_names is None:
             feature_names = list(self.alert["candidate"].keys())
+        elif not set(feature_names).issubset(set(ZTF_ALERT_NUMERICAL_FEATURES)):
+            raise ValueError(
+                "feature_names must be a subset of the ZTF_ALERT_NUMERICAL_FEATURES"
+            )
         for feature_name in feature_names:
             feature = self.alert["candidate"].get(feature_name)
             if feature is None and feature_name == "drb":

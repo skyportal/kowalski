@@ -455,7 +455,7 @@ class TestIngester:
         )
 
         # small number of alerts that come with kowalski
-        path_alerts = pathlib.Path("/app/data/ztf_alerts/20200202/")
+        path_alerts = pathlib.Path(f"{KOWALSKI_APP_PATH}/data/ztf_alerts/20200202/")
         # grab some more alerts from gs://ztf-fritz/sample-public-alerts
         try:
             log("Grabbing more alerts from gs://ztf-fritz/sample-public-alerts")
@@ -475,7 +475,7 @@ class TestIngester:
                 "cp",
                 "-n",
                 "gs://ztf-fritz/sample-public-alerts/*.avro",
-                "/app/data/ztf_alerts/20200202/",
+                f"{KOWALSKI_APP_PATH}/data/ztf_alerts/20200202/",
             ]
         )
         log(f"Fetched {len(ids)} alerts from gs://ztf-fritz/sample-public-alerts")
@@ -544,6 +544,7 @@ class TestIngester:
             username=config["database"]["username"],
             password=config["database"]["password"],
             db=config["database"]["db"],
+            srv=config["database"]["srv"],
             verbose=True,
         )
         collection_alerts = config["database"]["collections"]["alerts_ztf"]
@@ -604,3 +605,8 @@ class TestIngester:
             assert result["data"]["totalMatches"] == 1
             assert "sources" in result["data"]
             assert result["data"]["sources"][0]["id"] == "ZTF20aaelulu"
+
+
+if __name__ == "__main__":
+    test_ingester = TestIngester()
+    test_ingester.test_ingester()

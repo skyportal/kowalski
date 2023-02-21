@@ -153,8 +153,14 @@ def check_configs(
                 for k, v in deep_diff.items()
                 if k in ("dictionary_item_added", "dictionary_item_removed")
             }
-            if len(difference) > 0:
-                print("config.yaml structure differs from config.defaults.yaml")
+            if (
+                len(difference) > 0
+                and "['kowalski']['ml_models']"
+                not in difference["dictionary_item_removed"][0]
+            ):
+                print(
+                    "\n !!! config.yaml structure differs from config.defaults.yaml !!!"
+                )
                 pprint(difference)
                 raise KeyError("Fix config.yaml before proceeding")
 

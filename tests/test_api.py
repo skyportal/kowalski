@@ -12,7 +12,6 @@ KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
 config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
-@pytest.fixture
 async def get_admin_credentials(aiohttp_client):
     """
         Fixture to get authorization token for admin
@@ -156,7 +155,7 @@ async def test_auth_error(aiohttp_client):
 
 
 @pytest.mark.asyncio
-async def test_users(aiohttp_client, get_admin_credentials):
+async def test_users(aiohttp_client):
     """Test user management: /api/users
 
     :param aiohttp_client:
@@ -165,25 +164,28 @@ async def test_users(aiohttp_client, get_admin_credentials):
     client = await aiohttp_client(await app_factory())
 
     # check JWT authorization
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": f"Bearer {access_token}"}
 
-    test_user = "test_user"
-    test_user_edited = "test_user_edited"
+    test_user = uid(6)
+    test_user_edited = uid(6)
+    test_user_password = uid(6)
 
     # adding a user
     resp = await client.post(
         "/api/users",
-        json={"username": test_user, "password": uid(6)},
+        json={"username": test_user, "password": test_user_password},
         headers=headers,
     )
     assert resp.status == 200
 
     # editing user data
     resp = await client.put(
-        f"/api/users/{test_user}", json={"password": uid(6)}, headers=headers
+        f"/api/users/{test_user}",
+        json={"password": test_user_password},
+        headers=headers,
     )
     assert resp.status == 200
     resp = await client.put(
@@ -202,7 +204,7 @@ async def test_users(aiohttp_client, get_admin_credentials):
 
 
 @pytest.mark.asyncio
-async def test_filters(aiohttp_client, get_admin_credentials):
+async def test_filters(aiohttp_client):
     """Test saving, testing, retrieving, modifying, and removing a user-defined filter: /api/filters
 
     :param aiohttp_client:
@@ -211,7 +213,7 @@ async def test_filters(aiohttp_client, get_admin_credentials):
     client = await aiohttp_client(await app_factory())
 
     # authorize as admin, regular users cannot do this
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -352,7 +354,7 @@ async def test_filters(aiohttp_client, get_admin_credentials):
 
 
 @pytest.mark.asyncio
-async def test_invalid_pipeline_stage_in_filter(aiohttp_client, get_admin_credentials):
+async def test_invalid_pipeline_stage_in_filter(aiohttp_client):
     """Test trying to save a bad filter with an invalid pipeline stage: POST /api/filters
 
     :param aiohttp_client:
@@ -360,7 +362,7 @@ async def test_invalid_pipeline_stage_in_filter(aiohttp_client, get_admin_creden
     """
     client = await aiohttp_client(await app_factory())
 
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -392,9 +394,7 @@ async def test_invalid_pipeline_stage_in_filter(aiohttp_client, get_admin_creden
 
 
 @pytest.mark.asyncio
-async def test_forbidden_pipeline_stage_in_filter(
-    aiohttp_client, get_admin_credentials
-):
+async def test_forbidden_pipeline_stage_in_filter(aiohttp_client):
     """Test trying to save a bad filter with an invalid stage: POST /api/filters
 
     :param aiohttp_client:
@@ -402,7 +402,7 @@ async def test_forbidden_pipeline_stage_in_filter(
     """
     client = await aiohttp_client(await app_factory())
 
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -443,7 +443,7 @@ async def test_forbidden_pipeline_stage_in_filter(
 
 
 @pytest.mark.asyncio
-async def test_set_nonexistent_active_fid(aiohttp_client, get_admin_credentials):
+async def test_set_nonexistent_active_fid(aiohttp_client):
     """
     Test trying to set an invalid active filter version: PATCH /api/filters
 
@@ -452,7 +452,7 @@ async def test_set_nonexistent_active_fid(aiohttp_client, get_admin_credentials)
     """
     client = await aiohttp_client(await app_factory())
 
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -494,7 +494,7 @@ async def test_set_nonexistent_active_fid(aiohttp_client, get_admin_credentials)
 
 
 @pytest.mark.asyncio
-async def test_patch_remove_nonexistent_filter(aiohttp_client, get_admin_credentials):
+async def test_patch_remove_nonexistent_filter(aiohttp_client):
     """Test trying to patch and remove a non-existent filter:
     PATCH /api/filters
     DELETE /api/filters/{filter_id}
@@ -504,7 +504,7 @@ async def test_patch_remove_nonexistent_filter(aiohttp_client, get_admin_credent
     """
     client = await aiohttp_client(await app_factory())
 
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -551,7 +551,7 @@ async def test_patch_remove_nonexistent_filter(aiohttp_client, get_admin_credent
 
 
 @pytest.mark.asyncio
-async def test_query_cone_search(aiohttp_client, get_admin_credentials):
+async def test_query_cone_search(aiohttp_client):
     """
         Test {"query_type": "cone_search", ...}: POST /api/queries
     :param aiohttp_client:
@@ -560,7 +560,7 @@ async def test_query_cone_search(aiohttp_client, get_admin_credentials):
     client = await aiohttp_client(await app_factory())
 
     # authorize
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -597,7 +597,7 @@ async def test_query_cone_search(aiohttp_client, get_admin_credentials):
 
 
 @pytest.mark.asyncio
-async def test_query_find_one(aiohttp_client, get_admin_credentials):
+async def test_query_find_one(aiohttp_client):
     """
         Test {"query_type": "find_one", ...}: POST /api/queries
     :param aiohttp_client:
@@ -606,7 +606,7 @@ async def test_query_find_one(aiohttp_client, get_admin_credentials):
     client = await aiohttp_client(await app_factory())
 
     # authorize
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": access_token}
@@ -633,7 +633,7 @@ async def test_query_find_one(aiohttp_client, get_admin_credentials):
 
 
 @pytest.mark.asyncio
-async def test_query_find(aiohttp_client, get_admin_credentials):
+async def test_query_find(aiohttp_client):
     """
         Test {"query_type": "find", ...}: POST /api/queries
     :param aiohttp_client:
@@ -642,7 +642,7 @@ async def test_query_find(aiohttp_client, get_admin_credentials):
     client = await aiohttp_client(await app_factory())
 
     # authorize
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": access_token}
@@ -672,7 +672,7 @@ async def test_query_find(aiohttp_client, get_admin_credentials):
 
 
 @pytest.mark.asyncio
-async def test_query_aggregate(aiohttp_client, get_admin_credentials):
+async def test_query_aggregate(aiohttp_client):
     """
         Test {"query_type": "aggregate", ...}: POST /api/queries
     :param aiohttp_client:
@@ -681,7 +681,7 @@ async def test_query_aggregate(aiohttp_client, get_admin_credentials):
     client = await aiohttp_client(await app_factory())
 
     # authorize
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": access_token}
@@ -711,7 +711,7 @@ async def test_query_aggregate(aiohttp_client, get_admin_credentials):
 
 
 @pytest.mark.asyncio
-async def test_query_info(aiohttp_client, get_admin_credentials):
+async def test_query_info(aiohttp_client):
     """
         Test {"query_type": "info", ...}: POST /api/queries
     :param aiohttp_client:
@@ -720,7 +720,7 @@ async def test_query_info(aiohttp_client, get_admin_credentials):
     client = await aiohttp_client(await app_factory())
 
     # authorize
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": access_token}
@@ -738,7 +738,7 @@ async def test_query_info(aiohttp_client, get_admin_credentials):
 
 
 @pytest.mark.asyncio
-async def test_query_count_documents(aiohttp_client, get_admin_credentials):
+async def test_query_count_documents(aiohttp_client):
     """
         Test {"query_type": "count_documents", ...}: POST /api/queries
     :param aiohttp_client:
@@ -747,7 +747,7 @@ async def test_query_count_documents(aiohttp_client, get_admin_credentials):
     client = await aiohttp_client(await app_factory())
 
     # authorize
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": access_token}
@@ -771,7 +771,7 @@ async def test_query_count_documents(aiohttp_client, get_admin_credentials):
 
 
 @pytest.mark.asyncio
-async def test_query_estimated_document_count(aiohttp_client, get_admin_credentials):
+async def test_query_estimated_document_count(aiohttp_client):
     """
         Test {"query_type": "estimated_document_count", ...}: POST /api/queries
     :param aiohttp_client:
@@ -780,7 +780,7 @@ async def test_query_estimated_document_count(aiohttp_client, get_admin_credenti
     client = await aiohttp_client(await app_factory())
 
     # authorize
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": access_token}
@@ -803,7 +803,7 @@ async def test_query_estimated_document_count(aiohttp_client, get_admin_credenti
 
 
 @pytest.mark.asyncio
-async def test_query_near(aiohttp_client, get_admin_credentials):
+async def test_query_near(aiohttp_client):
     """
         Test {"query_type": "near", ...}: POST /api/queries
     :param aiohttp_client:
@@ -812,7 +812,7 @@ async def test_query_near(aiohttp_client, get_admin_credentials):
     client = await aiohttp_client(await app_factory())
 
     # authorize
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -850,7 +850,7 @@ async def test_query_near(aiohttp_client, get_admin_credentials):
 
 
 @pytest.mark.asyncio
-async def test_query_unauthorized(aiohttp_client, get_admin_credentials):
+async def test_query_unauthorized(aiohttp_client):
     """
         Test an unauthorized query: POST /api/queries
     :param aiohttp_client:
@@ -873,7 +873,7 @@ async def test_query_unauthorized(aiohttp_client, get_admin_credentials):
 
 
 @pytest.mark.asyncio
-async def test_triggers_ztf(aiohttp_client, get_admin_credentials):
+async def test_triggers_ztf(aiohttp_client):
     """Test saving, testing, retrieving, modifying, and removing a ZTF trigger: /api/triggers/ztf
 
     :param aiohttp_client:
@@ -883,7 +883,7 @@ async def test_triggers_ztf(aiohttp_client, get_admin_credentials):
     client = await aiohttp_client(await app_factory())
 
     # authorize as admin, regular users cannot do this
-    credentials = await get_admin_credentials
+    credentials = await get_admin_credentials(aiohttp_client)
     access_token = credentials["token"]
 
     headers = {"Authorization": f"Bearer {access_token}"}

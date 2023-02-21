@@ -14,7 +14,6 @@ from utils import get_default_args, load_config, log, Mongo
 
 """ load config and secrets """
 KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
-KOWALSKI_DATA_PATH = os.environ.get("KOWALSKI_DATA_PATH", "/app/data")
 config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
@@ -28,6 +27,7 @@ def mongo_fixture(request):
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
+        srv=config["database"]["srv"],
         verbose=True,
     )
     log("Successfully connected")
@@ -45,7 +45,7 @@ class TestTools:
         collection = f"ZTF_source_features_{tag}"
 
         run_ztf_source_features(
-            path=f"{KOWALSKI_DATA_PATH}/ztf_source_features",
+            path=f"{KOWALSKI_APP_PATH}/data/ztf_source_features",
             tag=tag,
             xmatch=False,
             num_processes=1,
@@ -61,7 +61,7 @@ class TestTools:
         collection = f"ZTF_source_classifications_{tag}"
 
         run_ztf_source_classifications(
-            path=f"{KOWALSKI_DATA_PATH}/ztf_source_classifications/",
+            path=f"{KOWALSKI_APP_PATH}/data/ztf_source_classifications/",
             tag=tag,
             num_processes=1,
         )
@@ -76,7 +76,7 @@ class TestTools:
         sources_collection = f"ZTF_sources_{tag}"
         exposures_collection = f"ZTF_exposures_{tag}"
         run_ztf_matchfiles(
-            path=f"{KOWALSKI_DATA_PATH}/ztf_matchfiles",
+            path=f"{KOWALSKI_APP_PATH}/data/ztf_matchfiles",
             tag=tag,
             num_proc=1,
         )
@@ -95,7 +95,7 @@ class TestTools:
         collection = "VLASS_DR1"
 
         run_vlass(
-            path=f"{KOWALSKI_DATA_PATH}/catalogs",
+            path=f"{KOWALSKI_APP_PATH}/data/catalogs",
             num_processes=1,
         )
 
@@ -108,7 +108,7 @@ class TestTools:
         collection = "IGAPS_DR2"
 
         run_igaps(
-            path=f"{KOWALSKI_DATA_PATH}/catalogs",
+            path=f"{KOWALSKI_APP_PATH}/data/catalogs",
             num_processes=1,
         )
 
@@ -121,7 +121,7 @@ class TestTools:
         tag = get_default_args(run_ztf_public).get("tag")
         collection = f"ZTF_public_sources_{tag}"
 
-        run_ztf_public(path=f"{KOWALSKI_DATA_PATH}/catalogs", num_proc=1)
+        run_ztf_public(path=f"{KOWALSKI_APP_PATH}/data/catalogs", num_proc=1)
 
         ingested_entries = list(self.mongo.db[collection].find({}, {"_id": 1}))
         log(f"Ingested features of {len(ingested_entries)} sources")
@@ -132,7 +132,7 @@ class TestTools:
         sources_collection = "PTF_sources"
         exposures_collection = "PTF_exposures"
         run_ptf_matchfiles(
-            path=f"{KOWALSKI_DATA_PATH}/catalogs",
+            path=f"{KOWALSKI_APP_PATH}/data/catalogs",
             num_proc=1,
         )
 
