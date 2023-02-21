@@ -1130,6 +1130,35 @@ def ccd_quad_to_rc(ccd: int, quad: int) -> int:
     return rc
 
 
+ZTF_ALERT_NUMERICAL_FEATURES = (
+    "drb",
+    "diffmaglim",
+    "ra",
+    "dec",
+    "magpsf",
+    "sigmapsf",
+    "chipsf",
+    "fwhm",
+    "sky",
+    "chinr",
+    "sharpnr",
+    "sgscore1",
+    "distpsnr1",
+    "sgscore2",
+    "distpsnr2",
+    "sgscore3",
+    "distpsnr3",
+    "ndethist",
+    "ncovhist",
+    "scorr",
+    "nmtchps",
+    "clrcoeff",
+    "clrcounc",
+    "neargaia",
+    "neargaiabright",
+)
+
+
 class ZTFAlert:
     def __init__(self, alert, label=None, **kwargs):
         self.kwargs = kwargs
@@ -1140,36 +1169,7 @@ class ZTFAlert:
 
         triplet_normalize = kwargs.get("triplet_normalize", True)
         to_tpu = kwargs.get("to_tpu", False)
-        feature_names = kwargs.get(
-            "feature_names",
-            (
-                "drb",
-                "diffmaglim",
-                "ra",
-                "dec",
-                "magpsf",
-                "sigmapsf",
-                "chipsf",
-                "fwhm",
-                "sky",
-                "chinr",
-                "sharpnr",
-                "sgscore1",
-                "distpsnr1",
-                "sgscore2",
-                "distpsnr2",
-                "sgscore3",
-                "distpsnr3",
-                "ndethist",
-                "ncovhist",
-                "scorr",
-                "nmtchps",
-                "clrcoeff",
-                "clrcounc",
-                "neargaia",
-                "neargaiabright",
-            ),
-        )
+        feature_names = kwargs.get("feature_names", ZTF_ALERT_NUMERICAL_FEATURES)
         feature_norms = kwargs.get("feature_norms", None)
         # dmdt_up_to_candidate_jd = kwargs.get("dmdt_up_to_candidate_jd", True)
 
@@ -1229,6 +1229,10 @@ class ZTFAlert:
         features = []
         if feature_names is None:
             feature_names = list(self.alert["candidate"].keys())
+        elif not set(feature_names).issubset(set(ZTF_ALERT_NUMERICAL_FEATURES)):
+            raise ValueError(
+                "feature_names must be a subset of the ZTF_ALERT_NUMERICAL_FEATURES"
+            )
         for feature_name in feature_names:
             feature = self.alert["candidate"].get(feature_name)
             if feature is None and feature_name == "drb":

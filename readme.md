@@ -308,7 +308,7 @@ When running locally, you should change said `server.properties` file to set `lo
 Moreover, the ingester needs the different models to be downloaded. To do so, run:
 
 ```bash
-mkdir models && cd models && \
+cd kowalski && mkdir models && cd models && \
 braai_version=d6_m9 && acai_h_version=d1_dnn_20201130 && \
 acai_v_version=d1_dnn_20201130 && acai_o_version=d1_dnn_20201130 && \
 acai_n_version=d1_dnn_20201130 && acai_b_version=d1_dnn_20201130 && \

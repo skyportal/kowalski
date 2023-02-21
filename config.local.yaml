@@ -896,18 +896,32 @@ kowalski:
             yMeanPSFMagErr: 1
 
   ml_models:
+    # models need: a version (string, e.g. "v1"), a triplet (bool), and features (bool, or list of features)
+    # if features is True, all features from ZTF_ALERT_NUMERICAL_FEATURES (from utils.py) are used
     ZTF:
       braai:
+        triplet: True
+        features: False
         version: "d6_m9"
       acai_h:
+        triplet: True
+        features: True
         version: "d1_dnn_20201130"
       acai_v:
+        triplet: True
+        features: True
         version: "d1_dnn_20201130"
       acai_o:
+        triplet: True
+        features: True
         version: "d1_dnn_20201130"
       acai_n:
+        triplet: True
+        features: True
         version: "d1_dnn_20201130"
       acai_b:
+        triplet: True
+        features: True
         version: "d1_dnn_20201130"
 
 
