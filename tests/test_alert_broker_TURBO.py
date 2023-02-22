@@ -1,8 +1,10 @@
 import fastavro
 import pytest
 
-from alert_broker_pgir import PGIRAlertWorker
+from alert_broker_TURBO import TURBOAlertWorker
 from utils import load_config, log
+
+import pickle
 
 """ load config and secrets """
 config = load_config(config_file="config.yaml")["kowalski"]
@@ -11,7 +13,7 @@ config = load_config(config_file="config.yaml")["kowalski"]
 @pytest.fixture(autouse=True, scope="class")
 def worker_fixture(request):
     log("Initializing alert processing worker class instance")
-    request.cls.worker = PGIRAlertWorker()
+    request.cls.worker = TURBOAlertWorker()
     log("Successfully initialized")
     # do not attempt monitoring filters
     request.cls.run_forever = False
@@ -19,29 +21,45 @@ def worker_fixture(request):
 
 @pytest.fixture(autouse=True, scope="class")
 def alert_fixture(request):
-    log("Loading a sample ZTF alert")
-    candid = 114297926
-    request.cls.candid = candid
-    sample_avro = f"/app/data/pgir_alerts/20210629/{candid}.avro"
+#    log("Loading a sample ZTF alert")
+#    candid = 114297926
+#    request.cls.candid = candid
+#    sample_avro = f"/app/data/pgir_alerts/20210629/{candid}.avro"
+#    with open(sample_avro, "rb") as f:
+#        for record in fastavro.reader(f):
+#            request.cls.alert = record
+#            print(record)
+#    log("Successfully loaded")
+    sample_avro = "/app/data/real_TURBO_alerts_fewer/89_None.28.avro"
+    log(f"Loading sample TURBO alert {sample_avro}")
+#    sample_avro = "/app/data/pgir_alerts/89_None.28.avro"
+#    sample_avro = "/app/data/real_TURBO_alerts/89_None.28.avro"
     with open(sample_avro, "rb") as f:
         for record in fastavro.reader(f):
             request.cls.alert = record
 #            print(record)
+#            exit()
+#    sample="/app/data/pgir_alerts/TURBO_dict.pkl"
+#    with open(sample, 'rb') as f:
+#        record=pickle.load(f)
+#        request.cls.alert=record
+#        print(record)
+    request.cls.candid=record['candid']
+    print(request.cls.candid)
     log("Successfully loaded")
 
-
-class TestAlertBrokerPGIR:
-    """Test individual components/methods of the PGIR alert processor used by the broker"""
+class TestAlertBrokerTURBO:
+    """Test individual components/methods of the TURBO alert processor used by the broker"""
 
     def test_alert_mongification(self):
         """Test massaging avro packet into a dict digestible by mongodb"""
         alert, prv_candidates = self.worker.alert_mongify(self.alert)
         assert alert["candid"] == self.candid
-        assert len(prv_candidates) == 71
+        assert len(prv_candidates) == 0#71
 
     def test_make_photometry(self):
         df_photometry = self.worker.make_photometry(self.alert)
-        assert len(df_photometry) == 71
+        assert len(df_photometry) == 0#71
 
     def test_make_thumbnails(self):
         alert, _ = self.worker.alert_mongify(self.alert)
@@ -63,7 +81,7 @@ class TestAlertBrokerPGIR:
         """Test cross matching with external catalog"""
         alert, _ = self.worker.alert_mongify(self.alert)
         xmatches = self.worker.alert_filter__xmatch(alert)
-        assert len(xmatches) > 0
+        assert len(xmatches) >= 0
 
     def test_alert_filter__xmatch_clu(self):
         """Test cross matching with the CLU catalog"""

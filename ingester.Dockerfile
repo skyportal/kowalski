@@ -36,32 +36,34 @@ ADD https://github.com/dmitryduev/acai/raw/master/models/acai_b.$acai_b_version.
 # copy over the test data
 COPY data/ztf_alerts/ /app/data/ztf_alerts/
 COPY data/pgir_alerts/ /app/data/pgir_alerts/
-COPY data/wntr_alerts/ /app/data/wntr_alerts/
+COPY data/TURBO_alerts/ /app/data/TURBO_alerts/
 COPY data/catalogs/ /app/data/catalogs/
 COPY data/ztf_matchfiles/ /app/data/ztf_matchfiles/
 COPY data/ztf_source_features/ /app/data/ztf_source_features/
 COPY data/ztf_source_classifications/ /app/data/ztf_source_classifications/
+COPY data/real_TURBO_alerts /app/data/real_TURBO_alerts/
+COPY data/real_TURBO_alerts_fewer /app/data/real_TURBO_alerts_fewer/
+
 
 # copy over the config and the code
 COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py",\
       "kowalski/dask_cluster.py",\
       "kowalski/alert_broker.py",\
       "kowalski/alert_broker_ztf.py",\
-      "kowalski/alert_broker_winter.py",\
       "kowalski/ops_watcher_ztf.py",\
       "kowalski/tns_watcher.py",\
       "kowalski/alert_broker_pgir.py",\
       "kowalski/dask_cluster_pgir.py",\
-      "kowalski/dask_cluster_winter.py",\
+      "kowalski/alert_broker_TURBO.py",\
+      "kowalski/dask_cluster_TURBO.py",\
       "kowalski/performance_reporter.py",\
       "kowalski/requirements_ingester.txt",\
-      "kowalski/check_db_entries.py",\
       "tests/test_alert_broker_ztf.py",\
       "tests/test_alert_broker_pgir.py",\
-      "tests/test_alert_broker_wntr.py",\
+      "tests/test_alert_broker_TURBO.py",\
       "tests/test_ingester.py",\
       "tests/test_ingester_pgir.py",\
-      "tests/test_ingester_wntr.py",\
+      "tests/test_ingester_TURBO.py",\
       "tests/test_tns_watcher.py",\
       "tests/test_tools.py",\
       "tools/fetch_ztf_matchfiles.py",\
@@ -79,7 +81,7 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
 WORKDIR /app
 
 # install python libs and generate supervisord config file
-RUN pip install -r /app/requirements_ingester.txt --no-cache-dir --use-feature=2020-resolver && \
+RUN pip install -r /app/requirements_ingester.txt --no-cache-dir && \
     python generate_supervisord_conf.py ingester
 
 # run container

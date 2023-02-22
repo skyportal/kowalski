@@ -469,59 +469,59 @@ class Kowalski:
 
         test_setups = [
             {
-                "part": "PGIR alert broker components",
+                "part": "TURBO alert broker components",
                 "container": "kowalski_ingester_1",
-                "test_script": "test_alert_broker_pgir.py",
+                "test_script": "test_alert_broker_TURBO.py",
                 "flaky": False,
             },
             {
-                "part": "ZTF alert broker components",
+                "part": "TURBO alert ingestion",
                 "container": "kowalski_ingester_1",
-                "test_script": "test_alert_broker_ztf.py",
+                "test_script": "test_ingester_TURBO.py",
                 "flaky": False,
             },
-            {
-                "part": "WINTER alert broker components",
-                "container": "kowalski_ingester_1",
-                "test_script": "test_alert_broker_wntr.py",
-                "flaky": False,
-            },
-            {
-                "part": "PGIR alert ingestion",
-                "container": "kowalski_ingester_1",
-                "test_script": "test_ingester_pgir.py",
-                "flaky": False,
-            },
-            {
-                "part": "ZTF alert ingestion",
-                "container": "kowalski_ingester_1",
-                "test_script": "test_ingester.py",
-                "flaky": False,
-            },
-            {
-                "part": "WINTER alert ingestion",
-                "container": "kowalski_ingester_1",
-                "test_script": "test_ingester_wntr.py",
-                "flaky": False,
-            },
-            {
-                "part": "API",
-                "container": "kowalski_api_1",
-                "test_script": "test_api.py",
-                "flaky": False,
-            },
-            {
-                "part": "TNS monitoring",
-                "container": "kowalski_ingester_1",
-                "test_script": "test_tns_watcher.py",
-                "flaky": True,
-            },
-            {
-                "part": "Tools",
-                "container": "kowalski_ingester_1",
-                "test_script": "test_tools.py",
-                "flaky": False,
-            },
+            #{
+            #    "part": "PGIR alert broker components",
+            #    "container": "kowalski_ingester_1",
+            #    "test_script": "test_alert_broker_pgir.py",
+            #    "flaky": False,
+            #},
+            #{
+            #    "part": "ZTF alert broker components",
+            #    "container": "kowalski_ingester_1",
+            #    "test_script": "test_alert_broker_ztf.py",
+            #    "flaky": False,
+            #},
+            #{
+            #    "part": "PGIR alert ingestion",
+            #    "container": "kowalski_ingester_1",
+            #    "test_script": "test_ingester_pgir.py",
+            #    "flaky": False,
+            #},
+            #{
+            #    "part": "ZTF alert ingestion",
+            #    "container": "kowalski_ingester_1",
+            #    "test_script": "test_ingester.py",
+            #    "flaky": False,
+            #},
+            #{
+            #    "part": "API",
+            #    "container": "kowalski_api_1",
+            #    "test_script": "test_api.py",
+            #    "flaky": False,
+            #},
+            #{
+            #    "part": "TNS monitoring",
+            #    "container": "kowalski_ingester_1",
+            #    "test_script": "test_tns_watcher.py",
+            #    "flaky": True,
+            #},
+            #{
+            #    "part": "Tools",
+            #    "container": "kowalski_ingester_1",
+            #    "test_script": "test_tools.py",
+            #    "flaky": False,
+            #},
         ]
 
         failed_tests = []

@@ -132,7 +132,6 @@ class AlertConsumer:
                 log(consumer.get_watermark_offsets(part))
 
         self.consumer.subscribe([topic], on_assign=on_assign)
-        log(f"Successfully subscribed to {topic}")
 
         # set up own mongo client
         self.collection_alerts = config["database"]["collections"][
@@ -162,8 +161,6 @@ class AlertConsumer:
                     )
                 except Exception as e:
                     log(e)
-
-        log("Finished AlertConsumer setup")
 
     @staticmethod
     def read_schema_data(bytes_io):
@@ -232,6 +229,7 @@ class AlertConsumer:
                     msg_decoded = self.decode_message(msg)
 
                 for record in msg_decoded:
+                    # submit only unprocessed alerts:
                     if (
                         self.mongo.db[self.collection_alerts].count_documents(
                             {"candid": record["candid"]}, limit=1
@@ -250,7 +248,6 @@ class AlertConsumer:
                             del future
 
             except Exception as e:
-                print("Error in poll!")
                 log(e)
                 _err = traceback.format_exc()
                 log(_err)
@@ -265,7 +262,7 @@ class AlertWorker:
         self.verbose = kwargs.get("verbose", 2)
         self.config = config
 
-        self.instrument = kwargs.get("instrument", "ZTF")
+        self.instrument = kwargs.get("instrument", "TURBO")
 
         # Kowalski version
         path_version_file = pathlib.Path(__file__).parent.absolute() / "version.txt"
@@ -357,7 +354,6 @@ class AlertWorker:
             raise ValueError(
                 f"Failed to get {self.instrument} instrument_id from SkyPortal"
             )
-        log("AlertWorker setup complete")
 
     def api_skyportal(self, method: str, endpoint: str, data: Optional[Mapping] = None):
         """Make an API call to a SkyPortal instance
@@ -488,6 +484,8 @@ class AlertWorker:
 
         # replace nans with median:
         img = np.array(image_data)
+#        print(img)
+        print(np.shape(img))
         # replace dubiously large values
         xl = np.greater(np.abs(img), 1e20, where=~np.isnan(img))
         if img[xl].any():
@@ -547,6 +545,7 @@ class AlertWorker:
             # pad to 63x63 if smaller
             shape = cutout_dict[cutout].shape
             if shape != (63, 63):
+                # print(f'Shape of {candid}/{cutout}: {shape}, padding to (63, 63)')
                 cutout_dict[cutout] = np.pad(
                     cutout_dict[cutout],
                     [(0, 63 - shape[0]), (0, 63 - shape[1])],
@@ -590,13 +589,11 @@ class AlertWorker:
             # fixme: PGIR uses 2massj, which is not in sncosmo as of 20210803
             #        cspjs seems to be close/good enough as an approximation
             df_light_curve["filter"] = "cspjs"
-        elif self.instrument == "WNTR":
-            # 20220818: added WNTR
-            # 20220929: nir bandpasses have been added to sncosmo
-            nir_filters = {0: "ps1::y", 1: "2massj", 2: "2massh", 3: "2massks"}
-            df_light_curve["filter"] = df_light_curve["fid"].apply(
-                lambda x: nir_filters[x]
-            )
+
+        elif self.instrument == "TURBO":
+#            TURBO_filters={1: "g", 2: "r"}
+            df_light_curve["filter"] = "cspjs"
+
 
         df_light_curve["magsys"] = "ab"
         df_light_curve["mjd"] = df_light_curve["jd"] - 2400000.5
@@ -706,6 +703,9 @@ class AlertWorker:
 
         elif self.instrument == "PGIR":
             # TODO
+            pass
+        
+        elif self.instrument == "TURBO":
             pass
 
         return scores
@@ -857,15 +857,12 @@ class AlertWorker:
                 alpha1, delta01 = galaxy["ra"], galaxy["dec"]
 
                 redshift = galaxy["z"]
-
+                # By default, set the cross-match radius to 30 kpc at the redshift of the host galaxy
+                cm_radius = 30.0 * (0.05 / redshift) / 3600
                 if redshift < 0.01:
                     # for nearby galaxies and galaxies with negative redshifts, do a 5 arc-minute cross-match
                     # (cross-match radius would otherwise get un-physically large for nearby galaxies)
                     cm_radius = 300.0 / 3600
-
-                else:
-                    # For distant galaxies, set the cross-match radius to 30 kpc at the redshift of the host galaxy
-                    cm_radius = 30.0 * (0.05 / redshift) / 3600
 
                 in_galaxy = in_ellipse(ra, dec, alpha1, delta01, cm_radius, 1, 0)
 
