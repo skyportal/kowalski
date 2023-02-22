@@ -1,0 +1,20 @@
+{
+    "namespace": "turbo",
+    "type": "record",
+    "name": "alert",
+    "doc": "avro alert schema for testing TURBO",
+    "version": "0.1",
+    "fields": [
+        {"name": "schemavsn", "type": "string", "doc": "schema version used"},
+        {"name": "publisher", "type": "string", "doc": "origin of alert packet"},
+        {"name": "objectId", "type": "string"},
+        {"name": "candid", "type": "long"},
+        {"name": "candidate", "type": "turbo.alert.candidate", "doc": "candidate information"},
+        {"name": "prv_candidates", "type": [{
+            "type": "array",
+            "items": "turbo.alert.prv_candidate"}, "null" ], "default": null}, 
+        {"name": "cutoutScience", "type": "bytes", "default": null, "doc": "science cutout image [gzipped fits bytestream]"},
+        {"name": "cutoutTemplate", "type": "bytes", "default": null, "doc": "cutout of template image [gzipped fits bytestream]"},
+        {"name": "cutoutDifference", "type": "bytes", "default": null, "doc": "difference image cutout [gzipped fits bytestream]"}        
+        ]
+}

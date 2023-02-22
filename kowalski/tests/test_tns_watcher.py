@@ -1,0 +1,44 @@
+import pandas
+import pytest
+
+from tns_watcher import get_tns
+from utils import load_config, log, Mongo
+
+
+""" load config and secrets """
+config = load_config(config_file="config.yaml")["kowalski"]
+
+
+class TestTNSWatcher:
+    """
+    Test TNS monitoring
+    """
+
+    @pytest.mark.xfail(raises=pandas.errors.ParserError)
+    def test_tns_watcher(self):
+        log("Connecting to DB")
+        mongo = Mongo(
+            host=config["database"]["host"],
+            port=config["database"]["port"],
+            replica_set=config["database"]["replica_set"],
+            username=config["database"]["username"],
+            password=config["database"]["password"],
+            db=config["database"]["db"],
+            verbose=True,
+        )
+        log("Successfully connected")
+
+        collection = config["database"]["collections"]["tns"]
+
+        log(
+            "Grabbing most recent object from the TNS and ingesting that into the database"
+        )
+        get_tns(
+            grab_all=False,
+            test=True,
+        )
+        log("Done")
+
+        fetched_entries = list(mongo.db[collection].find({}, {"_id": 1}))
+
+        assert len(fetched_entries) > 0
