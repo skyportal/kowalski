@@ -1157,11 +1157,12 @@ ZTF_ALERT_NUMERICAL_FEATURES = (
     "clrcounc",
     "neargaia",
     "neargaiabright",
+    "classtar",
 )
 
 
 class ZTFAlert:
-    def __init__(self, alert, label=None, **kwargs):
+    def __init__(self, alert, models, label=None, **kwargs):
         self.kwargs = kwargs
 
         self.label = label
@@ -1170,17 +1171,15 @@ class ZTFAlert:
 
         triplet_normalize = kwargs.get("triplet_normalize", True)
         to_tpu = kwargs.get("to_tpu", False)
-        feature_names = kwargs.get("feature_names", ZTF_ALERT_NUMERICAL_FEATURES)
-        feature_norms = kwargs.get("feature_norms", None)
         # dmdt_up_to_candidate_jd = kwargs.get("dmdt_up_to_candidate_jd", True)
 
         triplet = self.make_triplet(normalize=triplet_normalize, to_tpu=to_tpu)
-        features = self.make_features(feature_names=feature_names, norms=feature_norms)
+        features = self.make_features_by_model(models)
         # dmdt = self.make_dmdt(up_to_candidate_jd=dmdt_up_to_candidate_jd)
 
         self.data = {
             "triplet": triplet,
-            "features": features,
+            "features": features
             # "dmdt": dmdt
         }
 
@@ -1228,12 +1227,6 @@ class ZTFAlert:
 
     def make_features(self, feature_names=None, norms=None):
         features = []
-        if feature_names is None:
-            feature_names = list(self.alert["candidate"].keys())
-        elif not set(feature_names).issubset(set(ZTF_ALERT_NUMERICAL_FEATURES)):
-            raise ValueError(
-                "feature_names must be a subset of the ZTF_ALERT_NUMERICAL_FEATURES"
-            )
         for feature_name in feature_names:
             feature = self.alert["candidate"].get(feature_name)
             if feature is None and feature_name == "drb":
@@ -1244,6 +1237,20 @@ class ZTFAlert:
 
         features = np.array(features)
         return features
+
+    def make_features_by_model(self, models):
+        features_by_model = {}
+        for model_name in models.keys():
+            feature_names = models[model_name]["feature_names"]
+            feature_norms = models[model_name]["feature_norms"]
+            if feature_names is not False:
+                features_by_model[model_name] = self.make_features(
+                    feature_names=feature_names, norms=feature_norms
+                )
+            else:
+                features_by_model[model_name] = np.array([])
+
+        return features_by_model
 
     def make_dmdt(self, up_to_candidate_jd=True, min_points=4):
         df_candidate = pd.DataFrame(self.alert["candidate"], index=[0])

@@ -1,5 +1,6 @@
 __all__ = ["AlertConsumer", "AlertWorker", "EopError"]
 
+from ast import literal_eval as make_tuple
 import base64
 import datetime
 import gzip
@@ -41,6 +42,7 @@ from utils import (
     radec2lb,
     time_stamp,
     timer,
+    ZTF_ALERT_NUMERICAL_FEATURES,
 )
 
 # Tensorflow is problematic for Mac's currently, so we can add an option to disable it
@@ -303,30 +305,86 @@ class AlertWorker:
                 try:
                     if not set(
                         config["ml_models"][self.instrument][model].keys()
-                    ).issubset({"version", "features", "triplet"}):
+                    ).issubset(
+                        {
+                            "version",
+                            "feature_names",
+                            "feature_norms",
+                            "triplet",
+                            "format",
+                            "order",
+                        }
+                    ):
                         raise ValueError(
-                            f"Invalid keys in config['ml_models']['{self.instrument}']['{model}'], must be 'version', 'features' and 'triplet'"
+                            f"Invalid keys in config['ml_models']['{self.instrument}']['{model}'], must be 'version', 'feature_names', 'feature_norms', 'triplet','format', and 'order'"
                         )
 
                     model_version = config["ml_models"][self.instrument][model][
                         "version"
                     ]
-                    model_features = config["ml_models"][self.instrument][model].get(
-                        "features", False
-                    )
+                    model_feature_names = config["ml_models"][self.instrument][
+                        model
+                    ].get("feature_names", False)
+                    model_feature_norms = config["ml_models"][self.instrument][
+                        model
+                    ].get("feature_norms", None)
                     model_triplet = config["ml_models"][self.instrument][model].get(
                         "triplet", False
                     )
-
-                    if model_features is False and model_triplet is False:
+                    model_format = config["ml_models"][self.instrument][model].get(
+                        "format", "h5"
+                    )
+                    model_order = config["ml_models"][self.instrument][model].get(
+                        "order", ["features", "triplet"]
+                    )
+                    if model_format not in ["h5", "pb"]:
                         raise ValueError(
-                            f"Either 'features' or 'triplet' must be set to True in config['ml_models']['{self.instrument}']['{model}']"
+                            f"Invalid model format: {model_format}, must be 'h5' or 'pb'"
                         )
-                    if not isinstance(model_features, bool) and not isinstance(
-                        model_features, list
+                    if model_format == "pb":
+                        model_format = "/"
+                    else:
+                        model_format = f".{model_format}"
+                    if model_feature_names is True:
+                        model_feature_names = ZTF_ALERT_NUMERICAL_FEATURES
+                    if isinstance(model_feature_names, str):
+                        try:
+                            model_feature_names = make_tuple(model_feature_names)
+                        except Exception:
+                            raise ValueError(
+                                f"Invalid model_feature_names: {model_feature_names}"
+                            )
+
+                    if model_feature_names is False and model_triplet is False:
+                        raise ValueError(
+                            f"Both'feature_names' or 'triplet' cannot be False for model {model}"
+                        )
+                    if not isinstance(model_feature_names, bool) and not isinstance(
+                        model_feature_names, tuple
                     ):
                         raise ValueError(
-                            f"model_features must be either a bool or a list, got {type(model_features)}"
+                            f"model_feature_names must be either a bool or a tuple, got {type(model_feature_names)}"
+                        )
+
+                    if not set(
+                        model_feature_names
+                        if isinstance(model_feature_names, tuple)
+                        else []
+                    ).issubset(set(ZTF_ALERT_NUMERICAL_FEATURES)):
+                        raise ValueError(
+                            "feature_names must be a subset of the ZTF_ALERT_NUMERICAL_FEATURES"
+                        )
+                    if model_feature_norms is not None and not isinstance(
+                        model_feature_norms, dict
+                    ):
+                        raise ValueError(
+                            f"model_feature_norms must be a dict, or None, got {type(model_feature_norms)}"
+                        )
+                    if model_feature_norms is not None and not set(
+                        model_feature_norms.keys()
+                    ).issubset(set(model_feature_names)):
+                        raise ValueError(
+                            "model_feature_norms keys must be a subset of model_feature_names"
                         )
                     if not isinstance(model_triplet, bool):
                         raise ValueError(
@@ -340,13 +398,15 @@ class AlertWorker:
                     # todo: allow other formats such as SavedModel
                     model_filepath = os.path.join(
                         config["path"][f"ml_models_{self.instrument.lower()}"],
-                        f"{model}.{model_version}.h5",
+                        f"{model}.{model_version}{model_format}",
                     )
                     self.ml_models[model] = {
                         "model": load_model(model_filepath),
                         "version": model_version,
-                        "features": model_features,
+                        "feature_names": model_feature_names,
+                        "feature_norms": model_feature_norms,
                         "triplet": model_triplet,
+                        "order": model_order,
                     }
                 except Exception as e:
                     log(f"Error loading ML model {model}: {str(e)}")
@@ -715,29 +775,23 @@ class AlertWorker:
         if self.instrument == "ZTF":
             try:
                 with timer("ZTFAlert(alert)"):
-                    ztf_alert = ZTFAlert(alert)
-                with timer("Prepping features"):
-                    features = np.expand_dims(ztf_alert.data["features"], axis=[0, -1])
-                    triplet = np.expand_dims(ztf_alert.data["triplet"], axis=[0])
+                    ztf_alert = ZTFAlert(alert, self.ml_models)
 
                 for model_name in self.ml_models.keys():
-                    inputs = []
-                    if self.ml_models[model_name]["features"] is True:
-                        inputs.append(features)
-                    elif (
-                        len(self.ml_models[model_name]["features"]) > 0
-                        if isinstance(self.ml_models[model_name]["features"], list)
-                        else False
-                    ):
-                        inputs.append(
-                            ztf_alert.make_features(
-                                self.ml_models[model_name]["features"]
-                            )
-                        )
-                    if self.ml_models[model_name]["triplet"] is True:
-                        inputs.append(triplet)
-                    if len(inputs) == 1:
-                        inputs = inputs[0]
+                    inputs = {}
+                    with timer(f"Prepping features for {model_name}"):
+                        if self.ml_models[model_name]["feature_names"] is not False:
+                            features = ztf_alert.data["features"][model_name]
+                            inputs["features"] = np.expand_dims(features, axis=[0, -1])
+                        if self.ml_models[model_name]["triplet"] is not False:
+                            triplet = ztf_alert.data["triplet"]
+                            inputs["triplet"] = np.expand_dims(triplet, axis=[0])
+                        if len(inputs.keys()) == 1:
+                            inputs = inputs[list(inputs.keys())[0]]
+                        else:
+                            inputs = [
+                                inputs[k] for k in self.ml_models[model_name]["order"]
+                            ]
 
                     with timer(model_name):
                         score = self.ml_models[model_name]["model"].predict(x=inputs)[0]
