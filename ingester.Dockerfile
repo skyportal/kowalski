@@ -41,7 +41,6 @@ COPY data/catalogs/ /app/data/catalogs/
 COPY data/ztf_matchfiles/ /app/data/ztf_matchfiles/
 COPY data/ztf_source_features/ /app/data/ztf_source_features/
 COPY data/ztf_source_classifications/ /app/data/ztf_source_classifications/
-COPY data/real_TURBO_alerts /app/data/real_TURBO_alerts/
 COPY data/real_TURBO_alerts_fewer /app/data/real_TURBO_alerts_fewer/
 
 
