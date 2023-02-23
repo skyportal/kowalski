@@ -109,7 +109,6 @@ Similar to the Docker setup, you need config files in order to run `Kowalski`. Y
 
 ```bash
 cp config.local.yaml config.yaml
-cp docker-compose.defaults.yaml docker-compose.yaml
 ```
 
 The difference between `config.local.yaml` and `config.defaults.yaml` is that the former has all the path variables set to the local relative path of the kowalski repo. This is useful if you want to run `Kowalski` without Docker without having to change many path variables in `config.yaml`.
@@ -220,7 +219,7 @@ If you have access to a ZTF alert stream and have it configured accordingly in t
 KOWALSKI_APP_PATH=./ python kowalski/alert_broker_ztf.py
 ```
 
-**Otherwise, when running locally for testing purposes, you can simply run the tests which will create a mock alert stream and run the broker on it.**
+**When running locally for testing/development purposes, you can simply run the tests which will create a mock alert stream and run the broker on it.**
 
 Then tests can be run by going into the kowalski/ directory
 *(when running the tests, you do not need to start the broker as instructed in the previous step. The tests will take care of it)*
@@ -311,9 +310,9 @@ In `docker-compose.yaml`:
 - Replace `kowalski@caltech.edu` with your email.
 - Replace `private.caltech.edu` with your domain.
 
-## Docs
+## API Docs
 
-OpenAPI specs are to be found under `/docs/api` once `Kowalski` is up and running.
+OpenAPI specs are to be found under `/docs/api/` once `Kowalski` is up and running.
 
 ## Developer guide
 
@@ -417,11 +416,11 @@ A brief summary of the changes required (to add WINTER into Kowalski, but hopefu
 
 3. A new `kowalski/dask_cluster_<winter>,py` needs to be created, modeled on `dask_cluster.py` but using the ports for the new stream from the config file.
 
-4. The config file `config.defaults.yaml` needs to be updated to include the collections, upstream filters, crossmatches, dask ports for the new stream. No two streams should use the same ports for dask to avoid conflicts. Entries also need to be made in the `supervisord` section of the config file so that `alert_broker_<winter>.py` and `dask_cluster_<winter>.py` can be run through supervisor.
+4. The config file `config.defaults.yaml` needs to be updated to include the collections, upstream filters, crossmatches, dask ports, and ml_models (if MLing is necessary) for the new stream. No two streams should use the same ports for dask to avoid conflicts. Entries also need to be made in the `supervisord` section of the config file so that `alert_broker_<winter>.py` and `dask_cluster_<winter>.py` can be run through supervisor.
 
-5. Some alerts need to be added to `data/` for testing. Tests for alert ingestion (`tests/test_ingester_<wntr>.py`) and alert processing (`tests/test_alert_broker_wntr.py`) can be modeled on the ZTF tests, with appropriate changes for the new stream.
+5. Some alerts need to be added to `data/` for testing. Tests for alert ingestion (`tests/test_ingester_<wntr>.py`) and alert processing (`tests/test_alert_broker_wntr.py`) can be modeled on the ZTF tests, with appropriate changes for the new stream. The ingester test is where you will be able to create a mock kafka stream to test your broker.
 
-6. Need to edit `ingester.Dockerfile` so that all new files are copied into the docker container.
+6. Need to edit `ingester.Dockerfile` so that all new files are copied into the docker container (add or modify the COPY lines).
 
 ### Add a new ML model to Kowalski
 
