@@ -204,18 +204,24 @@ Next, you need to start the dask scheduler and workers. These are the processes 
 Before starting it, you might want to consider lowering or increasing the number of workers and threads per worker in the config file, depending on your config. The default values are set to 4 workers and 4 threads per worker. This means that the dask cluster will be able to process 4 alerts at the same time. If you have a GPU available with a lot of VRAM, you might want to increase the number of workers and threads per worker to take advantage of it.
 
 ```bash
-KOWALSKI_APP_PATH=./ python kowalski/dask_cluster.py
+cd kowalski
+```
+
+and running:
+
+```bash
+KOWALSKI_APP_PATH=../ python dask_cluster.py
 ```
 
 If you have a GPU available, tensorflow might use it by default. However, you might run into some issue running the ml models when following the instructions below if you GPU does not have much memory. To avoid this, you can set the environment variable `CUDA_VISIBLE_DEVICES=-1` before running the dask cluster:
 
 ```bash
-CUDA_VISIBLE_DEVICES=-1 KOWALSKI_APP_PATH=./ python kowalski/dask_cluster.py
+CUDA_VISIBLE_DEVICES=-1 KOWALSKI_APP_PATH=../ python dask_cluster.py
 ```
 
-### Alert Broker and Ingester
+### Alert Broker
 
-If you have access to a ZTF alert stream and have it configured accordingly in the config, you can run the broker with
+If you have access to a ZTF alert stream and have it configured accordingly in the config. If you intend to simulate an alert stream locally, you should change the kafka config to set the `bootstrap.servers` to `localhost:9092`, and `zookeeper` to `localhost:2181`.Then, you can run the broker with
 ```bash
 KOWALSKI_APP_PATH=./ python kowalski/alert_broker_ztf.py
 ```
@@ -237,9 +243,25 @@ KOWALSKI_APP_PATH=../ python -m pytest -s alert_broker_ztf.py ../tests/test_aler
 
 We also provide an option `USE_TENSORFLOW=False` for users who cannot install Tensorflow for whatever reason.
 
-To test the ingester, path.logs in the config should be set to ./data/logs/.
+### Ingester (Pushing alerts to a kafka)
 
-Then tests can be run by going into the kowalski/ directory (similarly to the broker tests, you do not need to star the broker manually as instructed in the previous step. The tests will take care of it)
+Once the broker is running, you might want to create a local kafka stream of alerts to test it. To do so, you can run the ingester with
+
+```bash
+cd kowalski
+```
+
+and running:
+
+```bash
+PYTHONPATH=. KOWALSKI_APP_PATH=../ python ../tools/kafka_stream.py --topic="<topic_listened_by_your_broker" --path="<path_to_alerts_in_KOWALSKI_APP_PATH/data/>" --test=True
+```
+
+where `<topic_listened_by_your_broker>` is the topic listened by your broker (ex: `ztf_20200301_programid3` for the ztf broker) and `<path_to_alerts_in_KOWALSKI_APP_PATH/data/>` is the path to the alerts in the `data/` directory of the kowalski app (ex: `ztf_alerts/20200202` for the ztf broker).
+
+**Otherwise, you can test both ingestion and broker at the same time by running the ingester tests:**
+
+Then tests can be run by going into the kowalski/ directory (similarly to the broker tests, you do not need to star the broker manually as instructed in the previous step. The tests will take care of it). Make sure that the dask cluster is running before running the ingester tests.
 
 ```bash
 cd kowalski

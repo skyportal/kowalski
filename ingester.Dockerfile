@@ -54,6 +54,7 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
       "kowalski/alert_broker_pgir.py",\
       "kowalski/dask_cluster_pgir.py",\
       "kowalski/dask_cluster_winter.py",\
+      "kowalski/ingester.py",\
       "kowalski/performance_reporter.py",\
       "kowalski/requirements_ingester.txt",\
       "kowalski/check_db_entries.py",\
