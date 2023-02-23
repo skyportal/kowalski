@@ -24,9 +24,10 @@ def alert_fixture(request):
     with open(sample_avro, "rb") as f:
         for record in fastavro.reader(f):
             request.cls.alert = record
-    request.cls.candid=record['candid']
+    request.cls.candid = record["candid"]
     print(request.cls.candid)
     log("Successfully loaded")
+
 
 class TestAlertBrokerTURBO:
     """Test individual components/methods of the TURBO alert processor used by the broker"""
@@ -35,11 +36,11 @@ class TestAlertBrokerTURBO:
         """Test massaging avro packet into a dict digestible by mongodb"""
         alert, prv_candidates = self.worker.alert_mongify(self.alert)
         assert alert["candid"] == self.candid
-        assert len(prv_candidates) == 0#71
+        assert len(prv_candidates) == 0  # 71
 
     def test_make_photometry(self):
         df_photometry = self.worker.make_photometry(self.alert)
-        assert len(df_photometry) == 0#71
+        assert len(df_photometry) == 0  # 71
 
     def test_make_thumbnails(self):
         alert, _ = self.worker.alert_mongify(self.alert)

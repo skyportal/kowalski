@@ -253,9 +253,12 @@ class TestIngester:
         )
         log(f"Found topics: {topics}")
 
-        cmd_kafka_server_list = os.path.join(config["path"]["kafka"], "bin","kafka-topics.sh --list --zookeeper localhost:2181")
-        #os.system(cmd_kafka_server_list)
-
+        cmd_kafka_server_list = os.path.join(
+            config["path"]["kafka"],
+            "bin",
+            "kafka-topics.sh --list --zookeeper localhost:2181",
+        )
+        # os.system(cmd_kafka_server_list)
 
         # create a test TURBO topic for the current UTC date
         date = datetime.datetime.utcnow().strftime("%Y%m%d")
@@ -297,10 +300,9 @@ class TestIngester:
                 topic_name,
             ]
 
-#            cmd_create_topic2 = os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh")+ " --create"+ " --bootstrap-server "+ config["kafka"]["bootstrap.test.servers"]+ " --replication-factor"+ " 1"+ " --partitions"+ " 1"+ " --topic"+ ' bullox'
-            
-#            os.system(cmd_create_topic2)
+            #            cmd_create_topic2 = os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh")+ " --create"+ " --bootstrap-server "+ config["kafka"]["bootstrap.test.servers"]+ " --replication-factor"+ " 1"+ " --partitions"+ " 1"+ " --topic"+ ' bullox'
 
+            #            os.system(cmd_create_topic2)
 
             with open(
                 os.path.join(config["path"]["logs"], "create_topic.stdout"), "w"
@@ -308,12 +310,12 @@ class TestIngester:
                 # p_create_topic = \
                 subprocess.run(
                     cmd_create_topic,
-#                    cmd_create_topic2,
+                    #                    cmd_create_topic2,
                     stdout=stdout_create_topic,
                     stderr=subprocess.STDOUT,
                 )
-#        print(cmd_create_topic2)
-#        os.system(cmd_create_topic2)
+        #        print(cmd_create_topic2)
+        #        os.system(cmd_create_topic2)
         log("Starting up Kafka Producer")
 
         # spin up Kafka producer
@@ -322,14 +324,14 @@ class TestIngester:
         )
 
         # small number of alerts that come with kowalski
-#        path_alerts = pathlib.Path("/app/data/pgir_alerts/20210629/")
+        #        path_alerts = pathlib.Path("/app/data/pgir_alerts/20210629/")
         path_alerts = pathlib.Path("/app/data/real_TURBO_alerts_fewer/")
         # fixme: ONLY USING THE ARCHIVAL TURBO ALERTS FOR NOW
 
         # push!
         for p in path_alerts.glob("*.avro"):
             print(p)
-#        for p in path_alerts.glob("*.pkl"):
+            #        for p in path_alerts.glob("*.pkl"):
             with open(str(p), "rb") as data:
                 # Trigger any available delivery report callbacks from previous produce() calls
                 producer.poll(0)
@@ -355,9 +357,13 @@ class TestIngester:
         time.sleep(10)
 
         log("Listing the topics in the kafka server")
-        cmd_kafka_server_list = os.path.join(config["path"]["kafka"], "bin","kafka-topics.sh --list --zookeeper localhost:2181")
-        
-#        print(cmd_kafka_server_list)
+        cmd_kafka_server_list = os.path.join(
+            config["path"]["kafka"],
+            "bin",
+            "kafka-topics.sh --list --zookeeper localhost:2181",
+        )
+
+        #        print(cmd_kafka_server_list)
         os.system(cmd_kafka_server_list)
 
         log("Shutting down Kafka Server at localhost:9092")
@@ -366,7 +372,7 @@ class TestIngester:
             os.path.join(config["path"]["kafka"], "bin", "kafka-server-stop.sh"),
             os.path.join(config["path"]["kafka"], "config", "server.properties"),
         ]
-#        print(cmd_kafka_server_stop)
+        #        print(cmd_kafka_server_stop)
         with open(
             os.path.join(config["path"]["logs"], "kafka_server.stdout"), "w"
         ) as stdout_kafka_server:
@@ -377,8 +383,7 @@ class TestIngester:
                 stderr=subprocess.STDOUT,
             )
 
-#        os.system(cmd_kafka_server_list)
-
+        #        os.system(cmd_kafka_server_list)
 
         log("Shutting down ZooKeeper at localhost:2181")
         cmd_zookeeper_stop = [
@@ -394,8 +399,7 @@ class TestIngester:
                 cmd_zookeeper_stop, stdout=stdout_zookeeper, stderr=subprocess.STDOUT
             )
 
-
-#        os.system(cmd_kafka_server_list)
+        #        os.system(cmd_kafka_server_list)
 
         log("Checking the TURBO alert collection states")
         mongo = Mongo(
@@ -409,30 +413,29 @@ class TestIngester:
         )
         collection_alerts = config["database"]["collections"]["alerts_turbo"]
         collection_alerts_aux = config["database"]["collections"]["alerts_turbo_aux"]
-#        collection_alerts = config["database"]["collections"]["alerts_pgir"]
-#        collection_alerts_aux = config["database"]["collections"]["alerts_pgir_aux"]
-
+        #        collection_alerts = config["database"]["collections"]["alerts_pgir"]
+        #        collection_alerts_aux = config["database"]["collections"]["alerts_pgir_aux"]
 
         num_retries = 20
         # alert processing takes time, which depends on the available resources
         # so allow some additional time for the processing to finish
         for i in range(num_retries):
             print(i)
-#            if i == num_retries - 1:
-#                raise RuntimeError("Alert ingestion failed")
+            #            if i == num_retries - 1:
+            #                raise RuntimeError("Alert ingestion failed")
 
             n_alerts = mongo.db[collection_alerts].count_documents({})
             n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
-    
-            print(f'n_alerts: {n_alerts}')
-            print(f'n_alerts_aux: {n_alerts_aux}')
+
+            print(f"n_alerts: {n_alerts}")
+            print(f"n_alerts_aux: {n_alerts_aux}")
             # REMOVE THIS
-            #print("Testing n_alerts and n_alerts_aux", n_alerts, n_alerts_aux)
-            #try:
+            # print("Testing n_alerts and n_alerts_aux", n_alerts, n_alerts_aux)
+            # try:
             #    assert n_alerts == 17
             #    assert n_alerts_aux == 15
             #    break
-            #except AssertionError:
+            # except AssertionError:
             #    print(
             #        "Found an unexpected amount of alert/aux data: "
             #        f"({n_alerts}/{n_alerts_aux}, expecting 17/15). "
@@ -441,7 +444,7 @@ class TestIngester:
             #    time.sleep(30)
             #    continue
 
-#        os.system(cmd_kafka_server_list)
+        #        os.system(cmd_kafka_server_list)
 
         if config["misc"]["broker"]:
             log("Checking that posting to SkyPortal succeeded")
