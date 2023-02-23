@@ -144,3 +144,34 @@ class TestTools:
 
         assert len(ingested_sources) == 1145
         assert len(ingested_exposures) == 2
+
+
+# this is a pytest fixture that runs once after all tests are done
+# this is needed if you run the tests multiple times locally, as the database is not reset automatically
+@pytest.fixture(scope="session", autouse=True)
+def cleanup(request):
+    """Cleanup after tests, by removing the vlass and igaps collections"""
+
+    def remove_vlass_igaps():
+        log("Cleaning up")
+        mongo = Mongo(
+            host=config["database"]["host"],
+            port=config["database"]["port"],
+            replica_set=config["database"]["replica_set"],
+            username=config["database"]["username"],
+            password=config["database"]["password"],
+            db=config["database"]["db"],
+            srv=config["database"]["srv"],
+            verbose=True,
+        )
+        log("Successfully connected")
+
+        collections = [
+            "VLASS_DR1",
+            "IGAPS_DR2",
+        ]
+        for collection in collections:
+            log(f"Removing {collection}")
+            mongo.db[collection].drop()
+
+    request.addfinalizer(remove_vlass_igaps)
