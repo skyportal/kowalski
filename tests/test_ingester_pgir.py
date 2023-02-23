@@ -12,7 +12,11 @@ from utils import Mongo, init_db_sync, load_config, log
 
 """ load config and secrets """
 KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+USING_DOCKER = os.environ.get("USING_DOCKER", False)
 config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+
+if USING_DOCKER:
+    config["server"]["host"] = "kowalski_api_1"
 
 
 class Filter:
@@ -60,7 +64,7 @@ class Filter:
     @staticmethod
     def get_api_token():
         a = requests.post(
-            f"http://kowalski_api_1:{config['server']['port']}/api/auth",
+            f"http://{config['server']['host']}:{config['server']['port']}/api/auth",
             json={
                 "username": config["server"]["admin_username"],
                 "password": config["server"]["admin_password"],
@@ -85,7 +89,7 @@ class Filter:
 
         # save:
         resp = requests.post(
-            f"http://kowalski_api_1:{config['server']['port']}/api/filters",
+            f"http://{config['server']['host']}:{config['server']['port']}/api/filters",
             json=user_filter,
             headers=self.headers,
             timeout=5,
@@ -102,7 +106,7 @@ class Filter:
 
     def remove(self):
         resp = requests.delete(
-            f"http://kowalski_api_1:{config['server']['port']}/api/filters",
+            f"http://{config['server']['host']}:{config['server']['port']}/api/filters",
             json={"group_id": self.group_id, "filter_id": self.filter_id},
             headers=self.headers,
             timeout=5,

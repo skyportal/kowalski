@@ -79,6 +79,8 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
 # change working directory to /app
 WORKDIR /app
 
+ENV USING_DOCKER=true
+
 # update pip
 RUN pip install --upgrade pip
 
