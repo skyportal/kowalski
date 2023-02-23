@@ -41,6 +41,8 @@ COPY data/catalogs/ /app/data/catalogs/
 COPY data/ztf_matchfiles/ /app/data/ztf_matchfiles/
 COPY data/ztf_source_features/ /app/data/ztf_source_features/
 COPY data/ztf_source_classifications/ /app/data/ztf_source_classifications/
+COPY data/TURBO_alerts/ /app/data/TURBO_alerts/
+
 
 # copy over the config and the code
 COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "kowalski/utils.py",\
@@ -48,20 +50,24 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
       "kowalski/alert_broker.py",\
       "kowalski/alert_broker_ztf.py",\
       "kowalski/alert_broker_winter.py",\
+      "kowalski/alert_broker_TURBO.py",\
       "kowalski/ops_watcher_ztf.py",\
       "kowalski/tns_watcher.py",\
       "kowalski/alert_broker_pgir.py",\
       "kowalski/dask_cluster_pgir.py",\
       "kowalski/dask_cluster_winter.py",\
+      "kowalski/dask_cluster_TURBO.py",\
       "kowalski/performance_reporter.py",\
       "kowalski/requirements_ingester.txt",\
       "kowalski/check_db_entries.py",\
       "tests/test_alert_broker_ztf.py",\
       "tests/test_alert_broker_pgir.py",\
       "tests/test_alert_broker_wntr.py",\
+      "tests/test_alert_broker_TURBO.py",\
       "tests/test_ingester.py",\
       "tests/test_ingester_pgir.py",\
       "tests/test_ingester_wntr.py",\
+      "tests/test_ingester_TURBO.py",\
       "tests/test_tns_watcher.py",\
       "tests/test_tools.py",\
       "tools/fetch_ztf_matchfiles.py",\

@@ -469,6 +469,18 @@ class Kowalski:
 
         test_setups = [
             {
+                "part": "TURBO alert broker components",
+                "container": "kowalski_ingester_1",
+                "test_script": "test_alert_broker_TURBO.py",
+                "flaky": False,
+            },
+            {
+                "part": "TURBO alert ingestion",
+                "container": "kowalski_ingester_1",
+                "test_script": "test_ingester_TURBO.py",
+                "flaky": False,
+            },
+            {
                 "part": "PGIR alert broker components",
                 "container": "kowalski_ingester_1",
                 "test_script": "test_alert_broker_pgir.py",
