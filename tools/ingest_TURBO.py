@@ -2,7 +2,6 @@ import datetime
 import fire
 import multiprocessing
 import os
-import pprint
 import pathlib
 import pyarrow.parquet as pq
 import pymongo
