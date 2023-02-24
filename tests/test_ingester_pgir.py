@@ -194,7 +194,7 @@ class TestIngester:
         # create a test PGIR topic for the current UTC date
         date = datetime.datetime.utcnow().strftime("%Y%m%d")
         topic_name = f"pgir_{date}_test"
-        path_alerts = "pgir_alerts/20210629/"
+        path_alerts = "pgir_alerts/20210629"
 
         with KafkaStream(
             topic_name,
