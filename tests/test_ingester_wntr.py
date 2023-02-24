@@ -187,7 +187,7 @@ class TestIngester:
         # create a test WNTR topic for the current UTC date
         date = datetime.datetime.utcnow().strftime("%Y%m%d")
         topic_name = f"winter_{date}_test"
-        path_alerts = "data/wntr_alerts/20220815/"
+        path_alerts = "wntr_alerts/20220815/"
 
         with KafkaStream(
             topic_name,
