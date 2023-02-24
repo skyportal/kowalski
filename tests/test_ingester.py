@@ -1,4 +1,3 @@
-from confluent_kafka import Producer
 import datetime
 import os
 import pathlib
@@ -8,6 +7,7 @@ import time
 from typing import List, Optional
 
 from alert_broker_ztf import watchdog
+from ingester import KafkaStream
 from utils import init_db_sync, load_config, log, Mongo
 
 
@@ -281,15 +281,6 @@ class Filter:
         self.fid = None
 
 
-def delivery_report(err, msg):
-    """Called once for each message produced to indicate delivery result.
-    Triggered by poll() or flush()."""
-    if err is not None:
-        log(f"Message delivery failed: {err}")
-    else:
-        log(f"Message delivered to {msg.topic()} [{msg.partition()}]")
-
-
 class TestIngester:
     """
     End-to-end ingester test:
@@ -346,120 +337,10 @@ class TestIngester:
                 ],  # there are 3 alerts in the test set for this oid
             )
 
-        # clean up old Kafka logs
-        log("Cleaning up Kafka logs")
-        subprocess.run(["rm", "-rf", path_logs / "kafka-logs", "/tmp/zookeeper"])
-
-        log("Starting up ZooKeeper at localhost:2181")
-
-        # start ZooKeeper in the background
-        cmd_zookeeper = [
-            os.path.join(config["path"]["kafka"], "bin", "zookeeper-server-start.sh"),
-            "-daemon",
-            os.path.join(config["path"]["kafka"], "config", "zookeeper.properties"),
-        ]
-
-        with open(path_logs / "zookeeper.stdout", "w") as stdout_zookeeper:
-            # p_zookeeper =
-            subprocess.run(
-                cmd_zookeeper, stdout=stdout_zookeeper, stderr=subprocess.STDOUT
-            )
-
-        # take a nap while it fires up
-        time.sleep(3)
-
-        log("Starting up Kafka Server at localhost:9092")
-
-        # start the Kafka server:
-        cmd_kafka_server = [
-            os.path.join(config["path"]["kafka"], "bin", "kafka-server-start.sh"),
-            "-daemon",
-            os.path.join(config["path"]["kafka"], "config", "server.properties"),
-        ]
-
-        with open(
-            os.path.join(config["path"]["logs"], "kafka_server.stdout"), "w"
-        ) as stdout_kafka_server:
-            # p_kafka_server = subprocess.Popen(cmd_kafka_server, stdout=stdout_kafka_server, stderr=subprocess.STDOUT)
-            # p_kafka_server =
-            subprocess.run(cmd_kafka_server)
-
-        # take a nap while it fires up
-        time.sleep(3)
-
-        # get kafka topic names with kafka-topics command
-        cmd_topics = [
-            os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-            "--bootstrap-server",
-            config["kafka"]["bootstrap.test.servers"],
-            "-list",
-        ]
-
-        topics = (
-            subprocess.run(cmd_topics, stdout=subprocess.PIPE)
-            .stdout.decode("utf-8")
-            .split("\n")[:-1]
-        )
-        log(f"Found topics: {topics}")
-
-        # create a test ZTF topic for the current UTC date
+        path_alerts = "ztf_alerts/20200202"
         date = datetime.datetime.utcnow().strftime("%Y%m%d")
         topic_name = f"ztf_{date}_programid1_test"
 
-        if topic_name in topics:
-            # topic previously created? remove first
-            cmd_remove_topic = [
-                os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-                "--bootstrap-server",
-                config["kafka"]["bootstrap.test.servers"],
-                "--delete",
-                "--topic",
-                topic_name,
-            ]
-
-            remove_topic = (
-                subprocess.run(cmd_remove_topic, stdout=subprocess.PIPE)
-                .stdout.decode("utf-8")
-                .split("\n")[:-1]
-            )
-            log(f"{remove_topic}")
-            log(f"Removed topic: {topic_name}")
-            time.sleep(1)
-
-        if topic_name not in topics:
-            log(f"Creating topic {topic_name}")
-
-            cmd_create_topic = [
-                os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-                "--create",
-                "--bootstrap-server",
-                config["kafka"]["bootstrap.test.servers"],
-                "--replication-factor",
-                "1",
-                "--partitions",
-                "1",
-                "--topic",
-                topic_name,
-            ]
-            with open(
-                os.path.join(config["path"]["logs"], "create_topic.stdout"), "w"
-            ) as stdout_create_topic:
-                # p_create_topic = \
-                subprocess.run(
-                    cmd_create_topic,
-                    stdout=stdout_create_topic,
-                    stderr=subprocess.STDOUT,
-                )
-
-        log("Starting up Kafka Producer")
-
-        # spin up Kafka producer
-        producer = Producer(
-            {"bootstrap.servers": config["kafka"]["bootstrap.test.servers"]}
-        )
-
-        # small number of alerts that come with kowalski
-        path_alerts = pathlib.Path(f"{KOWALSKI_APP_PATH}/data/ztf_alerts/20200202/")
         # grab some more alerts from gs://ztf-fritz/sample-public-alerts
         try:
             log("Grabbing more alerts from gs://ztf-fritz/sample-public-alerts")
@@ -479,66 +360,20 @@ class TestIngester:
                 "cp",
                 "-n",
                 "gs://ztf-fritz/sample-public-alerts/*.avro",
-                f"{KOWALSKI_APP_PATH}/data/ztf_alerts/20200202/",
+                f"{KOWALSKI_APP_PATH}/data/{path_alerts}",
             ]
         )
         log(f"Fetched {len(ids)} alerts from gs://ztf-fritz/sample-public-alerts")
         # push!
-        for p in path_alerts.glob("*.avro"):
-            with open(str(p), "rb") as data:
-                # Trigger any available delivery report callbacks from previous produce() calls
-                producer.poll(0)
-
-                log(f"Pushing {p}")
-
-                # Asynchronously produce a message, the delivery report callback
-                # will be triggered from poll() above, or flush() below, when the message has
-                # been successfully delivered or failed permanently.
-                producer.produce(topic_name, data.read(), callback=delivery_report)
-
-                # Wait for any outstanding messages to be delivered and delivery report
-                # callbacks to be triggered.
-        producer.flush()
-
-        log("Starting up Ingester")
-
-        # digest and ingest
-        watchdog(obs_date=date, test=True)
-        log("Digested and ingested: all done!")
-
-        # shut down Kafka server and ZooKeeper
-        time.sleep(30)
-
-        log("Shutting down Kafka Server at localhost:9092")
-        # start the Kafka server:
-        cmd_kafka_server_stop = [
-            os.path.join(config["path"]["kafka"], "bin", "kafka-server-stop.sh"),
-            os.path.join(config["path"]["kafka"], "config", "server.properties"),
-        ]
-
-        with open(
-            os.path.join(config["path"]["logs"], "kafka_server.stdout"), "w"
-        ) as stdout_kafka_server:
-            # p_kafka_server_stop = \
-            subprocess.run(
-                cmd_kafka_server_stop,
-                stdout=stdout_kafka_server,
-                stderr=subprocess.STDOUT,
-            )
-
-        log("Shutting down ZooKeeper at localhost:2181")
-        cmd_zookeeper_stop = [
-            os.path.join(config["path"]["kafka"], "bin", "zookeeper-server-stop.sh"),
-            os.path.join(config["path"]["kafka"], "config", "zookeeper.properties"),
-        ]
-
-        with open(
-            os.path.join(config["path"]["logs"], "zookeeper.stdout"), "w"
-        ) as stdout_zookeeper:
-            # p_zookeeper_stop = \
-            subprocess.run(
-                cmd_zookeeper_stop, stdout=stdout_zookeeper, stderr=subprocess.STDOUT
-            )
+        with KafkaStream(
+            topic_name,
+            pathlib.Path(f"{KOWALSKI_APP_PATH}/data/{path_alerts}"),
+            config=config,
+            test=True,
+        ):
+            log("Starting up Ingester")
+            watchdog(obs_date=date, test=True)
+            log("Digested and ingested: all done!")
 
         log("Checking the ZTF alert collection states")
         mongo = Mongo(
