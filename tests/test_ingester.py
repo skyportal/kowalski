@@ -337,9 +337,9 @@ class TestIngester:
                 ],  # there are 3 alerts in the test set for this oid
             )
 
-        path_alerts = "ztf_alerts/20200202"
         date = datetime.datetime.utcnow().strftime("%Y%m%d")
         topic_name = f"ztf_{date}_programid1_test"
+        path_alerts = "ztf_alerts/20200202"
 
         # grab some more alerts from gs://ztf-fritz/sample-public-alerts
         try:
