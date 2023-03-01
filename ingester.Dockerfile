@@ -61,7 +61,7 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
       "tests/test_alert_broker_ztf.py",\
       "tests/test_alert_broker_pgir.py",\
       "tests/test_alert_broker_wntr.py",\
-      "tests/test_ingester.py",\
+      "tests/test_ingester_ztf.py",\
       "tests/test_ingester_pgir.py",\
       "tests/test_ingester_wntr.py",\
       "tests/test_tns_watcher.py",\

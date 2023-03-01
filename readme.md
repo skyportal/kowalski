@@ -269,7 +269,7 @@ cd kowalski
 and running:
 
 ```bash
-PYTHONPATH=. KOWALSKI_APP_PATH=../ python -m pytest ../tests/test_ingester.py
+PYTHONPATH=. KOWALSKI_APP_PATH=../ python -m pytest ../tests/test_ingester_ztf.py
 ```
 
 The ingester tests can take a while to complete, be patient! If they encounter an error with kafka, it is likely that you did not modify the `server.properties` file as instructed above, meaning that the kafka logs can't be created, which blocks the test without showing an error.
@@ -277,7 +277,7 @@ The ingester tests can take a while to complete, be patient! If they encounter a
 If that happens, you can simply run the ingester without pytest so that you can see the logs and debug the issue:
 
 ```bash
-PYTHONPATH=. KOWALSKI_APP_PATH=../ python ../tests/test_ingester.py
+PYTHONPATH=. KOWALSKI_APP_PATH=../ python ../tests/test_ingester_ztf.py
 ```
 
 Another common problem is that if you stop the ingester test while its running or if it fails, it might leave a lock file in the kafka logs directory, which will prevent kafka from starting the next time you try to do so. If that happens, you can: delete the lock file, or simply retry starting the test, as a failed test attempt is supposed to remove the lock file. Then, the test should work on the following attempt.

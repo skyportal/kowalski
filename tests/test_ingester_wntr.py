@@ -6,12 +6,12 @@ import time
 import requests
 from alert_broker_winter import watchdog
 from ingester import KafkaStream
-from test_ingester import Program
+from test_ingester_ztf import Program
 from utils import Mongo, init_db_sync, load_config, log
 
 """
-Essentially the same as the ZTF ingester tests (test_ingester.py), except -
-1. Only a small number of test WINTER/WIRC alerts are used. These alerts are stored in data/, as opposed to ZTF test_ingester.py that pulls alerts from googleapis.
+Essentially the same as the ZTF ingester tests (test_ingester_ztf.py), except -
+1. Only a small number of test WINTER/WIRC alerts are used. These alerts are stored in data/, as opposed to ZTF test_ingester_ztf.py that pulls alerts from googleapis.
 2. Collections and Skyportal programs and filters relevant to WINTER are used instead of the ztf ones.
 """
 

@@ -153,11 +153,7 @@ def check_configs(
                 for k, v in deep_diff.items()
                 if k in ("dictionary_item_added", "dictionary_item_removed")
             }
-            if (
-                len(difference) > 0
-                and "['kowalski']['ml_models']"
-                not in difference["dictionary_item_removed"][0]
-            ):
+            if len(difference) > 0:
                 print(
                     "\n !!! config.yaml structure differs from config.defaults.yaml !!!"
                 )
@@ -277,7 +273,7 @@ class Kowalski:
             subprocess.run(command)
 
     @classmethod
-    def up(cls, build: bool = False):
+    def up(cls, build: bool = False, ignore_checks: bool = False):
         """
         🐧🚀 Launch Kowalski
 
@@ -289,13 +285,14 @@ class Kowalski:
         config_wildcards = ["config.*yaml", "docker-compose.*yaml"]
 
         # check configuration
-        with status("Checking configuration"):
-            check_configs(config_wildcards=config_wildcards)
+        if not ignore_checks:
+            with status("Checking configuration"):
+                check_configs(config_wildcards=config_wildcards)
 
         cls.check_keyfile()
 
         if build:
-            cls.build()
+            cls.build(ignore_checks=ignore_checks)
 
         command = ["docker-compose", "-f", "docker-compose.yaml", "up", "-d"]
 
@@ -316,7 +313,7 @@ class Kowalski:
         subprocess.run(command)
 
     @classmethod
-    def build(cls):
+    def build(cls, ignore_checks: bool = False):
         """
         Build Kowalski's containers
 
@@ -330,8 +327,9 @@ class Kowalski:
         command = ["docker-compose", "-f", "docker-compose.yaml", "build"]
 
         # check configuration
-        with status("Checking configuration"):
-            check_configs(config_wildcards=config_wildcards)
+        if not ignore_checks:
+            with status("Checking configuration"):
+                check_configs(config_wildcards=config_wildcards)
 
         # load config
         with open(
@@ -357,7 +355,9 @@ class Kowalski:
         subprocess.run(command)
 
     @staticmethod
-    def seed(source: str = "./", drop: Optional[bool] = False):
+    def seed(
+        source: str = "./", drop: Optional[bool] = False, ignore_checks: bool = False
+    ):
         """
         Ingest catalog dumps into Kowalski
 
@@ -369,8 +369,9 @@ class Kowalski:
         print("Ingesting catalog dumps into a running Kowalski instance")
 
         # check configuration
-        with status("Checking configuration"):
-            check_configs(config_wildcards=["config.*yaml"])
+        if not ignore_checks:
+            with status("Checking configuration"):
+                check_configs(config_wildcards=["config.*yaml"])
 
         with open(
             pathlib.Path(__file__).parent.absolute() / "config.yaml"
@@ -501,7 +502,7 @@ class Kowalski:
             {
                 "part": "ZTF alert ingestion",
                 "container": "kowalski_ingester_1",
-                "test_script": "test_ingester.py",
+                "test_script": "test_ingester_ztf.py",
                 "flaky": False,
             },
             {

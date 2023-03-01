@@ -6,7 +6,7 @@ import time
 import requests
 from alert_broker_pgir import watchdog
 from ingester import KafkaStream
-from test_ingester import Program
+from test_ingester_ztf import Program
 from utils import Mongo, init_db_sync, load_config, log
 
 """ load config and secrets """

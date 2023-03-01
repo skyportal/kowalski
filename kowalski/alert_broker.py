@@ -42,7 +42,6 @@ from utils import (
     radec2lb,
     time_stamp,
     timer,
-    ZTF_ALERT_NUMERICAL_FEATURES,
 )
 
 # Tensorflow is problematic for Mac's currently, so we can add an option to disable it
@@ -299,12 +298,27 @@ class AlertWorker:
 
         # ML models
         self.ml_models = dict()
+        self.allowed_features = (
+            config["ml"].get(self.instrument, {}).get("allowed_features", "()")
+        )
+        if isinstance(self.allowed_features, str):
+            try:
+                self.allowed_features = make_tuple(self.allowed_features)
+            except Exception:
+                log(
+                    f"Invalid format for ml.<instrument>.allowed_features: {self.allowed_features}, must be a tuple of strings"
+                )
+                self.allowed_features = ()
+        if len(self.allowed_features) == 0:
+            log(
+                "No ML models will be used: ml.<instrument>.allowed_features is empty/missing"
+            )
 
-        if USE_TENSORFLOW:
-            for model in config["ml_models"].get(self.instrument, []):
+        if USE_TENSORFLOW and len(self.allowed_features) > 0:
+            for model in config["ml"].get(self.instrument, {}).get("models", []):
                 try:
                     if not set(
-                        config["ml_models"][self.instrument][model].keys()
+                        config["ml"][self.instrument]["models"][model].keys()
                     ).issubset(
                         {
                             "version",
@@ -316,25 +330,25 @@ class AlertWorker:
                         }
                     ):
                         raise ValueError(
-                            f"Invalid keys in config['ml_models']['{self.instrument}']['{model}'], must be 'version', 'feature_names', 'feature_norms', 'triplet','format', and 'order'"
+                            f"Invalid keys in config['ml']['{self.instrument}']['models']['{model}'], must be 'version', 'feature_names', 'feature_norms', 'triplet','format', and 'order'"
                         )
 
-                    model_version = config["ml_models"][self.instrument][model][
+                    model_version = config["ml"][self.instrument]["models"][model][
                         "version"
                     ]
-                    model_feature_names = config["ml_models"][self.instrument][
+                    model_feature_names = config["ml"][self.instrument]["models"][
                         model
                     ].get("feature_names", False)
-                    model_feature_norms = config["ml_models"][self.instrument][
+                    model_feature_norms = config["ml"][self.instrument]["models"][
                         model
                     ].get("feature_norms", None)
-                    model_triplet = config["ml_models"][self.instrument][model].get(
+                    model_triplet = config["ml"][self.instrument]["models"][model].get(
                         "triplet", False
                     )
-                    model_format = config["ml_models"][self.instrument][model].get(
+                    model_format = config["ml"][self.instrument]["models"][model].get(
                         "format", "h5"
                     )
-                    model_order = config["ml_models"][self.instrument][model].get(
+                    model_order = config["ml"][self.instrument]["models"][model].get(
                         "order", ["features", "triplet"]
                     )
                     if model_format not in ["h5", "pb"]:
@@ -346,7 +360,7 @@ class AlertWorker:
                     else:
                         model_format = f".{model_format}"
                     if model_feature_names is True:
-                        model_feature_names = ZTF_ALERT_NUMERICAL_FEATURES
+                        model_feature_names = self.allowed_features
                     if isinstance(model_feature_names, str):
                         try:
                             model_feature_names = make_tuple(model_feature_names)
@@ -370,9 +384,9 @@ class AlertWorker:
                         model_feature_names
                         if isinstance(model_feature_names, tuple)
                         else []
-                    ).issubset(set(ZTF_ALERT_NUMERICAL_FEATURES)):
+                    ).issubset(set(self.allowed_features)):
                         raise ValueError(
-                            "feature_names must be a subset of the ZTF_ALERT_NUMERICAL_FEATURES"
+                            "feature_names must be a subset of the self.allowed_features"
                         )
                     if model_feature_norms is not None and not isinstance(
                         model_feature_norms, dict

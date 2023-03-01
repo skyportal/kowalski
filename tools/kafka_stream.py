@@ -2,12 +2,11 @@ import argparse
 import os
 import pathlib
 
-from utils import KafkaStream, load_config
+from utils import load_config
+from ingester import KafkaStream
 
 KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
 config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
-
-print("Kafka stream started...")
 
 parser = argparse.ArgumentParser(description="Create a Kafka stream")
 
@@ -44,7 +43,7 @@ if isinstance(action, str) and action.lower() not in ["start", "stop"]:
     raise ValueError(
         "action must be either start or stop. Default is start if not specified"
     )
-
+print("\nParameters:")
 print(f"topic: {topic}")
 print(f"path_alerts: {path_alerts}")
 print(f"test: {test}")
@@ -58,6 +57,8 @@ stream = KafkaStream(
 )
 
 if action == "stop":
+    print("\nStopping Kafka stream...")
     stream.stop()
 else:
+    print("\nStarting Kafka stream...")
     stream.start()

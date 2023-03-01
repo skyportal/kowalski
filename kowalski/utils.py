@@ -1131,36 +1131,6 @@ def ccd_quad_to_rc(ccd: int, quad: int) -> int:
     return rc
 
 
-ZTF_ALERT_NUMERICAL_FEATURES = (
-    "drb",
-    "diffmaglim",
-    "ra",
-    "dec",
-    "magpsf",
-    "sigmapsf",
-    "chipsf",
-    "fwhm",
-    "sky",
-    "chinr",
-    "sharpnr",
-    "sgscore1",
-    "distpsnr1",
-    "sgscore2",
-    "distpsnr2",
-    "sgscore3",
-    "distpsnr3",
-    "ndethist",
-    "ncovhist",
-    "scorr",
-    "nmtchps",
-    "clrcoeff",
-    "clrcounc",
-    "neargaia",
-    "neargaiabright",
-    "classtar",
-)
-
-
 class ZTFAlert:
     def __init__(self, alert, models, label=None, **kwargs):
         self.kwargs = kwargs
