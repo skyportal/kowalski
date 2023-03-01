@@ -7,7 +7,7 @@ Its main focus is the [Zwicky Transient Facility](https://ztf.caltech.edu).
 
 A schematic overview of the functional aspects of `Kowalski` and how they interact is shown below:
 
-![data/img/kowalski.jpg](data/img/kowalski.jpg)
+![data/img/logo-kowalski.png](data/img/logo-kowalski.png)
 
 - A non-relational (NoSQL) database `MongoDB` powers the data archive, the alert stream sink,
 and the alert handling service.
