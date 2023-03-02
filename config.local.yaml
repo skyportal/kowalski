@@ -51,7 +51,7 @@ kowalski:
     host: 127.0.0.1 # change to whatever your mongo host is if not running locally
     port: 27017 # you can set to null or leave empty if not running locally
     # if not null, must be same as in entrypoint of mongo container
-    replica_set: "atlas-kwz9nb-shard-0" # you can set to null or leave empty if not running locally, or if you are not using a replica set
+    replica_set: "atlas-kwz9nb-shard-0" # you can set to null or leave empty if not running a mongodb cluster locally, or if you are not using a replica set
     db: "kowalski"
     admin_username: "mongoadmin" # create admin_user manually if you are using mongodb atlas (on atlas web interface)
     admin_password: "mongoadminsecret" # create admin_user manually if you are using mongodb atlas (on atlas web interface)

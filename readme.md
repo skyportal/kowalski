@@ -133,16 +133,93 @@ db.createUser( { user: "mongoadmin", pwd: "mongoadminsecret", roles: [ { role: "
 db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "kowalski" } ] } )
 ```
 
-### Installing python and system dependencies
+*We recommend using MongoDB atlas when running locally to avoid having to setup a momgodb cluster. Don't forget seting the `database.host` to you atlas url.*
 
-This time, you will need to start the different services manually. But first, you'll need to install the python dependencies:
+### Installing python and system dependencies on Linux amd64
+
+#### System dependencies
+
+First, you'll need to install few system dependencies:
 
 ```bash
+sudo apt install -y default-jdk wget
+```
+
+#### Python dependencies
+
+Make sure you have a version of python that is 3.8 or above before following the next steps.
+
+Now, in the **same** terminal, run:
+
+```bash
+sudo pip install virtualenv
+virtualenv env
 source env/bin/activate
+```
+
+to create your virtual environment. If you are told that pip is not found, try using pip3 instead. For the following steps however (in the virtualenv), pip should work.
+
+Then, run:
+
+```bash
+pip install -r requirements.txt
 pip install -r kowalski/requirements_api.txt
 pip install -r kowalski/requirements_ingester.txt
 pip install -r kowalski/requirements_tools.txt
 ```
+
+### Installing python and system dependencies on MacOS arm64 (M1 and M2 processors)
+
+#### System dependencies
+
+First, you need to install several system dependencies using [homebrew](https://brew.sh):
+
+```bash
+brew install java librdkafka wget
+```
+
+After installing java, run the following to make sure it is accessible by kafka later on:
+```
+sudo ln -sfn /opt/homebrew/opt/openjdk/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk.jdk
+echo 'export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"' >> ~/.zshrc
+```
+Seperately, we install hdf5:
+```bash
+brew install hdf5
+```
+At the end of hdf5's installation, the path where it has been installed will be displayed in your terminal. Copy that path and make sure that you save it somewhere (like as a comment in the config.yaml for example). You will need it when installing or updating python dependencies.
+
+Next, run:
+```bash
+export HDF5_DIR=<path_to_hdf5>
+```
+
+#### Python dependencies
+
+Make sure you have a version of python that is 3.8 or above before following the next steps. You can consider installing a newer version with `homebrew` if needed.
+
+Now, in the **same** terminal, run:
+
+```bash
+sudo pip install virtualenv
+virtualenv env
+source env/bin/activate
+```
+
+to create your virtual environment. If you are told that pip is not found, try using pip3 instead. For the following steps however (in the virtualenv), pip should work.
+
+*We do not suggest using conda, as we experienced trouble installing arm64 specific packages like tensorflow-macos and tensor flow-metal.*
+
+Finally, run the following to install the python dependencies:
+
+```bash
+pip install -r requirements.txt
+pip install -r kowalski/requirements_api.txt
+pip install -r kowalski/requirements_ingester_macos.txt
+pip install -r kowalski/requirements_tools.txt
+```
+
+### Install kafka and zookeeper
 
 Then, you'll need to install kafka and zookeeper:
 
@@ -173,6 +250,8 @@ wget https://github.com/dmitryduev/acai/raw/master/models/acai_o.$acai_o_version
 wget https://github.com/dmitryduev/acai/raw/master/models/acai_n.$acai_n_version.h5 && \
 wget https://github.com/dmitryduev/acai/raw/master/models/acai_b.$acai_b_version.h5
 ```
+
+*Kowalski's path have been designed to be easy to use in Docker. To avoid running into any problems accessing the models, we suggest copying them at the root of your kowalski repo, and not only in the kowalski directory in it (as the command given above did).*
 
 ### API
 
