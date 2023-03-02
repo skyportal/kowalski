@@ -306,12 +306,12 @@ class AlertWorker:
                 self.allowed_features = make_tuple(self.allowed_features)
             except Exception:
                 log(
-                    f"Invalid format for ml.<instrument>.allowed_features: {self.allowed_features}, must be a tuple of strings"
+                    f"Invalid format for ml.{self.instrument}.allowed_features, must be a tuple of strings"
                 )
                 self.allowed_features = ()
         if len(self.allowed_features) == 0:
             log(
-                "No ML models will be used: ml.<instrument>.allowed_features is empty/missing"
+                f"No ML models will be used: ml.{self.instrument}.allowed_features is empty/missing"
             )
 
         if USE_TENSORFLOW and len(self.allowed_features) > 0:
@@ -330,7 +330,7 @@ class AlertWorker:
                         }
                     ):
                         raise ValueError(
-                            f"Invalid keys in config['ml']['{self.instrument}']['models']['{model}'], must be 'version', 'feature_names', 'feature_norms', 'triplet','format', and 'order'"
+                            f"Invalid keys in ml.{self.instrument}.models.{model}, must be 'version', 'feature_names', 'feature_norms', 'triplet','format', and 'order'"
                         )
 
                     model_version = config["ml"][self.instrument]["models"][model][
@@ -353,7 +353,7 @@ class AlertWorker:
                     )
                     if model_format not in ["h5", "pb"]:
                         raise ValueError(
-                            f"Invalid model format: {model_format}, must be 'h5' or 'pb'"
+                            f"Invalid ml.{self.instrument}.models.{model}.format: {model_format}, must be 'h5' or 'pb'"
                         )
                     if model_format == "pb":
                         model_format = "/"
@@ -366,18 +366,18 @@ class AlertWorker:
                             model_feature_names = make_tuple(model_feature_names)
                         except Exception:
                             raise ValueError(
-                                f"Invalid model_feature_names: {model_feature_names}"
+                                f"Invalid ml.{self.instrument}.models.{model}.feature_names, must be a tuple of strings"
                             )
 
                     if model_feature_names is False and model_triplet is False:
                         raise ValueError(
-                            f"Both'feature_names' or 'triplet' cannot be False for model {model}"
+                            f"ml.{self.instrument}.models.{model}: both 'feature_names' or 'triplet' cannot be False for model {model}"
                         )
                     if not isinstance(model_feature_names, bool) and not isinstance(
                         model_feature_names, tuple
                     ):
                         raise ValueError(
-                            f"model_feature_names must be either a bool or a tuple, got {type(model_feature_names)}"
+                            f"ml.{self.instrument}.models.{model}.feature_names must be either a bool or a tuple, got {type(model_feature_names)}"
                         )
 
                     if not set(
@@ -386,27 +386,27 @@ class AlertWorker:
                         else []
                     ).issubset(set(self.allowed_features)):
                         raise ValueError(
-                            "feature_names must be a subset of the self.allowed_features"
+                            f"ml.{self.instrument}.models.{model}.feature_names must be a subset of the {self.allowed_features}"
                         )
                     if model_feature_norms is not None and not isinstance(
                         model_feature_norms, dict
                     ):
                         raise ValueError(
-                            f"model_feature_norms must be a dict, or None, got {type(model_feature_norms)}"
+                            f"ml.{self.instrument}.models.{model}.feature_norms must be a dict, or None, got {type(model_feature_norms)}"
                         )
                     if model_feature_norms is not None and not set(
                         model_feature_norms.keys()
                     ).issubset(set(model_feature_names)):
                         raise ValueError(
-                            "model_feature_norms keys must be a subset of model_feature_names"
+                            f"ml.{self.instrument}.models.{model}.feature_norms keys must be a subset of model_feature_names"
                         )
                     if not isinstance(model_triplet, bool):
                         raise ValueError(
-                            f"model_triplet must be a bool, got {type(model_triplet)}"
+                            f"ml.{self.instrument}.models.{model}.triplet must be a bool, got {type(model_triplet)}"
                         )
                     if not isinstance(model_version, str) or model_version == "":
                         raise ValueError(
-                            f"model_version must be a non empty string, got {type(model_version)}"
+                            f"ml.{self.instrument}.models.{model}.version must be a non empty string, got {type(model_version)}"
                         )
 
                     # todo: allow other formats such as SavedModel

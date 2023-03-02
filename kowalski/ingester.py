@@ -16,6 +16,8 @@ def delivery_report(err, msg):
 
 
 class KafkaStream:
+    as_context_manager = False
+
     def __init__(self, topic, path_alerts, config, test=False):
         self.config = config
         self.topic = topic
@@ -166,7 +168,6 @@ class KafkaStream:
 
     def stop(self):
         # shut down Kafka server and ZooKeeper
-        time.sleep(30)
 
         log("Shutting down Kafka Server at localhost:9092")
         # start the Kafka server:
@@ -205,7 +206,10 @@ class KafkaStream:
 
     def __enter__(self):
         self.start()
+        self.as_context_manager = True
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.as_context_manager:
+            time.sleep(15)  # give it a chance to finish ingesting properly
         self.stop()

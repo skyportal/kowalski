@@ -57,7 +57,7 @@ kowalski:
     admin_password: "mongoadminsecret" # create admin_user manually if you are using mongodb atlas (on atlas web interface)
     username: "ztf" # create user manually if you are using mongodb atlas (on atlas web interface)
     password: "ztf" # create user manually if you are using mongodb atlas (on atlas web interface)
-    srv: True
+    srv: True # to use with mongodb atlas or any other distant mongodb server, where specifying a port is not necessary
 
     build_indexes: True
 

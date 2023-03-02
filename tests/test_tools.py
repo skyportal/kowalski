@@ -43,6 +43,16 @@ class TestTools:
         tag = get_default_args(run_ztf_source_features).get("tag")
         collection = f"ZTF_source_features_{tag}"
 
+        # check if the collection exists, drop it if it does
+        if collection in self.mongo.db.list_collection_names():
+            log(f"Collection {collection} already exists, dropping it...")
+            try:
+                self.mongo.db[collection].drop()
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to drop the existing ZTF source features collection: {e}"
+                )
+
         run_ztf_source_features(
             path=f"{KOWALSKI_APP_PATH}/data/ztf_source_features",
             tag=tag,
@@ -59,6 +69,16 @@ class TestTools:
         tag = get_default_args(run_ztf_source_classifications).get("tag")
         collection = f"ZTF_source_classifications_{tag}"
 
+        # check if the collection exists, drop it if it does
+        if collection in self.mongo.db.list_collection_names():
+            log(f"Collection {collection} already exists, dropping it...")
+            try:
+                self.mongo.db[collection].drop()
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to drop the existing ZTF source classifications collection: {e}"
+                )
+
         run_ztf_source_classifications(
             path=f"{KOWALSKI_APP_PATH}/data/ztf_source_classifications/",
             tag=tag,
@@ -74,6 +94,26 @@ class TestTools:
         tag = str(randrange(10000000, 99999999, 1))
         sources_collection = f"ZTF_sources_{tag}"
         exposures_collection = f"ZTF_exposures_{tag}"
+
+        # check if the collections exist, drop them if they do
+        if sources_collection in self.mongo.db.list_collection_names():
+            log(f"Collection {sources_collection} already exists, dropping it...")
+            try:
+                self.mongo.db[sources_collection].drop()
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to drop the existing ZTF sources collection: {e}"
+                )
+
+        if exposures_collection in self.mongo.db.list_collection_names():
+            log(f"Collection {exposures_collection} already exists, dropping it...")
+            try:
+                self.mongo.db[exposures_collection].drop()
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to drop the existing ZTF exposures collection: {e}"
+                )
+
         run_ztf_matchfiles(
             path=f"{KOWALSKI_APP_PATH}/data/ztf_matchfiles",
             tag=tag,
@@ -93,6 +133,14 @@ class TestTools:
     def test_ingest_vlass(self):
         collection = "VLASS_DR1"
 
+        # check if the collection exists, drop it if it does
+        if collection in self.mongo.db.list_collection_names():
+            log(f"Collection {collection} already exists, dropping it...")
+            try:
+                self.mongo.db[collection].drop()
+            except Exception as e:
+                raise RuntimeError(f"Failed to drop the existing VLASS collection: {e}")
+
         run_vlass(
             path=f"{KOWALSKI_APP_PATH}/data/catalogs",
             num_processes=1,
@@ -105,6 +153,14 @@ class TestTools:
 
     def test_ingest_igaps(self):
         collection = "IGAPS_DR2"
+
+        # check if the collection exists, drop it if it does
+        if collection in self.mongo.db.list_collection_names():
+            log(f"Collection {collection} already exists, dropping it...")
+            try:
+                self.mongo.db[collection].drop()
+            except Exception as e:
+                raise RuntimeError(f"Failed to drop the existing IGAPS collection: {e}")
 
         run_igaps(
             path=f"{KOWALSKI_APP_PATH}/data/catalogs",
@@ -120,6 +176,16 @@ class TestTools:
         tag = get_default_args(run_ztf_public).get("tag")
         collection = f"ZTF_public_sources_{tag}"
 
+        # check if the collection exists, drop it if it does
+        if collection in self.mongo.db.list_collection_names():
+            log(f"Collection {collection} already exists, dropping it...")
+            try:
+                self.mongo.db[collection].drop()
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to drop the existing ZTF public collection: {e}"
+                )
+
         run_ztf_public(path=f"{KOWALSKI_APP_PATH}/data/catalogs", num_proc=1)
 
         ingested_entries = list(self.mongo.db[collection].find({}, {"_id": 1}))
@@ -130,6 +196,26 @@ class TestTools:
     def test_ingest_ptf(self):
         sources_collection = "PTF_sources"
         exposures_collection = "PTF_exposures"
+
+        # check if the collections exist, drop them if they do
+        if sources_collection in self.mongo.db.list_collection_names():
+            log(f"Collection {sources_collection} already exists, dropping it...")
+            try:
+                self.mongo.db[sources_collection].drop()
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to drop the existing PTF sources collection: {e}"
+                )
+
+        if exposures_collection in self.mongo.db.list_collection_names():
+            log(f"Collection {exposures_collection} already exists, dropping it...")
+            try:
+                self.mongo.db[exposures_collection].drop()
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to drop the existing PTF exposures collection: {e}"
+                )
+
         run_ptf_matchfiles(
             path=f"{KOWALSKI_APP_PATH}/data/catalogs",
             num_proc=1,
@@ -144,34 +230,3 @@ class TestTools:
 
         assert len(ingested_sources) == 1145
         assert len(ingested_exposures) == 2
-
-
-# this is a pytest fixture that runs once after all tests are done
-# this is needed if you run the tests multiple times locally, as the database is not reset automatically
-@pytest.fixture(scope="session", autouse=True)
-def cleanup(request):
-    """Cleanup after tests, by removing the vlass and igaps collections"""
-
-    def remove_vlass_igaps():
-        log("Cleaning up")
-        mongo = Mongo(
-            host=config["database"]["host"],
-            port=config["database"]["port"],
-            replica_set=config["database"]["replica_set"],
-            username=config["database"]["username"],
-            password=config["database"]["password"],
-            db=config["database"]["db"],
-            srv=config["database"]["srv"],
-            verbose=True,
-        )
-        log("Successfully connected")
-
-        collections = [
-            "VLASS_DR1",
-            "IGAPS_DR2",
-        ]
-        for collection in collections:
-            log(f"Removing {collection}")
-            mongo.db[collection].drop()
-
-    request.addfinalizer(remove_vlass_igaps)

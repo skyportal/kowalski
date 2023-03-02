@@ -255,12 +255,10 @@ class Filter:
         )
         assert resp.status_code == requests.codes.ok
         result = resp.json()
-
         assert result["status"] == "success"
         assert "data" in result
         assert "fid" in result["data"]
         fid = result["data"]["fid"]
-
         return fid
 
     def remove(self):
@@ -300,11 +298,36 @@ class TestIngester:
         init_db_sync(config=config, verbose=True)
 
         log("Setting up paths")
-        # path_kafka = pathlib.Path(config["path"]["kafka"])
 
         path_logs = pathlib.Path(config["path"]["logs"])
         if not path_logs.exists():
             path_logs.mkdir(parents=True, exist_ok=True)
+
+        log("Checking the existing ZTF alert collection states")
+        mongo = Mongo(
+            host=config["database"]["host"],
+            port=config["database"]["port"],
+            replica_set=config["database"]["replica_set"],
+            username=config["database"]["username"],
+            password=config["database"]["password"],
+            db=config["database"]["db"],
+            srv=config["database"]["srv"],
+            verbose=True,
+        )
+        collection_alerts = config["database"]["collections"]["alerts_ztf"]
+        collection_alerts_aux = config["database"]["collections"]["alerts_ztf_aux"]
+
+        # check if the collection exists, drop it if it does
+        if collection_alerts in mongo.db.list_collection_names():
+            try:
+                mongo.db[collection_alerts].drop()
+            except Exception as e:
+                log(f"Failed to drop the collection {collection_alerts}: {e}")
+        if collection_alerts_aux in mongo.db.list_collection_names():
+            try:
+                mongo.db[collection_alerts_aux].drop()
+            except Exception as e:
+                log(f"Failed to drop the collection {collection_alerts_aux}: {e}")
 
         if config["misc"]["broker"]:
             log("Setting up test groups and filters in Fritz")
@@ -376,19 +399,6 @@ class TestIngester:
             log("Digested and ingested: all done!")
 
         log("Checking the ZTF alert collection states")
-        mongo = Mongo(
-            host=config["database"]["host"],
-            port=config["database"]["port"],
-            replica_set=config["database"]["replica_set"],
-            username=config["database"]["username"],
-            password=config["database"]["password"],
-            db=config["database"]["db"],
-            srv=config["database"]["srv"],
-            verbose=True,
-        )
-        collection_alerts = config["database"]["collections"]["alerts_ztf"]
-        collection_alerts_aux = config["database"]["collections"]["alerts_ztf_aux"]
-
         num_retries = 10
         # alert processing takes time, which depends on the available resources
         # so allow some additional time for the processing to finish

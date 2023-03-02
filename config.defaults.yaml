@@ -59,7 +59,7 @@ kowalski:
     username: "ztf"
     # fixme: use strong password if exposing the database to the world
     password: "ztf"
-    srv: False
+    srv: False # to use with mongodb atlas or any other distant mongodb server, where specifying a port is not necessary
 
     build_indexes: True
 

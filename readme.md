@@ -275,6 +275,8 @@ KOWALSKI_APP_PATH=../ python -m pytest -s api.py ../tests/test_api.py
 
 which should complete.
 
+*You might get 2 failed tests the first time. This is because some of the API tests rely on the ingester tests to have run first to populate the database. If you run the tests again after the ingester tests, they should all pass.*
+
 ### Dask cluster
 
 Next, you need to start the dask scheduler and workers. These are the processes that will run the machine learning models and the alert filtering when running the ingester and/or the broker.
