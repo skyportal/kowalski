@@ -25,7 +25,7 @@ catalog cross-matching, and ingestion into `MongoDB`.
 It also executes user-defined filters based on the augmented alert data and posts the filtering results
 to a [`SkyPortal`](https://skyportal.io/) instance.
 - Kowalski is containerized using `Docker` software and orchestrated with `docker-compose`
-allowing for simple and efficient deployment in the cloud and/or on-premise.
+allowing for simple and efficient deployment in the cloud and/or on-premise. However, it can also run without Docker especially for development purposes.
 
 ## Interacting with a `Kowalski` instance
 
@@ -33,23 +33,23 @@ allowing for simple and efficient deployment in the cloud and/or on-premise.
 
 The easiest way to interact with a `Kowalski` instance is by using a python client [`penquins`](https://github.com/dmitryduev/penquins).
 
+## Cloning and Environment configuration
 
-## Spin up your own `kowalski`
+Start off by creating your own kowalski fork and github, and cloning it, then `cd` into the cloned directory:
 
-### Cloning and Environment configuration
-
-Start off by cloning the repo, then `cd` into the cloned directory:
 ```bash
-git clone https://github.com/dmitryduev/kowalski.git
+git clone https://github.com/<your_github_id>/kowalski.git
 cd kowalski
 ```
-Make sure you have a `python` environment that meets the requirements to run `Kowalski`:
+Make sure you have a `python` environment that meets the requirements to run `Kowalski`. You can use both conda and virtualenv. Using virtualenv, you can do:
 
 ```bash
+virtualenv env
+source env/bin/activate
 pip install -r requirements.txt
 ```
 
-You can then use the `kowalski.py` utility to manage `Kowalski`.
+## Spin up your own `kowalski` **using Docker**
 
 ### Setting up config files
 
@@ -60,7 +60,7 @@ cp config.defaults.yaml config.yaml
 cp docker-compose.defaults.yaml docker-compose.yaml
 ```
 
-`config.yaml` contains the API and ingester configs, the `supevisord` config for the API and ingester containers,
+`config.yaml` contains the API and ingester configs, the `supervisord` config for the API and ingester containers,
 together with all the secrets, so be careful when committing code / pushing docker images.
 
 However, if you want to run in a production setting, be sure to modify `config.yaml` and choose strong passwords!
@@ -87,15 +87,299 @@ If you want to just interact with a `Kowalski` instance that has already been bu
 * `./kowalski.py up` to start up a pre-built Kowalski instance
 * `./koiwalski.py down`to shut down a pre-built Kowalski instance
 
-## Run tests
+### Run tests
 
-You can check that a running `Kowalski` instance is working by using the Kowalski test suite:
+You can check that a running docker `Kowalski` instance is working by using the Kowalski test suite:
 
 ```bash
 ./kowalski.py test
 ```
 
-## Different Deployment scenarios
+### Shut down `Kowalski`
+
+```bash
+./kowalski.py down
+```
+
+## Spin up your own `kowalski` **without Docker** (amd64 only for now)
+
+### Setting up config files
+
+Similar to the Docker setup, you need config files in order to run `Kowalski`. You can start off by copying the default config/secrets over. Here however, the default config file is `config.local.yaml`:
+
+```bash
+cp config.local.yaml config.yaml
+```
+
+The difference between `config.local.yaml` and `config.defaults.yaml` is that the former has all the path variables set to the local relative path of the kowalski repo. This is useful if you want to run `Kowalski` without Docker without having to change many path variables in `config.yaml`.
+
+### Setting up the MongoDB database
+
+You will need to edit the `database` section to point to your local mongodb instance, or to a mongodb atlas cluster, in which case you should set `database.srv` to `true`, and `database.replica_set` to the name of your cluster or simply `null`.
+If you are using a mongodb atlas cluster, kowalski won't be able to create admin users, so you will need to do so manually on the cluster's web interface. You will need to create 2 users: admin user and user, based on what usernames and passwords you've set in the config file.
+
+If you are running your own MongoDB cluster locally *(not using mongoDB atlas or any remove server)*, it is likely that database.host should be 127.0.0.1 or similar. For simplicity, we also set database.replica_set to null. We also need to set the admin and user roles for the database. To do so, login to mongdb and set (using the default values from the config):
+
+```bash
+mongosh --host 127.0.0.1 --port 27017
+```
+and then from within the mongo terminal
+
+```bash
+use kowalski
+db.createUser( { user: "mongoadmin", pwd: "mongoadminsecret", roles: [ { role: "userAdmin", db: "admin" } ] } )
+db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "admin" } ] } )
+db.createUser( { user: "mongoadmin", pwd: "mongoadminsecret", roles: [ { role: "userAdmin", db: "kowalski" } ] } )
+db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "kowalski" } ] } )
+```
+
+*We recommend using MongoDB atlas when running locally to avoid having to setup a momgodb cluster. Don't forget seting the `database.host` to you atlas url.*
+
+### Installing python and system dependencies on Linux amd64
+
+#### System dependencies
+
+First, you'll need to install few system dependencies:
+
+```bash
+sudo apt install -y default-jdk wget
+```
+
+#### Python dependencies
+
+Make sure you have a version of python that is 3.8 or above before following the next steps.
+
+Now, in the **same** terminal, run:
+
+```bash
+sudo pip install virtualenv
+virtualenv env
+source env/bin/activate
+```
+
+to create your virtual environment. If you are told that pip is not found, try using pip3 instead. For the following steps however (in the virtualenv), pip should work.
+
+Then, run:
+
+```bash
+pip install -r requirements.txt
+pip install -r kowalski/requirements_api.txt
+pip install -r kowalski/requirements_ingester.txt
+pip install -r kowalski/requirements_tools.txt
+```
+
+### Installing python and system dependencies on MacOS arm64 (M1 and M2 processors)
+
+#### System dependencies
+
+First, you need to install several system dependencies using [homebrew](https://brew.sh):
+
+```bash
+brew install java librdkafka wget
+```
+
+After installing java, run the following to make sure it is accessible by kafka later on:
+```
+sudo ln -sfn /opt/homebrew/opt/openjdk/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk.jdk
+echo 'export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"' >> ~/.zshrc
+```
+Seperately, we install hdf5:
+```bash
+brew install hdf5
+```
+At the end of hdf5's installation, the path where it has been installed will be displayed in your terminal. Copy that path and make sure that you save it somewhere (like as a comment in the config.yaml for example). You will need it when installing or updating python dependencies.
+
+Next, run:
+```bash
+export HDF5_DIR=<path_to_hdf5>
+```
+
+#### Python dependencies
+
+Make sure you have a version of python that is 3.8 or above before following the next steps. You can consider installing a newer version with `homebrew` if needed.
+
+Now, in the **same** terminal, run:
+
+```bash
+sudo pip install virtualenv
+virtualenv env
+source env/bin/activate
+```
+
+to create your virtual environment. If you are told that pip is not found, try using pip3 instead. For the following steps however (in the virtualenv), pip should work.
+
+*We do not suggest using conda, as we experienced trouble installing arm64 specific packages like tensorflow-macos and tensor flow-metal.*
+
+Finally, run the following to install the python dependencies:
+
+```bash
+pip install -r requirements.txt
+pip install -r kowalski/requirements_api.txt
+pip install -r kowalski/requirements_ingester_macos.txt
+pip install -r kowalski/requirements_tools.txt
+```
+
+### Install kafka and zookeeper
+
+Then, you'll need to install kafka and zookeeper:
+
+```bash
+export scala_version=2.13
+export kafka_version=3.4.0
+wget https://downloads.apache.org/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz
+tar -xzf kafka_$scala_version-$kafka_version.tgz
+```
+
+Installed in this way, path.kafka in the config should be set to ./kafka_2.13-3.4.0.
+
+The last step of the kafka setup is to replace its `kafka_$scala_version-$kafka_version/config/server.properties` file with the one in `kowalski/server.properties`. As this setup is meant to run locally outside docker, you should modify said `server.properties` file to set `log.dirs=/data/logs/kafka-logs` to `log.dirs=./data/logs/kafka-logs` instead (the addition here is the `.` at the beginning of the path) to avoid permission issues.
+
+### Download the ML models
+
+The ingester we will run later on needs the different models to be downloaded. To do so, run:
+
+```bash
+cd kowalski && mkdir models && cd models && \
+braai_version=d6_m9 && acai_h_version=d1_dnn_20201130 && \
+acai_v_version=d1_dnn_20201130 && acai_o_version=d1_dnn_20201130 && \
+acai_n_version=d1_dnn_20201130 && acai_b_version=d1_dnn_20201130 && \
+wget https://github.com/dmitryduev/braai/raw/master/models/braai_$braai_version.h5 -O braai.$braai_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_h.$acai_h_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_v.$acai_v_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_o.$acai_o_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_n.$acai_n_version.h5 && \
+wget https://github.com/dmitryduev/acai/raw/master/models/acai_b.$acai_b_version.h5
+```
+
+*Kowalski's path have been designed to be easy to use in Docker. To avoid running into any problems accessing the models, we suggest copying them at the root of your kowalski repo, and not only in the kowalski directory in it (as the command given above did).*
+
+### API
+
+The API app can then be run with
+
+```bash
+KOWALSKI_APP_PATH=./ KOWALSKI_PATH=kowalski python kowalski/api.py
+```
+
+Then tests can be run by going into the kowalski/ directory
+
+```bash
+cd kowalski
+```
+
+and running:
+
+```bash
+KOWALSKI_APP_PATH=../ python -m pytest -s api.py ../tests/test_api.py
+```
+
+which should complete.
+
+*You might get 2 failed tests the first time. This is because some of the API tests rely on the ingester tests to have run first to populate the database. If you run the tests again after the ingester tests, they should all pass.*
+
+### Dask cluster
+
+Next, you need to start the dask scheduler and workers. These are the processes that will run the machine learning models and the alert filtering when running the ingester and/or the broker.
+
+Before starting it, you might want to consider lowering or increasing the number of workers and threads per worker in the config file, depending on your config. The default values are set to 4 workers and 4 threads per worker. This means that the dask cluster will be able to process 4 alerts at the same time. If you have a GPU available with a lot of VRAM, you might want to increase the number of workers and threads per worker to take advantage of it.
+
+```bash
+cd kowalski
+```
+
+and running:
+
+```bash
+KOWALSKI_APP_PATH=../ python dask_cluster.py
+```
+
+If you have a GPU available, tensorflow might use it by default. However, you might run into some issue running the ml models when following the instructions below if you GPU does not have much memory. To avoid this, you can set the environment variable `CUDA_VISIBLE_DEVICES=-1` before running the dask cluster:
+
+```bash
+CUDA_VISIBLE_DEVICES=-1 KOWALSKI_APP_PATH=../ python dask_cluster.py
+```
+
+### Alert Broker
+
+If you have access to a ZTF alert stream and have it configured accordingly in the config. If you intend to simulate an alert stream locally, you should change the kafka config to set the `bootstrap.servers` to `localhost:9092`, and `zookeeper` to `localhost:2181`.Then, you can run the broker with
+```bash
+KOWALSKI_APP_PATH=./ python kowalski/alert_broker_ztf.py
+```
+
+**When running locally for testing/development purposes, you can simply run the tests which will create a mock alert stream and run the broker on it.**
+
+Then tests can be run by going into the kowalski/ directory
+*(when running the tests, you do not need to start the broker as instructed in the previous step. The tests will take care of it)*
+
+```bash
+cd kowalski
+```
+
+and running:
+
+```bash
+KOWALSKI_APP_PATH=../ python -m pytest -s alert_broker_ztf.py ../tests/test_alert_broker_ztf.py
+```
+
+We also provide an option `USE_TENSORFLOW=False` for users who cannot install Tensorflow for whatever reason.
+
+### Ingester (Pushing alerts to a kafka)
+
+Once the broker is running, you might want to create a local kafka stream of alerts to test it. To do so, you can run the ingester with
+
+```bash
+cd kowalski
+```
+
+and running:
+
+```bash
+PYTHONPATH=. KOWALSKI_APP_PATH=../ python ../tools/kafka_stream.py --topic="<topic_listened_by_your_broker" --path="<path_to_alerts_in_KOWALSKI_APP_PATH/data/>" --test=True
+```
+
+where `<topic_listened_by_your_broker>` is the topic listened by your broker (ex: `ztf_20200301_programid3` for the ztf broker) and `<path_to_alerts_in_KOWALSKI_APP_PATH/data/>` is the path to the alerts in the `data/` directory of the kowalski app (ex: `ztf_alerts/20200202` for the ztf broker).
+
+**Otherwise, you can test both ingestion and broker at the same time by running the ingester tests:**
+
+Then tests can be run by going into the kowalski/ directory (similarly to the broker tests, you do not need to star the broker manually as instructed in the previous step. The tests will take care of it). Make sure that the dask cluster is running before running the ingester tests.
+
+```bash
+cd kowalski
+```
+
+and running:
+
+```bash
+PYTHONPATH=. KOWALSKI_APP_PATH=../ python -m pytest ../tests/test_ingester_ztf.py
+```
+
+The ingester tests can take a while to complete, be patient! If they encounter an error with kafka, it is likely that you did not modify the `server.properties` file as instructed above, meaning that the kafka logs can't be created, which blocks the test without showing an error.
+
+If that happens, you can simply run the ingester without pytest so that you can see the logs and debug the issue:
+
+```bash
+PYTHONPATH=. KOWALSKI_APP_PATH=../ python ../tests/test_ingester_ztf.py
+```
+
+Another common problem is that if you stop the ingester test while its running or if it fails, it might leave a lock file in the kafka logs directory, which will prevent kafka from starting the next time you try to do so. If that happens, you can: delete the lock file, or simply retry starting the test, as a failed test attempt is supposed to remove the lock file. Then, the test should work on the following attempt.
+
+We stronly advise you to open the `server.log` file found in /kakfa_$scala_version-$kafka_version/logs/ to see what is going on with the kafka server. It will be particularly useful if you encounter errors with the ingester tests or the broker.
+
+### Tools
+
+Then tests can be run by going into the kowalski/ directory
+
+```bash
+cd kowalski
+```
+
+and running:
+```bash
+KOWALSKI_APP_PATH=../ python -m pytest -s ../tools/istarmap.py ../tests/test_tools.py
+```
+
+
+## Different Deployment scenarios (using Docker)
 
 `Kowalski` uses `docker-compose` under the hood and requires a `docker-compose.yaml` file.
 There are several available deployment scenarios:
@@ -129,17 +413,11 @@ In `docker-compose.yaml`:
 - Replace `kowalski@caltech.edu` with your email.
 - Replace `private.caltech.edu` with your domain.
 
-## Shut down `Kowalski`
+## API Docs
 
-```bash
-./kowalski.py down
-```
+OpenAPI specs are to be found under `/docs/api/` once `Kowalski` is up and running.
 
-## Docs
-
-OpenAPI specs are to be found under `/docs/api` once `Kowalski` is up and running.
-
-## Developer guidelines
+## Developer guide
 
 ### How to contribute
 
@@ -223,131 +501,6 @@ conform with our code style standards. We use `black` to reformat `Python`
 code and `flake8` to verify that code complies with [PEP8](https://www.python.org/dev/peps/pep-0008/).
 
 
-## Building and deploying locally
-
-When developing, it can be useful to just run kowalski directly.
-
-### API
-
-To install the API requirements, run:
-
-```bash
-pip install -r kowalski/requirements_api.txt
-```
-
-Just as described above, the config file must be created:
-
-```bash
-cp config.defaults.yaml config.yaml
-```
-
-When running locally, it is likely that database.host should be 127.0.0.1 or similar. For simplicity, we also set database.replica_set to null.
-
-We need to set the admin and user roles for the database. To do so, login to mongdb and set (using the default values from the config):
-
-```bash
-mongosh --host 127.0.0.1 --port 27017
-```
-and then from within the mongo terminal
-
-```bash
-use kowalski
-db.createUser( { user: "mongoadmin", pwd: "mongoadminsecret", roles: [ { role: "userAdmin", db: "admin" } ] } )
-db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "admin" } ] } )
-db.createUser( { user: "mongoadmin", pwd: "mongoadminsecret", roles: [ { role: "userAdmin", db: "kowalski" } ] } )
-db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "kowalski" } ] } )
-```
-
-The API app can then be run with
-
-```bash
-KOWALSKI_APP_PATH=./ KOWALSKI_PATH=kowalski python kowalski/api.py
-```
-
-Then tests can be run by going into the kowalski/ directory
-
-```bash
-cd kowalski
-```
-
-and running:
-
-```bash
-KOWALSKI_APP_PATH=../ python -m pytest -s api.py ../tests/test_api.py
-```
-
-which should complete.
-
-### Alert Broker and Ingester
-
-To install the broker requirements, run:
-
-```bash
-pip install -r kowalski/requirements_ingester.txt
-```
-
-The ingester requires kafka, which can be installed with:
-
-```bash
-export kafka_version=2.13-2.5.0
-wget https://storage.googleapis.com/ztf-fritz/kafka_$kafka_version.tgz
-tar -xzf kafka_$kafka_version.tgz
-```
-
-Installed in this way, path.kafka in the config should be set to ./kafka_2.13-2.5.0.
-
-The broker can then be run with
-```bash
-KOWALSKI_APP_PATH=./ python kowalski/alert_broker_ztf.py
-```
-
-Then tests can be run by going into the kowalski/ directory
-
-```bash
-cd kowalski
-```
-
-and running:
-
-```bash
-KOWALSKI_APP_PATH=../ KOWALSKI_DATA_PATH=../data python -m pytest -s alert_broker_ztf.py ../tests/test_alert_broker_ztf.py
-```
-
-We also provide an option `USE_TENSORFLOW=False` for users who cannot install Tensorflow for whatever reason.
-
-To test the ingester, path.logs in the config should be set to ./data/logs/.
-
-Then tests can be run by going into the kowalski/ directory
-
-```bash
-cd kowalski
-```
-
-and running:
-
-```bash
-KOWALSKI_APP_PATH=../ KOWALSKI_DATA_PATH=../data python -m pytest ../tests/test_ingester.py
-```
-
-### Tools
-
-To install the tools requirements, run:
-
-```bash
-pip install -r kowalski/requirements_tools.txt
-```
-
-Then tests can be run by going into the kowalski/ directory
-
-```bash
-cd kowalski
-```
-
-and running:
-```bash
-KOWALSKI_APP_PATH=../ KOWALSKI_DATA_PATH=../data python -m pytest -s ../tools/istarmap.py ../tests/test_tools.py
-```
-
 ### Add a new alert stream to Kowalski
 
 To add a new alert stream to kowalski, see the [PR](https://github.com/skyportal/kowalski/pull/174) associated with the addition of WINTER to Kowalski.
@@ -366,8 +519,31 @@ A brief summary of the changes required (to add WINTER into Kowalski, but hopefu
 
 3. A new `kowalski/dask_cluster_<winter>,py` needs to be created, modeled on `dask_cluster.py` but using the ports for the new stream from the config file.
 
-4. The config file `config.defaults.yaml` needs to be updated to include the collections, upstream filters, crossmatches, dask ports for the new stream. No two streams should use the same ports for dask to avoid conflicts. Entries also need to be made in the `supervisord` section of the config file so that `alert_broker_<winter>.py` and `dask_cluster_<winter>.py` can be run through supervisor.
+4. The config file `config.defaults.yaml` needs to be updated to include the collections, upstream filters, crossmatches, dask ports, and ml_models (if MLing is necessary) for the new stream. No two streams should use the same ports for dask to avoid conflicts. Entries also need to be made in the `supervisord` section of the config file so that `alert_broker_<winter>.py` and `dask_cluster_<winter>.py` can be run through supervisor.
 
-5. Some alerts need to be added to `data/` for testing. Tests for alert ingestion (`tests/test_ingester_<wntr>.py`) and alert processing (`tests/test_alert_broker_wntr.py`) can be modeled on the ZTF tests, with appropriate changes for the new stream.
+5. Some alerts need to be added to `data/` for testing. Tests for alert ingestion (`tests/test_ingester_<wntr>.py`) and alert processing (`tests/test_alert_broker_wntr.py`) can be modeled on the ZTF tests, with appropriate changes for the new stream. The ingester test is where you will be able to create a mock kafka stream to test your broker.
 
-6. Need to edit `ingester.Dockerfile` so that all new files are copied into the docker container.
+6. Need to edit `ingester.Dockerfile` so that all new files are copied into the docker container (add or modify the COPY lines).
+
+### Add a new ML model to Kowalski
+
+For now, only the ZTF alert stream has a method implement to run ML models on the alerts. However, this can be extended as reused as a basis to run ML models on other streams as well.
+
+To add a new ML model to run on the ZTF alert stream, you simply need to add the model to the `models` directory, and add the model to `ml_models.ZTF` in the config file. The model will then be automatically loaded and run on the alerts.
+
+Here are the exact steps to add a new ML model to Kowalski:
+
+1. Add the model in .h5 format, or if you are using a .pb format you can also add the model files and directories in a folder called `<model_name.model_version>` in the `models` directory.
+
+2. Add the model name to `ml_models.ZTF` in the config file. All models need to have at least the following fields:
+
+   - `triplet`: True or False, whether the model uses the triplet (images) or not as an input to the model
+   - `feature_names`: list of features used by the model as a tuple, they need to be a subset of the `ZTF_ALERT_NUMERICAL_FEATURES` found in `kowalski/utils.py`. Ex: `('drb', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf')`
+   - `version`: version of the model
+
+   Then, you might want to provide additional information about the model, such as:
+   - `feature_norms`: dictionary of feature names and their normalization values, if the model was trained with normalized features
+   - `order`: in which order do the triplet and features need to be passed to the model. ex: `['triplet', 'features']` or `['features', 'triplet']`
+   - `format`: format of the model, either `h5` or `pb`. If not provided, the default is `h5`.
+
+The best way to see if the model is being loaded correctly is to run the broker tests mentioned earlier. These tests will show you the models that are running, and the errors encountered when loading the models (if any).
