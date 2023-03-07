@@ -1,9 +1,9 @@
 
 <div align="center">
-   <picture align="left" width="100px" height="100px">
-      <source media="(prefers-color-scheme: dark)" srcset="data/img/dark-logo.svg">
-      <source media="(prefers-color-scheme: light)" srcset="data/img/light-logo.svg">
-      <img alt="Kowalski" src="data/img/dark-logo.svg">
+   <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://github.com/skyportal/kowalski/raw/main/data/img/dark-logo.svg">
+      <source media="(prefers-color-scheme: light)" srcset="https://github.com/skyportal/kowalski/raw/main/data/img/light-logo.svg">
+      <img alt="Kowalski" src="https://github.com/skyportal/kowalski/raw/main/data/img/dark-logo.svg" width="300px" height="300px">
    </picture>
    <h1>Kowalski</h1>
    <h2>a multi-survey data archive and alert broker for time-domain astronomy</h2>
