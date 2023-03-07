@@ -1,4 +1,4 @@
-FROM python:3.7
+FROM python:3.10
 #FROM python:3.7-slim
 
 RUN apt-get update
@@ -15,8 +15,11 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py",\
 # change working directory to /app
 WORKDIR /app
 
+# upgrade pip
+RUN pip install --upgrade pip
+
 # install python libs and generate supervisord config file
-RUN pip install -r /app/requirements_api.txt --no-cache-dir --use-feature=2020-resolver && \
+RUN pip install -r /app/requirements_api.txt --no-cache-dir && \
     python generate_supervisord_conf.py api
 
 # run container

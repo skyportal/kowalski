@@ -284,6 +284,7 @@ def process_file(_file, _collections, _xmatch):
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
+        srv=config["database"]["srv"],
         verbose=0,
     )
 
@@ -448,6 +449,7 @@ def run(
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
+        srv=config["database"]["srv"],
         verbose=0,
     )
     log("Successfully connected")

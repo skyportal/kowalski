@@ -1,24 +1,24 @@
-from abc import ABC
 import argparse
-from bson.json_util import loads as bson_loads
-from copy import deepcopy
-import dask.distributed
 import datetime
 import multiprocessing
 import os
-
 import subprocess
 import sys
+import threading
 import time
 import traceback
-import threading
+from abc import ABC
+from copy import deepcopy
 from typing import Mapping, Sequence
 
+import dask.distributed
 from alert_broker import AlertConsumer, AlertWorker, EopError
+from bson.json_util import loads as bson_loads
 from utils import init_db_sync, load_config, log, timer
 
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 class WNTRAlertConsumer(AlertConsumer, ABC):
@@ -555,8 +555,8 @@ def watchdog(obs_date: str = None, test: bool = False):
                 # Local test stream
                 kafka_cmd = [
                     os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-                    "--zookeeper",
-                    config["kafka"]["zookeeper.test"],
+                    "--bootstrap-server",
+                    config["kafka"]["bootstrap.test.servers"],
                     "-list",
                 ]
 

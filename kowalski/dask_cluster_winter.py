@@ -1,11 +1,12 @@
-from dask.distributed import LocalCluster
+import os
 import time
 
+from dask.distributed import LocalCluster
 from utils import load_config, log
 
-
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 if __name__ == "__main__":
