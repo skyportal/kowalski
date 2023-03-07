@@ -541,7 +541,7 @@ Here are the exact steps to add a new ML model to Kowalski:
    - `feature_names`: list of features used by the model as a tuple, they need to be a subset of the `ZTF_ALERT_NUMERICAL_FEATURES` found in `kowalski/utils.py`. Ex: `('drb', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf')`
    - `version`: version of the model
 
-   Then, you might want to provide additional information about the model, such as:
+3. Then, you might want to provide additional information about the model, such as:
    - `feature_norms`: dictionary of feature names and their normalization values, if the model was trained with normalized features
    - `order`: in which order do the triplet and features need to be passed to the model. ex: `['triplet', 'features']` or `['features', 'triplet']`
    - `format`: format of the model, either `h5` or `pb`. If not provided, the default is `h5`.
