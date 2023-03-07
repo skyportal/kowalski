@@ -9,6 +9,7 @@ from ingest_ztf_matchfiles import run as run_ztf_matchfiles
 from ingest_ztf_public import run as run_ztf_public
 from ingest_ztf_source_classifications import run as run_ztf_source_classifications
 from ingest_ztf_source_features import run as run_ztf_source_features
+from ingest_catalog import run as run_catalog
 from utils import Mongo, get_default_args, load_config, log
 
 """ load config and secrets """
@@ -230,3 +231,50 @@ class TestTools:
 
         assert len(ingested_sources) == 1145
         assert len(ingested_exposures) == 2
+
+    def test_ingest_catalog_from_fits(self):
+        collection = "FITS_CATALOG"
+
+        # check if the collection exists, drop it if it does
+        if collection in self.mongo.db.list_collection_names():
+            log(f"Collection {collection} already exists, dropping it...")
+            try:
+                self.mongo.db[collection].drop()
+            except Exception as e:
+                raise RuntimeError(f"Failed to drop the existing CLU collection: {e}")
+
+        total_good_docs, _ = run_catalog(
+            catalog_name=collection,
+            path="data/catalogs/igaps-dr1-215a-small.fits.gz",
+            max_docs=100,
+            format="fits",
+        )
+
+        ingested_entries = list(self.mongo.db[collection].find({}, {"_id": 1}))
+        log(f"Ingested features of {len(ingested_entries)} sources")
+
+        assert len(ingested_entries) == total_good_docs
+
+    def test_ingest_catalog_from_csv(self):
+        collection = "CSV_CATALOG"
+
+        # check if the collection exists, drop it if it does
+        if collection in self.mongo.db.list_collection_names():
+            log(f"Collection {collection} already exists, dropping it...")
+            try:
+                self.mongo.db[collection].drop()
+            except Exception as e:
+                raise RuntimeError(f"Failed to drop the existing CLU collection: {e}")
+
+        total_good_docs, _ = run_catalog(
+            catalog_name=collection,
+            path="data/catalogs/CIRADA_VLASS1QL_table1_components_v1_head100.csv",
+            batch_size=10,
+            max_docs=100,
+            format="csv",
+        )
+
+        ingested_entries = list(self.mongo.db[collection].find({}, {"_id": 1}))
+        log(f"Ingested features of {len(ingested_entries)} sources")
+
+        assert len(ingested_entries) == total_good_docs

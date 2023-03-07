@@ -111,7 +111,7 @@ You can check that a running docker `Kowalski` instance is working by using the 
 ./kowalski.py down
 ```
 
-## Spin up your own `kowalski` **without Docker** (amd64 only for now)
+## Spin up your own `kowalski` **without Docker**
 
 ### Setting up config files
 
@@ -551,9 +551,37 @@ Here are the exact steps to add a new ML model to Kowalski:
    - `feature_names`: list of features used by the model as a tuple, they need to be a subset of the `ZTF_ALERT_NUMERICAL_FEATURES` found in `kowalski/utils.py`. Ex: `('drb', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf')`
    - `version`: version of the model
 
-   Then, you might want to provide additional information about the model, such as:
+3. Then, you might want to provide additional information about the model, such as:
    - `feature_norms`: dictionary of feature names and their normalization values, if the model was trained with normalized features
    - `order`: in which order do the triplet and features need to be passed to the model. ex: `['triplet', 'features']` or `['features', 'triplet']`
    - `format`: format of the model, either `h5` or `pb`. If not provided, the default is `h5`.
 
 The best way to see if the model is being loaded correctly is to run the broker tests mentioned earlier. These tests will show you the models that are running, and the errors encountered when loading the models (if any).
+
+### Ingest Catalogs in Kowalski (fits, csv)
+
+To ingest a new catalog into Kowalski from a fits or csv file, you can use the `ingest_catalog.py` script in the `tools` directory. To use it, run:
+
+```bash
+PYTHONPATH=. KOWALSKI_APP_PATH=../ python ../tools/ingest_catalog.py --catalog_name="TEST" --path="data/catalogs/<your_file.fits_or_csv>" --max_docs=500 --ra_col="RA" --dec_col="DEC" --format="<fits_or_csv>"
+```
+
+The max_docs argument is optional, and if not provided, the entire catalog will be ingested. If you want to specify the RA and Dec columns, you can use the `--ra_col` and `--dec_col` arguments; if not provided, the script will try to find the RA and Dec columns in the catalog. The format argument is also optional, and if not provided, the script will try to process the file as a fits file. The catalog name argument and the path are required.
+
+Once a catalog has been added, you can perform cross-matches between the catalog and candidates. To do so, add the catalog and the cross-match conditions (like the search radius) in the `database.xmath.<instrument_name>` section of the config file.
+
+Here is an example of how to add a cross-match between the ZTF alert stream and a catalog called `TEST`, which has some columns called `j_m`, `h_m`, and `k_m`, and for which we want to perform a cross-match with a search radius of 2 arcsec:
+
+```yaml
+ZTF:
+   TEST:
+      cone_search_radius: 2
+      cone_search_unit: "arcsec"
+      filter: {}
+      projection:
+      _id: 1
+      coordinates.radec_str: 1
+      j_m: 1
+      h_m: 1
+      k_m: 1
+```
