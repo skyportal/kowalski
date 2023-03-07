@@ -150,6 +150,7 @@ def run(
 
     input_list = [(f, catalog_name, batch_size) for f in files]
 
+    setattr(mp.Pool, "istarmap", istarmap)
     with mp.Pool(processes=num_processes) as p:
         for _ in tqdm(p.istarmap(process_file, input_list), total=len(input_list)):
             pass

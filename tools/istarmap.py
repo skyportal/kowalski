@@ -46,4 +46,4 @@ else:
         return (item for chunk in result for item in chunk)
 
 
-mpp.Pool.istarmap = istarmap
+setattr(mpp.Pool, "istarmap", istarmap)
