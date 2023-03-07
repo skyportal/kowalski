@@ -1,4 +1,14 @@
-# Kowalski: a multi-survey data archive and alert broker for time-domain astronomy
+
+<div align="center">
+   <picture align="left" width="100" height="100">
+      <source media="(prefers-color-scheme: dark)" srcset="data/img/dark-logo.svg">
+      <source media="(prefers-color-scheme: light)" srcset="data/img/light-logo.svg">
+      <img alt="Shows an illustrated sun in light mode and a moon with stars in dark mode." src="data/img/dark-logo.svg">
+   </picture>
+   <h1>Kowalski</h1>
+   <h2>a multi-survey data archive and alert broker for time-domain astronomy</h2>
+   <br/><br/>
+</div>
 
 Kowalski is an API-driven multi-survey data archive and alert broker.
 Its main focus is the [Zwicky Transient Facility](https://ztf.caltech.edu).
@@ -7,7 +17,7 @@ Its main focus is the [Zwicky Transient Facility](https://ztf.caltech.edu).
 
 A schematic overview of the functional aspects of `Kowalski` and how they interact is shown below:
 
-![data/img/logo-kowalski.png](data/img/logo-kowalski.png)
+![data/img/system.png](data/img/system.jpg)
 
 - A non-relational (NoSQL) database `MongoDB` powers the data archive, the alert stream sink,
 and the alert handling service.
