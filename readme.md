@@ -101,7 +101,7 @@ You can check that a running docker `Kowalski` instance is working by using the 
 ./kowalski.py down
 ```
 
-## Spin up your own `kowalski` **without Docker** (amd64 only for now)
+## Spin up your own `kowalski` **without Docker**
 
 ### Setting up config files
 
@@ -556,7 +556,7 @@ To ingest a new catalog into Kowalski from a fits or csv file, you can use the `
 PYTHONPATH=. KOWALSKI_APP_PATH=../ python ../tools/ingest_catalog.py --catalog_name="TEST" --path="data/catalogs/<your_file.fits_or_csv>" --max_docs=500 --ra_col="RA" --dec_col="DEC" --format="<fits_or_csv>"
 ```
 
-The max docs argument is optional, and if not provided, the entire catalog will be ingested. If you want to specify the RA and Dec columns, you can use the `--ra_col` and `--dec_col` arguments; if not provided, the script will try to find the RA and Dec columns in the catalog. The format argument is also optional, and if not provided, the script will try to process the file as a fits file. The catalog name argument and the path are required.
+The max_docs argument is optional, and if not provided, the entire catalog will be ingested. If you want to specify the RA and Dec columns, you can use the `--ra_col` and `--dec_col` arguments; if not provided, the script will try to find the RA and Dec columns in the catalog. The format argument is also optional, and if not provided, the script will try to process the file as a fits file. The catalog name argument and the path are required.
 
 Once a catalog has been added, you can perform cross-matches between the catalog and candidates. To do so, add the catalog and the cross-match conditions (like the search radius) in the `database.xmath.<instrument_name>` section of the config file.
 

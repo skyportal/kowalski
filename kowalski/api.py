@@ -2768,7 +2768,6 @@ async def app_factory():
     if config["database"]["replica_set"] is not None:
         conn_string += f"/?replicaSet={config['database']['replica_set']}"
 
-    log(conn_string)
     client = AsyncIOMotorClient(
         conn_string,
         maxPoolSize=config["database"]["max_pool_size"],
