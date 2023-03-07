@@ -3,7 +3,7 @@
    <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://github.com/skyportal/kowalski/raw/main/data/img/dark-logo.svg">
       <source media="(prefers-color-scheme: light)" srcset="https://github.com/skyportal/kowalski/raw/main/data/img/light-logo.svg">
-      <img alt="Kowalski" src="https://github.com/skyportal/kowalski/raw/main/data/img/dark-logo.svg" width="300px" height="300px">
+      <img alt="Kowalski" src="https://github.com/skyportal/kowalski/raw/main/data/img/light-logo.svg" width="300px" height="300px">
    </picture>
    <h1>Kowalski</h1>
    <h2>a multi-survey data archive and alert broker for time-domain astronomy</h2>
