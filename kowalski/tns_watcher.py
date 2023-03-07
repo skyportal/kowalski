@@ -1,24 +1,19 @@
 import argparse
 import datetime
 import json
-import pytz
-import requests
 import os
 import sys
 import time
 import traceback
+
+import pytz
+import requests
 import tqdm
-
-from utils import (
-    load_config,
-    log,
-    Mongo,
-    radec_str2geojson,
-)
-
+from utils import Mongo, load_config, log, radec_str2geojson
 
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 def mongify(doc):
@@ -86,6 +81,7 @@ def get_tns(grab_all: bool = False, test: bool = False):
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
+        srv=config["database"]["srv"],
         verbose=0,
     )
     log("Successfully connected")

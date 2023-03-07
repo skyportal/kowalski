@@ -49,6 +49,7 @@ def process_file(argument_list: Sequence):
             username=config["database"]["username"],
             password=config["database"]["password"],
             db=config["database"]["db"],
+            srv=config["database"]["srv"],
             verbose=0,
         )
 
@@ -206,6 +207,7 @@ def run(
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
+        srv=config["database"]["srv"],
         verbose=0,
     )
     log("Successfully connected to DB")
