@@ -1,9 +1,9 @@
 
 <div align="center">
-   <picture align="left" width="100" height="100">
+   <picture align="left" width="100px" height="100px">
       <source media="(prefers-color-scheme: dark)" srcset="data/img/dark-logo.svg">
       <source media="(prefers-color-scheme: light)" srcset="data/img/light-logo.svg">
-      <img alt="Shows an illustrated sun in light mode and a moon with stars in dark mode." src="data/img/dark-logo.svg">
+      <img alt="Kowalski" src="data/img/dark-logo.svg">
    </picture>
    <h1>Kowalski</h1>
    <h2>a multi-survey data archive and alert broker for time-domain astronomy</h2>
