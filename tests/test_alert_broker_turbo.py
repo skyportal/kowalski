@@ -1,11 +1,13 @@
+import os
+
 import fastavro
 import pytest
-
-from alert_broker_TURBO import TURBOAlertWorker
+from alert_broker_turbo import TURBOAlertWorker
 from utils import load_config, log
 
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 @pytest.fixture(autouse=True, scope="class")
@@ -19,7 +21,7 @@ def worker_fixture(request):
 
 @pytest.fixture(autouse=True, scope="class")
 def alert_fixture(request):
-    sample_avro = "/app/data/TURBO_alerts/89_None.28.avro"
+    sample_avro = f"{KOWALSKI_APP_PATH}/data/turbo_alerts/89_None.28.avro"
     log(f"Loading sample TURBO alert {sample_avro}")
     with open(sample_avro, "rb") as f:
         for record in fastavro.reader(f):

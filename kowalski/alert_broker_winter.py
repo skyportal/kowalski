@@ -583,6 +583,7 @@ def watchdog(obs_date: str = None, test: bool = False):
                     else:
                         bootstrap_servers = config["kafka"]["bootstrap.test.servers"]
                     group = config["kafka"]["group"]
+
                     topics_on_watch[t] = multiprocessing.Process(
                         target=topic_listener,
                         args=(t, bootstrap_servers, offset_reset, group, test),

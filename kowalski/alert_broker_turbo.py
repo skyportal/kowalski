@@ -1,28 +1,24 @@
-from abc import ABC
 import argparse
-from bson.json_util import loads as bson_loads
-from copy import deepcopy
-import dask.distributed
 import datetime
 import multiprocessing
 import os
 import subprocess
 import sys
+import threading
 import time
 import traceback
-import threading
+from abc import ABC
+from copy import deepcopy
 from typing import Mapping, Sequence
 
-from alert_broker import (
-    AlertConsumer,
-    AlertWorker,
-    EopError,
-)
+import dask.distributed
+from alert_broker import AlertConsumer, AlertWorker, EopError
+from bson.json_util import loads as bson_loads
 from utils import init_db_sync, load_config, log, timer
 
-
 """ load config and secrets """
-config = load_config(config_file="config.yaml")["kowalski"]
+KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
+config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
 
 
 class TURBOAlertConsumer(AlertConsumer, ABC):
@@ -460,7 +456,7 @@ def topic_listener(
 
     # Configure dask client
     dask_client = dask.distributed.Client(
-        address=f"{config['dask_TURBO']['host']}:{config['dask_TURBO']['scheduler_port']}"
+        address=f"{config['dask_turbo']['host']}:{config['dask_turbo']['scheduler_port']}"
     )
 
     # init each worker with AlertWorker instance
@@ -526,37 +522,38 @@ def watchdog(obs_date: str = None, test: bool = False):
     while True:
 
         try:
-            # get kafka topic names with kafka-topics command
-            if not test:
-                # Production Kafka stream at IPAC
-                kafka_cmd = [
-                    os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-                    "--zookeeper",
-                    config["kafka"]["zookeeper"],
-                    "-list",
-                ]
-            else:
-                # Local test stream
-                kafka_cmd = [
-                    os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
-                    "--zookeeper",
-                    config["kafka"]["zookeeper.test"],
-                    "-list",
-                ]
-
-            topics = (
-                subprocess.run(kafka_cmd, stdout=subprocess.PIPE)
-                .stdout.decode("utf-8")
-                .split("\n")[:-1]
-            )
 
             if obs_date is None:
                 datestr = datetime.datetime.utcnow().strftime("%Y%m%d")
             else:
                 datestr = obs_date
-            # as of 20210722, the naming convention is pgir_%Y%m%d_programidN
-            topics_tonight = [t for t in topics if (datestr in t) and ("TURBO" in t)]
-            log(f"Topics: {topics_tonight}")
+
+            # get kafka topic names with kafka-topics command
+            if not test:
+                # Production Kafka stream at IPAC
+
+                # TODO: Verify naming convention
+                topics_tonight = [f"turbo_{datestr}"]
+            else:
+                # Local test stream
+                kafka_cmd = [
+                    os.path.join(config["path"]["kafka"], "bin", "kafka-topics.sh"),
+                    "--bootstrap-server",
+                    config["kafka"]["bootstrap.test.servers"],
+                    "-list",
+                ]
+
+                topics = (
+                    subprocess.run(kafka_cmd, stdout=subprocess.PIPE)
+                    .stdout.decode("utf-8")
+                    .split("\n")[:-1]
+                )
+
+                topics_tonight = [
+                    t for t in topics if (datestr in t) and ("turbo" in t)
+                ]
+
+            log(f"turbo: Topics tonight: {topics_tonight}")
 
             for t in topics_tonight:
                 if t not in topics_on_watch:
@@ -575,6 +572,7 @@ def watchdog(obs_date: str = None, test: bool = False):
                         args=(t, bootstrap_servers, offset_reset, group, test),
                     )
                     topics_on_watch[t].daemon = True
+                    log(f"set daemon to true {topics_on_watch}")
                     topics_on_watch[t].start()
 
                 else:

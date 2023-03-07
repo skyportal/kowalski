@@ -529,7 +529,7 @@ kowalski:
         - {
             "$lookup":
               {
-                "from": "ZTF_alerts_aux",
+                "from": "TURBO_alerts_aux",
                 "localField": "objectId",
                 "foreignField": "_id",
                 "as": "aux",
@@ -1102,7 +1102,7 @@ kowalski:
     lifetime_stagger: 1 hours
     lifetime_restart: true
 
-  dask_TURBO:
+  dask_turbo:
     host: 127.0.0.1
     scheduler_port: 8790
     dashboard_address: :8791
@@ -1224,13 +1224,13 @@ kowalski:
         redirect_stderr: True
         environment: "PRODUCTION=1"
 
-      "program:dask-cluster-TURBO":
-        command: /usr/local/bin/python dask_cluster_TURBO.py
+      "program:dask-cluster-turbo":
+        command: /usr/local/bin/python dask_cluster_turbo.py
         directory: /app
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/dask_cluster_TURBO.log
+        stdout_logfile: /data/logs/dask_cluster_turbo.log
         stdout_logfile_maxbytes: 50MB
         redirect_stderr: True
         environment: "PRODUCTION=1"
@@ -1268,13 +1268,13 @@ kowalski:
         redirect_stderr: True
         environment: "PRODUCTION=1"
 
-      "program:alert-broker-TURBO":
-        command: /usr/local/bin/python alert_broker_TURBO.py
+      "program:alert-broker-turbo":
+        command: /usr/local/bin/python alert_broker_turbo.py
         directory: /app
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/alert_broker_TURBO.log
+        stdout_logfile: /data/logs/alert_broker_turbo.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: "PRODUCTION=1"
