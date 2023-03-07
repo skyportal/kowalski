@@ -35,6 +35,7 @@ def process_file(args):
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
+        srv=config["database"]["srv"],
         verbose=0,
     )
     if verbose:
@@ -180,6 +181,7 @@ if __name__ == "__main__":
         username=config["database"]["username"],
         password=config["database"]["password"],
         db=config["database"]["db"],
+        srv=config["database"]["srv"],
         verbose=args.v,
     )
     log("Successfully connected")

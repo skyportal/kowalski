@@ -1,36 +1,38 @@
-from abc import ABC
-from aiohttp import web, ClientSession
-from aiohttp_swagger3 import SwaggerDocs, ReDocUiSettings
-from astropy.io import fits
-from astropy.visualization import (
-    AsymmetricPercentileInterval,
-    MinMaxInterval,
-    ZScaleInterval,
-    LinearStretch,
-    LogStretch,
-    AsinhStretch,
-    SqrtStretch,
-    ImageNormalize,
-)
-from ast import literal_eval
-from bson.json_util import dumps, loads
 import datetime
 import gzip
 import io
-import jwt
-from matplotlib.colors import LogNorm
-import matplotlib.pyplot as plt
-from middlewares import auth_middleware, error_middleware, auth_required, admin_required
-from motor.motor_asyncio import AsyncIOMotorClient
-from multidict import MultiDict
-import numpy as np
-from odmantic import AIOEngine, EmbeddedModel, Field, Model
 import os
 import pathlib
+import traceback
+from abc import ABC
+from ast import literal_eval
+from typing import Any, List, Mapping, Optional, Sequence, Union
+
+import jwt
+import matplotlib.pyplot as plt
+import numpy as np
+import uvloop
+from aiohttp import ClientSession, web
+from aiohttp_swagger3 import ReDocUiSettings, SwaggerDocs
+from astropy.io import fits
+from astropy.visualization import (
+    AsinhStretch,
+    AsymmetricPercentileInterval,
+    ImageNormalize,
+    LinearStretch,
+    LogStretch,
+    MinMaxInterval,
+    SqrtStretch,
+    ZScaleInterval,
+)
+from bson.json_util import dumps, loads
+from matplotlib.colors import LogNorm
+from middlewares import admin_required, auth_middleware, auth_required, error_middleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from multidict import MultiDict
+from odmantic import AIOEngine, EmbeddedModel, Field, Model
 from pydantic import root_validator
 from sshtunnel import SSHTunnelForwarder
-import traceback
-from typing import List, Mapping, Optional, Sequence, Union
 from utils import (
     add_admin,
     check_password_hash,
@@ -41,8 +43,6 @@ from utils import (
     radec_str2geojson,
     uid,
 )
-import uvloop
-
 
 KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
 KOWALSKI_PATH = os.environ.get("KOWALSKI_PATH", "./")
@@ -696,7 +696,7 @@ class Query(Model, ABC):
     """Data model for queries for streamlined validation"""
 
     query_type: str
-    query: Mapping
+    query: Optional[Any]
     kwargs: dict = dict()
     user: str
 
@@ -1496,7 +1496,7 @@ class Filter(Model, ABC):
     filter_id: int = Field(ge=1)
     group_id: int = Field(ge=1)
     catalog: str
-    permissions: List
+    permissions: List[int] = list()
     autosave: bool = False
     active: bool = True
     update_annotations: bool = False
@@ -2750,14 +2750,26 @@ async def app_factory():
     await init_db(config=config)
 
     # Database connection
-    mongodb_connection_string = (
-        f"mongodb://{config['database']['admin_username']}:{config['database']['admin_password']}@"
-        + f"{config['database']['host']}:{config['database']['port']}"
-    )
+    if config["database"]["srv"] is True:
+        conn_string = "mongodb+srv://"
+    else:
+        conn_string = "mongodb://"
+
+    if (
+        config["database"]["admin_username"] is not None
+        and config["database"]["admin_password"] is not None
+    ):
+        conn_string += f"{config['database']['admin_username']}:{config['database']['admin_password']}@"
+
+    conn_string += f"{config['database']['host']}"
+    if config["database"]["srv"] is not True:
+        conn_string += f":{config['database']['port']}"
+
     if config["database"]["replica_set"] is not None:
-        mongodb_connection_string += f"/?replicaSet={config['database']['replica_set']}"
+        conn_string += f"/?replicaSet={config['database']['replica_set']}"
+
     client = AsyncIOMotorClient(
-        mongodb_connection_string,
+        conn_string,
         maxPoolSize=config["database"]["max_pool_size"],
     )
     mongo = client[config["database"]["db"]]

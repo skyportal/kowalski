@@ -1,34 +1,37 @@
 __all__ = ["AlertConsumer", "AlertWorker", "EopError"]
 
+from ast import literal_eval as make_tuple
+import base64
+import datetime
+import gzip
+import io
+import os
+import pathlib
+import sys
+import traceback
 from ast import literal_eval
+from copy import deepcopy
+from typing import Mapping, Optional, Sequence
+
+import confluent_kafka
+import dask.distributed
+import fastavro
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import requests
 from astropy.io import fits
 from astropy.visualization import (
     AsymmetricPercentileInterval,
+    ImageNormalize,
     LinearStretch,
     LogStretch,
-    ImageNormalize,
 )
-import base64
-import confluent_kafka
-from copy import deepcopy
-import dask.distributed
-import datetime
-import fastavro
-import gzip
-import io
-import matplotlib.pyplot as plt
-import numpy as np
-import os
-import pandas as pd
-import pathlib
-import requests
 from requests.packages.urllib3.util.retry import Retry
-import sys
-
-import traceback
-from typing import Mapping, Optional, Sequence
-
 from utils import (
+    Mongo,
+    TimeoutHTTPAdapter,
+    ZTFAlert,
     deg2dms,
     deg2hms,
     great_circle_distance,
@@ -36,12 +39,9 @@ from utils import (
     load_config,
     log,
     memoize,
-    Mongo,
     radec2lb,
     time_stamp,
     timer,
-    TimeoutHTTPAdapter,
-    ZTFAlert,
 )
 
 # Tensorflow is problematic for Mac's currently, so we can add an option to disable it
@@ -146,6 +146,7 @@ class AlertConsumer:
             username=config["database"]["username"],
             password=config["database"]["password"],
             db=config["database"]["db"],
+            srv=config["database"]["srv"],
             verbose=self.verbose,
         )
 
@@ -291,26 +292,135 @@ class AlertWorker:
             username=config["database"]["username"],
             password=config["database"]["password"],
             db=config["database"]["db"],
+            srv=config["database"]["srv"],
             verbose=self.verbose,
         )
 
         # ML models
         self.ml_models = dict()
+        self.allowed_features = (
+            config["ml"].get(self.instrument, {}).get("allowed_features", "()")
+        )
+        if isinstance(self.allowed_features, str):
+            try:
+                self.allowed_features = make_tuple(self.allowed_features)
+            except Exception:
+                log(
+                    f"Invalid format for ml.{self.instrument}.allowed_features, must be a tuple of strings"
+                )
+                self.allowed_features = ()
+        if len(self.allowed_features) == 0:
+            log(
+                f"No ML models will be used: ml.{self.instrument}.allowed_features is empty/missing"
+            )
 
-        if USE_TENSORFLOW:
-            for model in config["ml_models"].get(self.instrument, []):
+        if USE_TENSORFLOW and len(self.allowed_features) > 0:
+            for model in config["ml"].get(self.instrument, {}).get("models", []):
                 try:
-                    model_version = config["ml_models"][self.instrument][model][
+                    if not set(
+                        config["ml"][self.instrument]["models"][model].keys()
+                    ).issubset(
+                        {
+                            "version",
+                            "feature_names",
+                            "feature_norms",
+                            "triplet",
+                            "format",
+                            "order",
+                        }
+                    ):
+                        raise ValueError(
+                            f"Invalid keys in ml.{self.instrument}.models.{model}, must be 'version', 'feature_names', 'feature_norms', 'triplet','format', and 'order'"
+                        )
+
+                    model_version = config["ml"][self.instrument]["models"][model][
                         "version"
                     ]
+                    model_feature_names = config["ml"][self.instrument]["models"][
+                        model
+                    ].get("feature_names", False)
+                    model_feature_norms = config["ml"][self.instrument]["models"][
+                        model
+                    ].get("feature_norms", None)
+                    model_triplet = config["ml"][self.instrument]["models"][model].get(
+                        "triplet", False
+                    )
+                    model_format = config["ml"][self.instrument]["models"][model].get(
+                        "format", "h5"
+                    )
+                    model_order = config["ml"][self.instrument]["models"][model].get(
+                        "order", ["features", "triplet"]
+                    )
+                    if model_format not in ["h5", "pb"]:
+                        raise ValueError(
+                            f"Invalid ml.{self.instrument}.models.{model}.format: {model_format}, must be 'h5' or 'pb'"
+                        )
+                    if model_format == "pb":
+                        model_format = "/"
+                    else:
+                        model_format = f".{model_format}"
+                    if model_feature_names is True:
+                        model_feature_names = self.allowed_features
+                    if isinstance(model_feature_names, str):
+                        try:
+                            model_feature_names = make_tuple(model_feature_names)
+                        except Exception:
+                            raise ValueError(
+                                f"Invalid ml.{self.instrument}.models.{model}.feature_names, must be a tuple of strings"
+                            )
+
+                    if model_feature_names is False and model_triplet is False:
+                        raise ValueError(
+                            f"ml.{self.instrument}.models.{model}: both 'feature_names' or 'triplet' cannot be False for model {model}"
+                        )
+                    if not isinstance(model_feature_names, bool) and not isinstance(
+                        model_feature_names, tuple
+                    ):
+                        raise ValueError(
+                            f"ml.{self.instrument}.models.{model}.feature_names must be either a bool or a tuple, got {type(model_feature_names)}"
+                        )
+
+                    if not set(
+                        model_feature_names
+                        if isinstance(model_feature_names, tuple)
+                        else []
+                    ).issubset(set(self.allowed_features)):
+                        raise ValueError(
+                            f"ml.{self.instrument}.models.{model}.feature_names must be a subset of the {self.allowed_features}"
+                        )
+                    if model_feature_norms is not None and not isinstance(
+                        model_feature_norms, dict
+                    ):
+                        raise ValueError(
+                            f"ml.{self.instrument}.models.{model}.feature_norms must be a dict, or None, got {type(model_feature_norms)}"
+                        )
+                    if model_feature_norms is not None and not set(
+                        model_feature_norms.keys()
+                    ).issubset(set(model_feature_names)):
+                        raise ValueError(
+                            f"ml.{self.instrument}.models.{model}.feature_norms keys must be a subset of model_feature_names"
+                        )
+                    if not isinstance(model_triplet, bool):
+                        raise ValueError(
+                            f"ml.{self.instrument}.models.{model}.triplet must be a bool, got {type(model_triplet)}"
+                        )
+                    if not isinstance(model_version, str) or model_version == "":
+                        raise ValueError(
+                            f"ml.{self.instrument}.models.{model}.version must be a non empty string, got {type(model_version)}"
+                        )
+
                     # todo: allow other formats such as SavedModel
                     model_filepath = os.path.join(
                         config["path"][f"ml_models_{self.instrument.lower()}"],
-                        f"{model}.{model_version}.h5",
+                        f"{model}.{model_version}{model_format}",
                     )
                     self.ml_models[model] = {
                         "model": load_model(model_filepath),
                         "version": model_version,
+                        "feature_names": model_feature_names,
+                        "feature_norms": model_feature_norms,
+                        "triplet": model_triplet,
+                        "order": model_order,
                     }
                 except Exception as e:
                     log(f"Error loading ML model {model}: {str(e)}")
@@ -679,28 +789,31 @@ class AlertWorker:
         if self.instrument == "ZTF":
             try:
                 with timer("ZTFAlert(alert)"):
-                    ztf_alert = ZTFAlert(alert)
-                with timer("Prepping features"):
-                    features = np.expand_dims(ztf_alert.data["features"], axis=[0, -1])
-                    triplet = np.expand_dims(ztf_alert.data["triplet"], axis=[0])
+                    ztf_alert = ZTFAlert(alert, self.ml_models)
 
-                # braai
-                if "braai" in self.ml_models.keys():
-                    with timer("braai"):
-                        braai = self.ml_models["braai"]["model"].predict(x=triplet)[0]
-                        scores["braai"] = float(braai)
-                        scores["braai_version"] = self.ml_models["braai"]["version"]
-                # acai
-                for model_name in ("acai_h", "acai_v", "acai_o", "acai_n", "acai_b"):
-                    if model_name in self.ml_models.keys():
-                        with timer(model_name):
-                            score = self.ml_models[model_name]["model"].predict(
-                                [features, triplet]
-                            )[0]
-                            scores[model_name] = float(score)
-                            scores[f"{model_name}_version"] = self.ml_models[
-                                model_name
-                            ]["version"]
+                for model_name in self.ml_models.keys():
+                    inputs = {}
+                    with timer(f"Prepping features for {model_name}"):
+                        if self.ml_models[model_name]["feature_names"] is not False:
+                            features = ztf_alert.data["features"][model_name]
+                            inputs["features"] = np.expand_dims(features, axis=[0, -1])
+                        if self.ml_models[model_name]["triplet"] is not False:
+                            triplet = ztf_alert.data["triplet"]
+                            inputs["triplet"] = np.expand_dims(triplet, axis=[0])
+                        if len(inputs.keys()) == 1:
+                            inputs = inputs[list(inputs.keys())[0]]
+                        else:
+                            inputs = [
+                                inputs[k] for k in self.ml_models[model_name]["order"]
+                            ]
+
+                    with timer(model_name):
+                        score = self.ml_models[model_name]["model"].predict(x=inputs)[0]
+                        scores[model_name] = float(score)
+                        scores[f"{model_name}_version"] = self.ml_models[model_name][
+                            "version"
+                        ]
+
             except Exception as e:
                 log(str(e))
 

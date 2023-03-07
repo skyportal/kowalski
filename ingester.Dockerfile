@@ -1,6 +1,7 @@
-FROM python:3.7
+FROM python:3.10
 
-ARG kafka_version=2.13-2.5.0
+ARG scala_version=2.13
+ARG kafka_version=3.4.0
 ARG braai_version=d6_m9
 ARG acai_h_version=d1_dnn_20201130
 ARG acai_v_version=d1_dnn_20201130
@@ -15,15 +16,15 @@ ARG acai_b_version=d1_dnn_20201130
 # Install jdk, mkdirs, fetch and install Kafka
 RUN apt-get update && apt-get install -y default-jdk && \
     mkdir -p /app /app/models_pgir /data /data/logs /_tmp /kafka && \
-    wget https://storage.googleapis.com/ztf-fritz/kafka_$kafka_version.tgz -O /kafka/kafka_$kafka_version.tgz && \
-    tar -xzf /kafka/kafka_$kafka_version.tgz
+    wget https://downloads.apache.org/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz -O /kafka/kafka_$scala_version-$kafka_version.tgz && \
+    tar -xzf /kafka/kafka_$scala_version-$kafka_version.tgz
 
 # Kafka:
-#ADD http://apache.claz.org/kafka/2.5.0/kafka_$kafka_version.tgz /kafka
-#RUN tar -xzf /kafka/kafka_$kafka_version.tgz
+#ADD http://apache.claz.org/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz /kafka
+#RUN tar -xzf /kafka/kafka_$scala_version-$kafka_version.tgz
 
 # Kafka test-server properties:
-COPY kowalski/server.properties /kafka_$kafka_version/config/
+COPY kowalski/server.properties /kafka_$scala_version-$kafka_version/config/
 
 # ML models <model_name>.<tag>.<extensions>:
 ADD https://github.com/dmitryduev/braai/raw/master/models/braai_$braai_version.h5 /app/models/braai.$braai_version.h5
@@ -53,13 +54,14 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
       "kowalski/alert_broker_pgir.py",\
       "kowalski/dask_cluster_pgir.py",\
       "kowalski/dask_cluster_winter.py",\
+      "kowalski/ingester.py",\
       "kowalski/performance_reporter.py",\
       "kowalski/requirements_ingester.txt",\
       "kowalski/check_db_entries.py",\
       "tests/test_alert_broker_ztf.py",\
       "tests/test_alert_broker_pgir.py",\
       "tests/test_alert_broker_wntr.py",\
-      "tests/test_ingester.py",\
+      "tests/test_ingester_ztf.py",\
       "tests/test_ingester_pgir.py",\
       "tests/test_ingester_wntr.py",\
       "tests/test_tns_watcher.py",\
@@ -78,8 +80,13 @@ COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py", "ko
 # change working directory to /app
 WORKDIR /app
 
+ENV USING_DOCKER=true
+
+# update pip
+RUN pip install --upgrade pip
+
 # install python libs and generate supervisord config file
-RUN pip install -r /app/requirements_ingester.txt --no-cache-dir --use-feature=2020-resolver && \
+RUN pip install -r /app/requirements_ingester.txt --no-cache-dir && \
     python generate_supervisord_conf.py ingester
 
 # run container
