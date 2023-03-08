@@ -568,6 +568,7 @@ def watchdog(obs_date: str = None, test: bool = False):
                         args=(t, bootstrap_servers, offset_reset, group, test),
                     )
                     topics_on_watch[t].daemon = True
+                    log(f"set daemon to true {topics_on_watch}")
                     topics_on_watch[t].start()
 
                 else:

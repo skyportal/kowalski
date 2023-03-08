@@ -3,16 +3,12 @@ import os
 import pathlib
 import time
 
-from alert_broker_winter import watchdog
+import requests
+from alert_broker_turbo import watchdog
 from ingester import KafkaStream
 from test_ingester_ztf import Program, Filter
 from utils import Mongo, init_db_sync, load_config, log
 
-"""
-Essentially the same as the ZTF ingester tests (test_ingester_ztf.py), except -
-1. Only a small number of test WINTER/WIRC alerts are used. These alerts are stored in data/, as opposed to ZTF test_ingester_ztf.py that pulls alerts from googleapis.
-2. Collections and Skyportal programs and filters relevant to WINTER are used instead of the ztf ones.
-"""
 
 """ load config and secrets """
 KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
@@ -27,6 +23,7 @@ class TestIngester:
     """ """
 
     def test_ingester(self):
+
         init_db_sync(config=config, verbose=True)
 
         log("Setting up paths")
@@ -35,7 +32,7 @@ class TestIngester:
         if not path_logs.exists():
             path_logs.mkdir(parents=True, exist_ok=True)
 
-        log("Checking the existing WINTER alert collection states")
+        log("Checking the existing TURBO alert collection states")
         mongo = Mongo(
             host=config["database"]["host"],
             port=config["database"]["port"],
@@ -46,10 +43,9 @@ class TestIngester:
             srv=config["database"]["srv"],
             verbose=True,
         )
-        collection_alerts = config["database"]["collections"]["alerts_wntr"]
-        collection_alerts_aux = config["database"]["collections"]["alerts_wntr_aux"]
+        collection_alerts = config["database"]["collections"]["alerts_turbo"]
+        collection_alerts_aux = config["database"]["collections"]["alerts_turbo_aux"]
 
-        # check if the collection exists, drop it if it does
         if collection_alerts in mongo.db.list_collection_names():
             try:
                 mongo.db[collection_alerts].drop()
@@ -64,52 +60,53 @@ class TestIngester:
         if config["misc"]["broker"]:
             log("Setting up test groups and filters in Fritz")
             program = Program(
-                group_name="FRITZ_TEST_WNTR",
-                group_nickname="test-wntr",
+                group_name="FRITZ_TEST_TURBO",
+                group_nickname="test-TURBO",
                 filter_name="Infraorange transients",
-                stream_ids=[5],
+                stream_ids=[4],
             )
             Filter(
-                collection="WNTR_alerts",
+                collection="TURBO_alerts",
                 group_id=program.group_id,
                 filter_id=program.filter_id,
                 pipeline=[{"$match": {"candid": {"$gt": 0}}}],  # pass all
             )
 
             program2 = Program(
-                group_name="FRITZ_TEST_WNTR_AUTOSAVE",
-                group_nickname="test2-wntr",
+                group_name="FRITZ_TEST_TURBO_AUTOSAVE",
+                group_nickname="test2-TURBO",
                 filter_name="Infraorange transients",
-                stream_ids=[5],
+                stream_ids=[4],
             )
             Filter(
-                collection="WNTR_alerts",
+                collection="TURBO_alerts",
                 group_id=program2.group_id,
                 filter_id=program2.filter_id,
                 autosave=True,
-                pipeline=[{"$match": {"objectId": "WIRC21aaaab"}}],
+                pipeline=[{"$match": {"objectId": "None.23"}}],
             )
 
             program3 = Program(
-                group_name="FRITZ_TEST_WNTR_UPDATE_ANNOTATIONS",
-                group_nickname="test3-wntr",
+                group_name="FRITZ_TEST_TURBO_UPDATE_ANNOTATIONS",
+                group_nickname="test3-TURBO",
                 filter_name="Infraorange transients",
-                stream_ids=[5],
+                stream_ids=[4],
             )
             Filter(
-                collection="WNTR_alerts",
+                collection="TURBO_alerts",
                 group_id=program3.group_id,
                 filter_id=program3.filter_id,
                 update_annotations=True,
                 pipeline=[
-                    {"$match": {"objectId": "WIRC21aaaac"}}
-                ],  # there are 2 alerts in the test set for this oid
+                    {"$match": {"objectId": "PGIR21aeiljk"}}
+                ],  # there are 3 alerts in the test set for this oid
             )
 
-        # create a test WNTR topic for the current UTC date
+        # create a test TURBO topic for the current UTC date
         date = datetime.datetime.utcnow().strftime("%Y%m%d")
-        topic_name = f"winter_{date}_test"
-        path_alerts = "wntr_alerts/20220815"
+        topic_name = f"turbo_{date}"
+        path_alerts = pathlib.Path("turbo_alerts")
+        # fixme: ONLY USING THE ARCHIVAL TURBO ALERTS FOR NOW
 
         with KafkaStream(
             topic_name,
@@ -121,30 +118,66 @@ class TestIngester:
             watchdog(obs_date=date, test=True)
             log("Digested and ingested: all done!")
 
-        log("Checking the WNTR alert collection states")
+        log("Checking the TURBO alert collection states")
         num_retries = 7
         # alert processing takes time, which depends on the available resources
         # so allow some additional time for the processing to finish
         for i in range(num_retries):
             if i == num_retries - 1:
-                raise RuntimeError("WNTR Alert ingestion failed")
+                raise RuntimeError("Alert ingestion failed")
 
             n_alerts = mongo.db[collection_alerts].count_documents({})
             n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
 
             try:
-                assert n_alerts == 5
-                assert n_alerts_aux == 4
-                print("----Passed WNTR ingester tests----")
+                assert n_alerts == 11
+                assert n_alerts_aux == 11
+                print("----Passed TURBO ingester tests----")
                 break
             except AssertionError:
                 print(
                     "Found an unexpected amount of alert/aux data: "
-                    f"({n_alerts}/{n_alerts_aux}, expecting 5/4). "
+                    f"({n_alerts}/{n_alerts_aux}, expecting 11/11). "
                     "Retrying in 30 seconds..."
                 )
                 time.sleep(15)
                 continue
+
+        if config["misc"]["broker"]:
+            log("Checking that posting to SkyPortal succeeded")
+
+            # check number of candidates that passed the first filter
+            resp = requests.get(
+                program.base_url + f"/api/candidates?groupIDs={program.group_id}",
+                headers=program.headers,
+                timeout=3,
+            )
+
+            assert resp.status_code == requests.codes.ok
+            result = resp.json()
+            assert result["status"] == "success"
+            assert "data" in result
+            assert "totalMatches" in result["data"]
+            print("totalMatches", result["data"]["totalMatches"])
+            # fixme:
+            assert result["data"]["totalMatches"] == 11
+
+            # check that the only candidate that passed the second filter (None.23) got saved as Source
+            resp = requests.get(
+                program2.base_url + f"/api/sources?group_ids={program2.group_id}",
+                headers=program2.headers,
+                timeout=3,
+            )
+
+            assert resp.status_code == requests.codes.ok
+            result = resp.json()
+            print(result["data"])
+            assert result["status"] == "success"
+            assert "data" in result
+            assert "totalMatches" in result["data"]
+            assert result["data"]["totalMatches"] == 1
+            assert "sources" in result["data"]
+            assert result["data"]["sources"][0]["id"] == "None.23"
 
 
 if __name__ == "__main__":

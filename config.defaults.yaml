@@ -76,6 +76,8 @@ kowalski:
       alerts_pgir_aux: "PGIR_alerts_aux"
       alerts_wntr: "WNTR_alerts"
       alerts_wntr_aux: "WNTR_alerts_aux"
+      alerts_turbo: "TURBO_alerts"
+      alerts_turbo_aux: "TURBO_alerts_aux"
 
     indexes:
       ZTF_alerts:
@@ -225,6 +227,59 @@ kowalski:
           unique: false
 
       WNTR_alerts:
+        - name: radec_candid
+          fields:
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["candid", -1]
+          unique: false
+        - name: radec_objectId
+          fields:
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["objectId", -1]
+          unique: false
+        - name: jd_radec_candid
+          fields:
+            - ["candidate.jd", 1]
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["candid", -1]
+          unique: false
+        - name: jd_radec_objectId
+          fields:
+            - ["candidate.jd", 1]
+            - ["coordinates.radec_geojson", "2dsphere"]
+            - ["objectId", -1]
+          unique: false
+        - name: objectId
+          fields:
+            - ["objectId", -1]
+          unique: false
+        - name: candid
+          fields:
+            - ["candid", -1]
+          unique: true
+        - name: jd_drb_candid
+          fields:
+            - ["candidate.jd", -1]
+            - ["candidate.drb", -1]
+            - ["candid", -1]
+          unique: false
+        - name: jd_drb_ndethist_dmag2mass_isstar_distnearbrstar
+          fields:
+            - ["candidate.jd", -1]
+            - ["candidate.drb", -1]
+            - ["candidate.ndethist", 1]
+            - ["candidate.dmag2mass", -1]
+            - ["candidate.isstar", -1]
+            - ["candidate.distnearbrstar", 1]
+          unique: false
+        - name: jd_scorr_dmag2mass
+          fields:
+            - ["candidate.jd", -1]
+            - ["candidate.scorr", -1]
+            - ["candidate.dmag2mass", -1]
+          unique: false
+
+      TURBO_alerts:
         - name: radec_candid
           fields:
             - ["coordinates.radec_geojson", "2dsphere"]
@@ -443,6 +498,68 @@ kowalski:
                                     ["$candidate.jd", "$$item.jd"],
                                 },
                                 1000,
+                              ],
+                          },
+                      },
+                  },
+                "schemavsn": 1,
+                "publisher": 1,
+                "objectId": 1,
+                "candid": 1,
+                "candidate": 1,
+                "classifications": 1,
+                "coordinates": 1,
+              },
+          }
+
+      TURBO_alerts:
+        # default upstream aggregation pipeline stages for filtering ZTF alerts (may need to be changed for TURBO):
+        - {
+            "$match":
+              { "candid": null, "candidate.programid": { "$in": null } },
+          }
+        - {
+            "$project":
+              {
+                "cutoutScience": 0,
+                "cutoutTemplate": 0,
+                "cutoutDifference": 0,
+              },
+          }
+        - {
+            "$lookup":
+              {
+                "from": "TURBO_alerts_aux",
+                "localField": "objectId",
+                "foreignField": "_id",
+                "as": "aux",
+              },
+          }
+        - {
+            "$project":
+              {
+                "cross_matches": { "$arrayElemAt": ["$aux.cross_matches", 0] },
+                "prv_candidates":
+                  {
+                    "$filter":
+                      {
+                        "input": { "$arrayElemAt": ["$aux.prv_candidates", 0] },
+                        "as": "item",
+                        "cond":
+                          {
+                            "$and":
+                              [
+                                { "$in": ["$$item.programid", null] },
+                                {
+                                  "$lt":
+                                    [
+                                      {
+                                        "$subtract":
+                                          ["$candidate.jd", "$$item.jd"],
+                                      },
+                                      365,
+                                    ],
+                                },
                               ],
                           },
                       },
@@ -985,6 +1102,16 @@ kowalski:
     lifetime_stagger: 1 hours
     lifetime_restart: true
 
+  dask_turbo:
+    host: 127.0.0.1
+    scheduler_port: 8790
+    dashboard_address: :8791
+    n_workers: 4
+    threads_per_worker: 1
+    lifetime: 24 hours
+    lifetime_stagger: 1 hours
+    lifetime_restart: true
+
   misc:
     # working stand-alone or in conjunction with a SkyPortal instance?
     broker: False
@@ -1097,6 +1224,17 @@ kowalski:
         redirect_stderr: True
         environment: "PRODUCTION=1"
 
+      "program:dask-cluster-turbo":
+        command: /usr/local/bin/python dask_cluster_turbo.py
+        directory: /app
+        user: root
+        autostart: true
+        autorestart: true
+        stdout_logfile: /data/logs/dask_cluster_turbo.log
+        stdout_logfile_maxbytes: 50MB
+        redirect_stderr: True
+        environment: "PRODUCTION=1"
+
       "program:alert-broker-ztf":
         command: /usr/local/bin/python alert_broker_ztf.py
         directory: /app
@@ -1126,6 +1264,17 @@ kowalski:
         autostart: true
         autorestart: true
         stdout_logfile: /data/logs/alert_broker_winter.log
+        stdout_logfile_maxbytes: 30MB
+        redirect_stderr: True
+        environment: "PRODUCTION=1"
+
+      "program:alert-broker-turbo":
+        command: /usr/local/bin/python alert_broker_turbo.py
+        directory: /app
+        user: root
+        autostart: true
+        autorestart: true
+        stdout_logfile: /data/logs/alert_broker_turbo.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: "PRODUCTION=1"
