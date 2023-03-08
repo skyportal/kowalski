@@ -122,7 +122,7 @@ class TestIngester:
             log("Digested and ingested: all done!")
 
         log("Checking the WNTR alert collection states")
-        num_retries = 10
+        num_retries = 7
         # alert processing takes time, which depends on the available resources
         # so allow some additional time for the processing to finish
         for i in range(num_retries):
@@ -143,7 +143,7 @@ class TestIngester:
                     f"({n_alerts}/{n_alerts_aux}, expecting 5/4). "
                     "Retrying in 30 seconds..."
                 )
-                time.sleep(30)
+                time.sleep(15)
                 continue
 
 

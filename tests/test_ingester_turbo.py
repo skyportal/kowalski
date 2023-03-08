@@ -83,7 +83,7 @@ class TestIngester:
                 group_id=program2.group_id,
                 filter_id=program2.filter_id,
                 autosave=True,
-                pipeline=[{"$match": {"objectId": "PGIR19aacbvv"}}],
+                pipeline=[{"$match": {"objectId": "None.23"}}],
             )
 
             program3 = Program(
@@ -119,7 +119,7 @@ class TestIngester:
             log("Digested and ingested: all done!")
 
         log("Checking the TURBO alert collection states")
-        num_retries = 20
+        num_retries = 7
         # alert processing takes time, which depends on the available resources
         # so allow some additional time for the processing to finish
         for i in range(num_retries):
@@ -129,20 +129,18 @@ class TestIngester:
             n_alerts = mongo.db[collection_alerts].count_documents({})
             n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
 
-            print(f"n_alerts: {n_alerts}")
-            print(f"n_alerts_aux: {n_alerts_aux}")
             try:
-                assert n_alerts == 17
-                assert n_alerts_aux == 15
+                assert n_alerts == 11
+                assert n_alerts_aux == 11
                 print("----Passed TURBO ingester tests----")
                 break
             except AssertionError:
                 print(
                     "Found an unexpected amount of alert/aux data: "
-                    f"({n_alerts}/{n_alerts_aux}, expecting 17/15). "
+                    f"({n_alerts}/{n_alerts_aux}, expecting 11/11). "
                     "Retrying in 30 seconds..."
                 )
-                time.sleep(30)
+                time.sleep(15)
                 continue
 
         if config["misc"]["broker"]:
@@ -162,9 +160,9 @@ class TestIngester:
             assert "totalMatches" in result["data"]
             print("totalMatches", result["data"]["totalMatches"])
             # fixme:
-            assert result["data"]["totalMatches"] == 15
+            assert result["data"]["totalMatches"] == 11
 
-            # check that the only candidate that passed the second filter (PGIR19aacbvv) got saved as Source
+            # check that the only candidate that passed the second filter (None.23) got saved as Source
             resp = requests.get(
                 program2.base_url + f"/api/sources?group_ids={program2.group_id}",
                 headers=program2.headers,
@@ -179,7 +177,7 @@ class TestIngester:
             assert "totalMatches" in result["data"]
             assert result["data"]["totalMatches"] == 1
             assert "sources" in result["data"]
-            assert result["data"]["sources"][0]["id"] == "PGIR19aacbvv"
+            assert result["data"]["sources"][0]["id"] == "None.23"
 
 
 if __name__ == "__main__":
