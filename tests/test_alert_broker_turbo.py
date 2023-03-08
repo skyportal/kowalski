@@ -21,7 +21,7 @@ def worker_fixture(request):
 
 @pytest.fixture(autouse=True, scope="class")
 def alert_fixture(request):
-    sample_avro = f"{KOWALSKI_APP_PATH}/data/turbo_alerts/89_None.28.avro"
+    sample_avro = f"{KOWALSKI_APP_PATH}/data/turbo_alerts/1.avro"
     log(f"Loading sample TURBO alert {sample_avro}")
     with open(sample_avro, "rb") as f:
         for record in fastavro.reader(f):
