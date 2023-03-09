@@ -327,10 +327,11 @@ class AlertWorker:
                             "triplet",
                             "format",
                             "order",
+                            "url",
                         }
                     ):
                         raise ValueError(
-                            f"Invalid keys in ml.{self.instrument}.models.{model}, must be 'version', 'feature_names', 'feature_norms', 'triplet','format', and 'order'"
+                            f"Invalid keys in ml.{self.instrument}.models.{model}, must be 'version', 'feature_names', 'feature_norms', 'triplet','format', and 'order', and 'url' (optional)"
                         )
 
                     model_version = config["ml"][self.instrument]["models"][model][

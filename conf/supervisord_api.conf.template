@@ -1,0 +1,26 @@
+[unix_http_server]
+file = /dev/shm/supervisor.sock
+[supervisord]
+logfile = logs/supervisord.log
+logfile_maxbytes = 50MB
+logfile_backups = 20
+loglevel = info
+pidfile = /tmp/supervisord.pid
+nodaemon = True
+minfds = 1024
+minprocs = 200
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+[supervisorctl]
+serverurl = unix:///dev/shm/supervisor.sock
+[program:gunicorn]
+command = gunicorn -w {{ server.processes }} --bind {{ server.host }}:{{ server.port }} --worker-tmp-dir /dev/shm --worker-class aiohttp.GunicornUVLoopWebWorker --log-level=DEBUG --timeout {{ server.timeout }} --max-requests {{ server.max_requests }} kowalski.api.api:app_factory
+
+directory = ./
+autostart = True
+autorestart = True
+stdout_logfile = logs/gunicorn_stdout.log
+stdout_logfile_maxbytes = 30MB
+stderr_logfile = logs/gunicorn_stderr.log
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1

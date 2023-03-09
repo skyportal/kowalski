@@ -1,0 +1,125 @@
+[unix_http_server]
+file = /dev/shm/supervisor.sock
+[supervisord]
+logfile = logs/supervisord.log
+logfile_maxbytes = 50MB
+logfile_backups = 30
+loglevel = info
+pidfile = /tmp/supervisord.pid
+nodaemon = True
+minfds = 1024
+minprocs = 200
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+[supervisorctl]
+serverurl = unix:///dev/shm/supervisor.sock
+[program:dask-cluster]
+command = python kowalski/dask_clusters/dask_cluster.py
+directory = ./
+
+autostart = True
+autorestart = True
+stdout_logfile = logs/dask_cluster.log
+stdout_logfile_maxbytes = 50MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1
+[program:dask-cluster-pgir]
+command = python kowalski/dask_clusters/dask_cluster_pgir.py
+directory = ./
+
+autostart = True
+autorestart = True
+stdout_logfile = logs/dask_cluster_pgir.log
+stdout_logfile_maxbytes = 50MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1
+[program:dask-cluster-winter]
+command = python kowalski/dask_clusters/dask_cluster_winter.py
+directory = ./
+
+autostart = True
+autorestart = True
+stdout_logfile = logs/dask_cluster_winter.log
+stdout_logfile_maxbytes = 50MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1
+[program:dask-cluster-turbo]
+command = python kowalski/dask_clusters/dask_cluster_turbo.py
+directory = ./
+
+autostart = True
+autorestart = True
+stdout_logfile = logs/dask_cluster_turbo.log
+stdout_logfile_maxbytes = 50MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1
+[program:alert-broker-ztf]
+command = python kowalski/alert_brokers/alert_broker_ztf.py
+directory = ./
+
+autostart = True
+autorestart = True
+stdout_logfile = logs/alert_broker_ztf.log
+stdout_logfile_maxbytes = 30MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1
+[program:alert-broker-pgir]
+command = python kowalski/alert_brokers/alert_broker_pgir.py
+directory = ./
+
+autostart = True
+autorestart = True
+stdout_logfile = logs/alert_broker_pgir.log
+stdout_logfile_maxbytes = 30MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1
+[program:alert-broker-winter]
+command = python kowalski/alert_brokers/alert_broker_winter.py
+directory = ./
+
+autostart = True
+autorestart = True
+stdout_logfile = logs/alert_broker_winter.log
+stdout_logfile_maxbytes = 30MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1
+[program:alert-broker-turbo]
+command = python kowalski/alert_brokers/alert_broker_turbo.py
+directory = ./
+
+autostart = True
+autorestart = True
+stdout_logfile = logs/alert_broker_turbo.log
+stdout_logfile_maxbytes = 30MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1
+[program:ops-watcher-ztf]
+command = python kowalski/tools/ops_watcher_ztf.py
+directory = ./
+
+autostart = True
+autorestart = True
+stdout_logfile = logs/ops_watcher_ztf.log
+stdout_logfile_maxbytes = 30MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1
+[program:tns-watcher]
+command = python kowalski/tools/tns_watcher.py
+directory = ./
+
+autostart = True
+autorestart = True
+stdout_logfile = logs/tns_watcher.log
+stdout_logfile_maxbytes = 30MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1
+[program:performance_reporter]
+command = python kowalski/tools/performance_reporter.py --send_to_slack --days_ago 1
+directory = ./
+
+autostart = True
+autorestart = True
+stdout_logfile = logs/performance_reporter_stdout.log
+stdout_logfile_maxbytes = 10MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1

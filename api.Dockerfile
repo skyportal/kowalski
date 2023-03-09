@@ -26,12 +26,16 @@ COPY kowalski/tools/generate_supervisord_conf.py kowalski/tools/
 
 COPY kowalski/tests/test_api.py kowalski/tests/
 
+COPY conf/supervisord_api.conf.template conf/
+
+COPY Makefile .
+
+
 # upgrade pip
 RUN pip install --upgrade pip
 
 # install python libs and generate supervisord config file
-RUN pip install -r requirements_api.txt --no-cache-dir && \
-    python kowalski/tools/generate_supervisord_conf.py api
+RUN pip install -r requirements_api.txt --no-cache-dir
 
 # run container
-CMD /usr/local/bin/supervisord -n -c supervisord_api.conf
+CMD make run_api

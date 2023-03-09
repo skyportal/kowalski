@@ -5,6 +5,9 @@ kowalski:
     description: "Kowalski: a toolkit for Time-Domain Astronomy"
     host: "0.0.0.0"
     port: 4000
+    processes: 4
+    max_requests: 100000
+    timeout: 36000
     admin_username: "admin"
     # fixme: use a strong password
     admin_password: "admin"
@@ -1010,26 +1013,32 @@ kowalski:
           triplet: True
           feature_names: False
           version: "d6_m9"
+          url: "https://github.com/dmitryduev/braai/raw/master/models/braai_d6_m9.h5"
         acai_h:
           triplet: True
           feature_names: ('drb', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf', 'fwhm', 'sky', 'chinr', 'sharpnr', 'sgscore1', 'distpsnr1', 'sgscore2', 'distpsnr2', 'sgscore3', 'distpsnr3', 'ndethist', 'ncovhist', 'scorr', 'nmtchps', 'clrcoeff', 'clrcounc', 'neargaia', 'neargaiabright')
           version: "d1_dnn_20201130"
+          url: "https://github.com/dmitryduev/acai/raw/master/models/acai_h.d1_dnn_20201130.h5"
         acai_v:
           triplet: True
           feature_names: ('drb', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf', 'fwhm', 'sky', 'chinr', 'sharpnr', 'sgscore1', 'distpsnr1', 'sgscore2', 'distpsnr2', 'sgscore3', 'distpsnr3', 'ndethist', 'ncovhist', 'scorr', 'nmtchps', 'clrcoeff', 'clrcounc', 'neargaia', 'neargaiabright')
           version: "d1_dnn_20201130"
+          url: "https://github.com/dmitryduev/acai/raw/master/models/acai_v.d1_dnn_20201130.h5"
         acai_o:
           triplet: True
           feature_names: ('drb', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf', 'fwhm', 'sky', 'chinr', 'sharpnr', 'sgscore1', 'distpsnr1', 'sgscore2', 'distpsnr2', 'sgscore3', 'distpsnr3', 'ndethist', 'ncovhist', 'scorr', 'nmtchps', 'clrcoeff', 'clrcounc', 'neargaia', 'neargaiabright')
           version: "d1_dnn_20201130"
+          url: "https://github.com/dmitryduev/acai/raw/master/models/acai_o.d1_dnn_20201130.h5"
         acai_n:
           triplet: True
           feature_names: ('drb', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf', 'fwhm', 'sky', 'chinr', 'sharpnr', 'sgscore1', 'distpsnr1', 'sgscore2', 'distpsnr2', 'sgscore3', 'distpsnr3', 'ndethist', 'ncovhist', 'scorr', 'nmtchps', 'clrcoeff', 'clrcounc', 'neargaia', 'neargaiabright')
           version: "d1_dnn_20201130"
+          url: "https://github.com/dmitryduev/acai/raw/master/models/acai_n.d1_dnn_20201130.h5"
         acai_b:
           triplet: True
           feature_names: ('drb', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf', 'fwhm', 'sky', 'chinr', 'sharpnr', 'sgscore1', 'distpsnr1', 'sgscore2', 'distpsnr2', 'sgscore3', 'distpsnr3', 'ndethist', 'ncovhist', 'scorr', 'nmtchps', 'clrcoeff', 'clrcounc', 'neargaia', 'neargaiabright')
           version: "d1_dnn_20201130"
+          url: "https://github.com/dmitryduev/acai/raw/master/models/acai_b.d1_dnn_20201130.h5"
 
 
   skyportal:
@@ -1111,188 +1120,3 @@ kowalski:
     # Used by the performance_reporter.py task to post Slack messages
     slack_bot_token:
     slack_channel_id:
-
-  # this is used to make supervisord.conf files at build time
-  supervisord:
-    api:
-      unix_http_server:
-        file: /dev/shm/supervisor.sock
-
-      supervisord:
-        logfile: logs/supervisord.log
-        logfile_maxbytes: 50MB
-        logfile_backups: 20
-        loglevel: info
-        pidfile: /tmp/supervisord.pid
-        nodaemon: True
-        minfds: 1024
-        minprocs: 200
-
-      "rpcinterface:supervisor":
-        "supervisor.rpcinterface_factory": supervisor.rpcinterface:make_main_rpcinterface
-
-      supervisorctl:
-        serverurl: unix:///dev/shm/supervisor.sock
-
-      "program:gunicorn":
-        # fixme: adjust number of workers -w for your system (e.g. -w 40 for kowalski.caltech.edu)
-        command: >
-          /usr/local/bin/gunicorn
-          -w 4
-          --bind 0.0.0.0:4000
-          --worker-tmp-dir /dev/shm
-          --worker-class aiohttp.GunicornUVLoopWebWorker
-          --log-level=DEBUG
-          --timeout 36000
-          --max-requests 100000
-          kowalski.api.api:app_factory
-        directory: ./
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: logs/gunicorn_stdout.log
-        stdout_logfile_maxbytes: 30MB
-        stderr_logfile: logs/gunicorn_stderr.log
-        redirect_stderr: True
-        environment: 'PYTHONPATH=".", PRODUCTION=1'
-
-    ingester:
-      unix_http_server:
-        file: /dev/shm/supervisor.sock
-
-      supervisord:
-        logfile: logs/supervisord.log
-        logfile_maxbytes: 50MB
-        logfile_backups: 30
-        loglevel: info
-        pidfile: /tmp/supervisord.pid
-        nodaemon: True
-        minfds: 1024
-        minprocs: 200
-
-      "rpcinterface:supervisor":
-        "supervisor.rpcinterface_factory": supervisor.rpcinterface:make_main_rpcinterface
-
-      supervisorctl:
-        serverurl: unix:///dev/shm/supervisor.sock
-
-      "program:dask-cluster":
-        command: /usr/local/bin/python kowalski/dask_clusters/dask_cluster.py
-        directory: ./
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: logs/dask_cluster.log
-        stdout_logfile_maxbytes: 50MB
-        redirect_stderr: True
-        environment: 'PYTHONPATH=".", PRODUCTION=1'
-
-      "program:dask-cluster-pgir":
-        command: /usr/local/bin/python kowalski/dask_clusters/dask_cluster_pgir.py
-        directory: ./
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: logs/dask_cluster_pgir.log
-        stdout_logfile_maxbytes: 50MB
-        redirect_stderr: True
-        environment: 'PYTHONPATH=".", PRODUCTION=1'
-
-      "program:dask-cluster-winter":
-        command: /usr/local/bin/python kowalski/dask_clusters/dask_cluster_winter.py
-        directory: ./
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: logs/dask_cluster_winter.log
-        stdout_logfile_maxbytes: 50MB
-        redirect_stderr: True
-        environment: 'PYTHONPATH=".", PRODUCTION=1'
-
-      "program:dask-cluster-turbo":
-        command: /usr/local/bin/python kowalski/dask_clusters/dask_cluster_turbo.py
-        directory: ./
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: logs/dask_cluster_turbo.log
-        stdout_logfile_maxbytes: 50MB
-        redirect_stderr: True
-        environment: 'PYTHONPATH=".", PRODUCTION=1'
-
-      "program:alert-broker-ztf":
-        command: /usr/local/bin/python kowalski/alert_brokers/alert_broker_ztf.py
-        directory: ./
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: logs/alert_broker_ztf.log
-        stdout_logfile_maxbytes: 30MB
-        redirect_stderr: True
-        environment: 'PYTHONPATH=".", PRODUCTION=1'
-
-      "program:alert-broker-pgir":
-        command: /usr/local/bin/python kowalski/alert_brokers/alert_broker_pgir.py
-        directory: ./
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: logs/alert_broker_pgir.log
-        stdout_logfile_maxbytes: 30MB
-        redirect_stderr: True
-        environment: 'PYTHONPATH=".", PRODUCTION=1'
-
-      "program:alert-broker-winter":
-        command: /usr/local/bin/python kowalski/alert_brokers/alert_broker_winter.py
-        directory: ./
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: logs/alert_broker_winter.log
-        stdout_logfile_maxbytes: 30MB
-        redirect_stderr: True
-        environment: 'PYTHONPATH=".", PRODUCTION=1'
-
-      "program:alert-broker-turbo":
-        command: /usr/local/bin/python kowalski/alert_brokers/alert_broker_turbo.py
-        directory: ./
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: logs/alert_broker_turbo.log
-        stdout_logfile_maxbytes: 30MB
-        redirect_stderr: True
-        environment: 'PYTHONPATH=".", PRODUCTION=1'
-
-      "program:ops-watcher-ztf":
-        command: /usr/local/bin/python kowalski/tools/ops_watcher_ztf.py
-        directory: ./
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: logs/ops_watcher_ztf.log
-        stdout_logfile_maxbytes: 30MB
-        redirect_stderr: True
-        environment: 'PYTHONPATH=".", PRODUCTION=1'
-
-      "program:tns-watcher":
-        command: /usr/local/bin/python kowalski/tools/tns_watcher.py
-        directory: ./
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: logs/tns_watcher.log
-        stdout_logfile_maxbytes: 30MB
-        redirect_stderr: True
-        environment: 'PYTHONPATH=".", PRODUCTION=1'
-
-      "program:performance_reporter":
-        command: /usr/local/bin/python kowalski/tools/performance_reporter.py --send_to_slack --days_ago 1
-        directory: ./
-        user: root
-        autostart: true
-        autorestart: true
-        stdout_logfile: logs/performance_reporter_stdout.log
-        stdout_logfile_maxbytes: 10MB
-        redirect_stderr: True
-        environment: 'PYTHONPATH=".", PRODUCTION=1'

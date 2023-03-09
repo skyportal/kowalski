@@ -1,35 +1,76 @@
 import argparse
+from collections import Counter
+import os
 import sys
 
-import yaml
+import jinja2
+
+from kowalski.utils import load_config, log
+
+config = load_config(config_file="config.yaml")
 
 
-def generate_conf(service):
-    if service not in config["kowalski"]["supervisord"].keys():
-        raise ValueError(
-            f"{service} service def not found in config['kowalski']['supervisord']"
+def fill_config_file_values(template_paths):
+    log("Compiling configuration templates")
+
+    for template_path in template_paths:
+        tpath, tfile = os.path.split(template_path)
+        jenv = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(tpath),
         )
 
-    sc = ""
-    for k in config["kowalski"]["supervisord"][service].keys():
-        sc += f"[{k}]\n"
-        for kk, vv in config["kowalski"]["supervisord"][service][k].items():
-            sc += f"{kk} = {vv}\n"
+        template = jenv.get_template(tfile)
+        rendered = template.render(config["kowalski"])
 
-    with open(f"supervisord_{service}.conf", "w") as fsc:
-        fsc.write(sc)
+        with open(os.path.splitext(template_path)[0], "w") as f:
+            f.write(rendered)
+            f.write("\n")
+
+
+def copy_supervisor_configs(services):
+
+    duplicates = [k for k, v in Counter(services.keys()).items() if v > 1]
+    if duplicates:
+        raise RuntimeError(f"Duplicate service definitions found for {duplicates}")
+
+    log(f"Discovered {len(services)} services")
+
+    services_to_run = set(services.keys())
+    log(f"Enabling {len(services_to_run)} services")
+
+    supervisor_configs = []
+    for service in services_to_run:
+        path = services[service]
+
+        if os.path.exists(path):
+            with open(path) as f:
+                supervisor_configs.append(f.read())
+
+    with open("conf/supervisord.conf", "w") as f:
+        f.write("\n\n".join(supervisor_configs))
 
 
 def api(args):
-    generate_conf("api")
+    fill_config_file_values(["conf/supervisord_api.conf.template"])
 
 
 def ingester(args):
-    generate_conf("ingester")
+    fill_config_file_values(["conf/supervisord_ingester.conf.template"])
 
 
-with open("config.yaml", "r") as f:
-    config = yaml.load(f, Loader=yaml.FullLoader)
+def all(args):
+    fill_config_file_values(
+        [
+            "conf/supervisord_api.conf.template",
+            "conf/supervisord_ingester.conf.template",
+        ]
+    )
+    copy_supervisor_configs(
+        {
+            "api": "conf/supervisord_api.conf",
+            "ingester": "conf/supervisord_ingester.conf",
+        }
+    )
 
 
 if __name__ == "__main__":
@@ -40,6 +81,7 @@ if __name__ == "__main__":
     commands = [
         ("api", "generate supervisord_api.conf"),
         ("ingester", "generate supervisord_ingester.conf"),
+        ("all", "generate supervisor.conf for both api and ingester"),
         ("help", "Print this message"),
     ]
 

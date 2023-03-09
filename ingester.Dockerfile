@@ -26,14 +26,6 @@ RUN apt-get update && apt-get install -y default-jdk && \
 # Kafka test-server properties:
 COPY server.properties kafka_$scala_version-$kafka_version/config/
 
-# ZTF ML models <model_name>.<tag>.<extensions>:
-ADD https://github.com/dmitryduev/braai/raw/master/models/braai_$braai_version.h5 models/ztf/braai.$braai_version.h5
-ADD https://github.com/dmitryduev/acai/raw/master/models/acai_h.$acai_h_version.h5 models/ztf/
-ADD https://github.com/dmitryduev/acai/raw/master/models/acai_v.$acai_v_version.h5 models/ztf/
-ADD https://github.com/dmitryduev/acai/raw/master/models/acai_o.$acai_o_version.h5 models/ztf/
-ADD https://github.com/dmitryduev/acai/raw/master/models/acai_n.$acai_n_version.h5 models/ztf/
-ADD https://github.com/dmitryduev/acai/raw/master/models/acai_b.$acai_b_version.h5 models/ztf/
-
 # copy over the test data
 COPY data/ztf_alerts/ data/ztf_alerts/
 COPY data/pgir_alerts/ data/pgir_alerts/
@@ -55,12 +47,14 @@ COPY ["kowalski/__init__.py", \
 # write the same copy lines above but as a single line:
 COPY ["kowalski/tools/__init__.py", \
         "kowalski/tools/check_db_entries.py", \
-        "kowalski/tools/generate_supervisord_conf.py", \
-        "kowalski/tools/ops_watcher_ztf.py", \
-        "kowalski/tools/tns_watcher.py", \
-        "kowalski/tools/performance_reporter.py", \
         "kowalski/tools/fetch_ztf_matchfiles.py", \
+        "kowalski/tools/generate_supervisord_conf.py", \
+        "kowalski/tools/init_models.py", \
         "kowalski/tools/istarmap.py", \
+        "kowalski/tools/kafka_stream.py", \
+        "kowalski/tools/ops_watcher_ztf.py", \
+        "kowalski/tools/performance_reporter.py", \
+        "kowalski/tools/tns_watcher.py", \
         "kowalski/tools/"]
 
 COPY ["kowalski/dask_clusters/__init__.py", \
@@ -107,14 +101,17 @@ COPY ["kowalski/tests/test_alert_broker_ztf.py", \
         "kowalski/tests/test_tools.py", \
         "kowalski/tests/"]
 
+COPY conf/supervisord_ingester.conf.template conf/
+
+COPY Makefile .
+
 ENV USING_DOCKER=true
 
 # update pip
 RUN pip install --upgrade pip
 
 # install python libs and generate supervisord config file
-RUN pip install -r requirements_ingester.txt --no-cache-dir && \
-    python kowalski/tools/generate_supervisord_conf.py ingester
+RUN pip install -r requirements_ingester.txt --no-cache-dir
 
 # run container
-CMD /usr/local/bin/supervisord -n -c supervisord_ingester.conf
+CMD make run_ingester
