@@ -52,7 +52,6 @@ def process_file(
 
     # if the file is not an url
     if not file.startswith("http"):
-        file = f"data/{file}"
         try:
             file = pathlib.Path(file).resolve(strict=True)
         except FileNotFoundError:
