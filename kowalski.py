@@ -556,7 +556,7 @@ class Kowalski:
                 "-m",
                 "pytest",
                 "-s",
-                setup["test_script"],
+                f"kowalski/tests/{setup['test_script']}",
             ]
             try:
                 subprocess.run(command, check=True)

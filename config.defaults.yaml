@@ -24,18 +24,6 @@ kowalski:
     mountain_bind_ip: null
     mountain_bind_port: null
 
-  path:
-    app: "/app"
-    docs: "/app/docs"
-    ml_models_ztf: "/app/models/"
-    ml_models_pgir: "/app/models_pgir/"
-    logs: "/data/logs/"
-    data: "/data"
-    queries: "/data/queries"
-    tess: "/data/tess"
-    tmp: "/_tmp"
-    kafka: "/kafka_2.13-3.4.0"
-
   kafka:
     default.topic.config:
       auto.offset.reset: "earliest"
@@ -45,22 +33,19 @@ kowalski:
     zookeeper: "192.168.0.64:2181"
     bootstrap.test.servers: "localhost:9092"
     zookeeper.test: "localhost:2181"
+    path: "kafka_2.13-3.4.0"
 
   database:
     max_pool_size: 200
     host: "mongo"
-    port: 27017
-    # if not null, must be same as in entrypoint of mongo container
+    port: 27017 # if not null, must be same as in entrypoint of mongo container
     replica_set: "rs0"
     db: "kowalski"
-    admin_username: "mongoadmin"
-    # fixme: use strong password if exposing the database to the world
+    admin_username: "mongoadmin" # fixme: use strong password if exposing the database to the world
     admin_password: "mongoadminsecret"
-    username: "ztf"
-    # fixme: use strong password if exposing the database to the world
+    username: "ztf" # fixme: use strong password if exposing the database to the world
     password: "ztf"
     srv: False # to use with mongodb atlas or any other distant mongodb server, where specifying a port is not necessary
-
     build_indexes: True
 
     collections:
@@ -1134,7 +1119,7 @@ kowalski:
         file: /dev/shm/supervisor.sock
 
       supervisord:
-        logfile: /data/logs/supervisord.log
+        logfile: data/logs/supervisord.log
         logfile_maxbytes: 50MB
         logfile_backups: 20
         loglevel: info
@@ -1160,23 +1145,23 @@ kowalski:
           --log-level=DEBUG
           --timeout 36000
           --max-requests 100000
-          api:app_factory
-        directory: /app
+          kowalski.api.api:app_factory
+        directory: ./
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/gunicorn_stdout.log
+        stdout_logfile: data/logs/gunicorn_stdout.log
         stdout_logfile_maxbytes: 30MB
-        stderr_logfile: /data/logs/gunicorn_stderr.log
+        stderr_logfile: data/logs/gunicorn_stderr.log
         redirect_stderr: True
-        environment: "PRODUCTION=1"
+        environment: 'PYTHONPATH=".", PRODUCTION=1'
 
     ingester:
       unix_http_server:
         file: /dev/shm/supervisor.sock
 
       supervisord:
-        logfile: /data/logs/supervisord.log
+        logfile: data/logs/supervisord.log
         logfile_maxbytes: 50MB
         logfile_backups: 30
         loglevel: info
@@ -1192,121 +1177,122 @@ kowalski:
         serverurl: unix:///dev/shm/supervisor.sock
 
       "program:dask-cluster":
-        command: /usr/local/bin/python dask_cluster.py
-        directory: /app
+        command: /usr/local/bin/python kowalski/dask_clusters/dask_cluster.py
+        directory: ./
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/dask_cluster.log
+        stdout_logfile: data/logs/dask_cluster.log
         stdout_logfile_maxbytes: 50MB
         redirect_stderr: True
-        environment: "PRODUCTION=1"
+        environment: 'PYTHONPATH=".", PRODUCTION=1'
 
       "program:dask-cluster-pgir":
-        command: /usr/local/bin/python dask_cluster_pgir.py
-        directory: /app
+        command: /usr/local/bin/python kowalski/dask_clusters/dask_cluster_pgir.py
+        directory: ./
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/dask_cluster_pgir.log
+        stdout_logfile: data/logs/dask_cluster_pgir.log
         stdout_logfile_maxbytes: 50MB
         redirect_stderr: True
-        environment: "PRODUCTION=1"
+        environment: 'PYTHONPATH=".", PRODUCTION=1'
 
       "program:dask-cluster-winter":
-        command: /usr/local/bin/python dask_cluster_winter.py
-        directory: /app
+        command: /usr/local/bin/python kowalski/dask_clusters/dask_cluster_winter.py
+        directory: ./
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/dask_cluster_winter.log
+        stdout_logfile: data/logs/dask_cluster_winter.log
         stdout_logfile_maxbytes: 50MB
         redirect_stderr: True
-        environment: "PRODUCTION=1"
+        environment: 'PYTHONPATH=".", PRODUCTION=1'
 
       "program:dask-cluster-turbo":
-        command: /usr/local/bin/python dask_cluster_turbo.py
-        directory: /app
+        command: /usr/local/bin/python kowalski/dask_clusters/dask_cluster_turbo.py
+        directory: ./
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/dask_cluster_turbo.log
+        stdout_logfile: data/logs/dask_cluster_turbo.log
         stdout_logfile_maxbytes: 50MB
         redirect_stderr: True
-        environment: "PRODUCTION=1"
+        environment: 'PYTHONPATH=".", PRODUCTION=1'
 
       "program:alert-broker-ztf":
-        command: /usr/local/bin/python alert_broker_ztf.py
-        directory: /app
+        command: /usr/local/bin/python kowalski/alert_brokers/alert_broker_ztf.py
+        directory: ./
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/alert_broker_ztf.log
+        stdout_logfile: data/logs/alert_broker_ztf.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
-        environment: "PRODUCTION=1"
+        environment: 'PYTHONPATH=".", PRODUCTION=1'
 
       "program:alert-broker-pgir":
-        command: /usr/local/bin/python alert_broker_pgir.py
-        directory: /app
+        command: /usr/local/bin/python kowalski/alert_brokers/alert_broker_pgir.py
+        directory: ./
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/alert_broker_pgir.log
+        stdout_logfile: data/logs/alert_broker_pgir.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
-        environment: "PRODUCTION=1"
+        environment: 'PYTHONPATH=".", PRODUCTION=1'
 
       "program:alert-broker-winter":
-        command: /usr/local/bin/python alert_broker_winter.py
-        directory: /app
+        command: /usr/local/bin/python kowalski/alert_brokers/alert_broker_winter.py
+        directory: ./
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/alert_broker_winter.log
+        stdout_logfile: data/logs/alert_broker_winter.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
-        environment: "PRODUCTION=1"
+        environment: 'PYTHONPATH=".", PRODUCTION=1'
 
       "program:alert-broker-turbo":
-        command: /usr/local/bin/python alert_broker_turbo.py
-        directory: /app
+        command: /usr/local/bin/python kowalski/alert_brokers/alert_broker_turbo.py
+        directory: ./
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/alert_broker_turbo.log
+        stdout_logfile: data/logs/alert_broker_turbo.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
-        environment: "PRODUCTION=1"
+        environment: 'PYTHONPATH=".", PRODUCTION=1'
 
       "program:ops-watcher-ztf":
-        command: /usr/local/bin/python ops_watcher_ztf.py
-        directory: /app
+        command: /usr/local/bin/python kowalski/tools/ops_watcher_ztf.py
+        directory: ./
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/ops_watcher_ztf.log
+        stdout_logfile: data/logs/ops_watcher_ztf.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
-        environment: "PRODUCTION=1"
+        environment: 'PYTHONPATH=".", PRODUCTION=1'
 
       "program:tns-watcher":
-        command: /usr/local/bin/python tns_watcher.py
-        directory: /app
+        command: /usr/local/bin/python kowalski/tools/tns_watcher.py
+        directory: ./
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/tns_watcher.log
+        stdout_logfile: data/logs/tns_watcher.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
-        environment: "PRODUCTION=1"
+        environment: 'PYTHONPATH=".", PRODUCTION=1'
 
       "program:performance_reporter":
-        command: /usr/local/bin/python performance_reporter.py --send_to_slack --days_ago 1
-        directory: /app
+        command: /usr/local/bin/python kowalski/tools/performance_reporter.py --send_to_slack --days_ago 1
+        directory: ./
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: /data/logs/performance_reporter_stdout.log
+        stdout_logfile: data/logs/performance_reporter_stdout.log
         stdout_logfile_maxbytes: 10MB
         redirect_stderr: True
+        environment: 'PYTHONPATH=".", PRODUCTION=1'

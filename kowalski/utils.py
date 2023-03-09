@@ -89,7 +89,7 @@ class TimeoutHTTPAdapter(HTTPAdapter):
             kwargs["timeout"] = DEFAULT_TIMEOUT
 
 
-def load_config(path="/app", config_file="config.yaml"):
+def load_config(path="/kowalski", config_file="config.yaml"):
     """
     Load config and secrets
     """

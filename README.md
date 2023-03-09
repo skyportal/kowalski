@@ -242,7 +242,7 @@ tar -xzf kafka_$scala_version-$kafka_version.tgz
 
 Installed in this way, path.kafka in the config should be set to ./kafka_2.13-3.4.0.
 
-The last step of the kafka setup is to replace its `kafka_$scala_version-$kafka_version/config/server.properties` file with the one in `kowalski/server.properties`. As this setup is meant to run locally outside docker, you should modify said `server.properties` file to set `log.dirs=/data/logs/kafka-logs` to `log.dirs=./data/logs/kafka-logs` instead (the addition here is the `.` at the beginning of the path) to avoid permission issues.
+The last step of the kafka setup is to replace its `kafka_$scala_version-$kafka_version/config/server.properties` file with the one in `kowalski/server.properties`. As this setup is meant to run locally outside docker, you should modify said `server.properties` file to set `log.dirs=/data/logs/kafka-logs` to `log.dirs=logs/kafka-logs` instead (the addition here is the `.` at the beginning of the path) to avoid permission issues.
 
 ### Download the ML models
 
