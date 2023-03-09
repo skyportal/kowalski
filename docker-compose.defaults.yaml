@@ -15,7 +15,7 @@ services:
       dockerfile: api.Dockerfile
     image: dmitryduev/kowalski_api:latest
     volumes:
-      - data:/data
+      - data:/kowalski/data
     expose:
       - "4000"
     # fixme:
@@ -37,7 +37,7 @@ services:
     ports:
       - "8787:8787"
     volumes:
-      - data:/data
+      - data:/kowalski/data
     links:
       - mongo:kowalski-mongo
     restart: always

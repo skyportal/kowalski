@@ -42,7 +42,7 @@ services:
     #    entrypoint: python -m pytest -s test_api.py
     image: dmitryduev/kowalski_api:latest
     volumes:
-      - data:/data
+      - data:/kowalski/data
     expose:
       - "4000"
     # fixme: comment out ports if deploying behind traefik
@@ -79,7 +79,7 @@ services:
     ports:
       - "8787:8787"
     volumes:
-      - data:/data
+      - data:/kowalski/data
     links:
       - mongo:kowalski-mongo
     restart: always

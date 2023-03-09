@@ -17,7 +17,7 @@ services:
       dockerfile: api.Dockerfile
     image: dmitryduev/kowalski_api:latest
     volumes:
-      - data:/data
+      - data:/kowalski/data
     expose:
       - "4000"
     # fixme:
@@ -35,7 +35,7 @@ services:
       dockerfile: ingester.Dockerfile
     image: dmitryduev/kowalski_ingester:latest
     volumes:
-      - data:/data
+      - data:/kowalski/data
     links:
       - mongo:kowalski-mongo
     restart: always
