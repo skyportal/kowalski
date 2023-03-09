@@ -10,7 +10,7 @@ import traceback
 from tqdm import tqdm
 
 
-import istarmap  # noqa: F401
+import kowalski.tools.istarmap as istarmap  # noqa: F401
 from kowalski.utils import (
     compute_dmdt,
     deg2dms,
@@ -23,8 +23,8 @@ from kowalski.utils import (
 
 
 """ load config and secrets """
-KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/kowalski")
-config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+
+config = load_config(config_file="config.yaml")["kowalski"]
 # init db if necessary
 init_db_sync(config=config)
 

@@ -15,9 +15,9 @@ Essentially the same as the ZTF ingester tests (test_ingester_ztf.py), except -
 """
 
 """ load config and secrets """
-KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/kowalski")
+
 USING_DOCKER = os.environ.get("USING_DOCKER", False)
-config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+config = load_config(config_file="config.yaml")["kowalski"]
 
 if USING_DOCKER:
     config["server"]["host"] = "kowalski_api_1"
@@ -113,7 +113,7 @@ class TestIngester:
 
         with KafkaStream(
             topic_name,
-            pathlib.Path(f"{KOWALSKI_APP_PATH}/data/{path_alerts}"),
+            pathlib.Path(f"data/{path_alerts}"),
             config=config,
             test=True,
         ):

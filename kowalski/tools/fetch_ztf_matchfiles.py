@@ -14,10 +14,7 @@ from urllib.parse import urljoin
 from kowalski.utils import load_config
 
 
-KOWALSKI_APP_PATH = os.environ.get(
-    "KOWALSKI_APP_PATH", pathlib.Path(__file__).parent.absolute()
-)
-config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+config = load_config(config_file="config.yaml")["kowalski"]
 
 
 def collect_urls(readout_channel: int) -> list:

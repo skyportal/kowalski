@@ -49,8 +49,8 @@ from kowalski.utils import (
     uid,
 )
 
-KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/kowalski")
-config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+
+config = load_config(config_file="config.yaml")["kowalski"]
 
 
 class Handler:
@@ -2820,7 +2820,7 @@ async def app_factory():
         title=config["server"]["name"],
         version=config["server"]["version"],
         description=config["server"]["description"],
-        components=os.path.join(KOWALSKI_APP_PATH, "kowalski/api/components_api.yaml"),
+        components=os.path.join("kowalski/api/components_api.yaml"),  # TODO: verify
     )
 
     # instantiate handler classes:

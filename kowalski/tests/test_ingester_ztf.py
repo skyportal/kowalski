@@ -12,9 +12,9 @@ from kowalski.utils import init_db_sync, load_config, log, Mongo
 
 
 """ load config and secrets """
-KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/kowalski")
+
 USING_DOCKER = os.environ.get("USING_DOCKER", False)
-config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+config = load_config(config_file="config.yaml")["kowalski"]
 
 if USING_DOCKER:
     config["server"]["host"] = "kowalski_api_1"
@@ -383,14 +383,14 @@ class TestIngester:
                 "cp",
                 "-n",
                 "gs://ztf-fritz/sample-public-alerts/*.avro",
-                f"{KOWALSKI_APP_PATH}/data/{path_alerts}",
+                f"data/{path_alerts}",
             ]
         )
         log(f"Fetched {len(ids)} alerts from gs://ztf-fritz/sample-public-alerts")
         # push!
         with KafkaStream(
             topic_name,
-            pathlib.Path(f"{KOWALSKI_APP_PATH}/data/{path_alerts}"),
+            pathlib.Path(f"data/{path_alerts}"),
             config=config,
             test=True,
         ):

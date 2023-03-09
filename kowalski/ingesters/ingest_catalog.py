@@ -5,7 +5,6 @@ This tool will digest zipped IGAPS source data from http://www.star.ucl.ac.uk/IG
 import fire
 import numpy as np
 import pandas as pd
-import os
 from astropy.io import fits
 import pathlib
 
@@ -20,8 +19,8 @@ from kowalski.utils import (
 )
 
 """ load config and secrets """
-KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/kowalski")
-config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+
+config = load_config(config_file="config.yaml")["kowalski"]
 
 # init db if necessary
 init_db_sync(config=config)
@@ -53,7 +52,7 @@ def process_file(
 
     # if the file is not an url
     if not file.startswith("http"):
-        file = f"{KOWALSKI_APP_PATH}/{file}"
+        file = f"data/{file}"
         try:
             file = pathlib.Path(file).resolve(strict=True)
         except FileNotFoundError:

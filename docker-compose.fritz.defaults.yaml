@@ -3,6 +3,7 @@ version: "3.7"
 volumes:
   mongodb:
   data:
+  logs:
 
 networks:
   default:
@@ -18,6 +19,7 @@ services:
     image: dmitryduev/kowalski_api:latest
     volumes:
       - data:/kowalski/data
+      - logs:/kowalski/logs
     expose:
       - "4000"
     # fixme:
@@ -36,6 +38,7 @@ services:
     image: dmitryduev/kowalski_ingester:latest
     volumes:
       - data:/kowalski/data
+      - logs:/kowalski/logs
     links:
       - mongo:kowalski-mongo
     restart: always

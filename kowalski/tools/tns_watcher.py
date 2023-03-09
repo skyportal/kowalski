@@ -12,8 +12,8 @@ import tqdm
 from kowalski.utils import Mongo, load_config, log, radec_str2geojson
 
 """ load config and secrets """
-KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/kowalski")
-config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+
+config = load_config(config_file="config.yaml")["kowalski"]
 
 
 def mongify(doc):

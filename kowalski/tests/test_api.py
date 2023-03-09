@@ -1,4 +1,3 @@
-import os
 import random
 import string
 from typing import List
@@ -7,8 +6,8 @@ import pytest
 from kowalski.api.api import app_factory
 from kowalski.utils import load_config, uid
 
-KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/kowalski")
-config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+
+config = load_config(config_file="config.yaml")["kowalski"]
 
 
 async def get_admin_credentials(aiohttp_client):

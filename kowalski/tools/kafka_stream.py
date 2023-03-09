@@ -1,12 +1,11 @@
 import argparse
-import os
 import pathlib
 
 from kowalski.utils import load_config
 from kowalski.ingesters.ingester import KafkaStream
 
-KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/kowalski")
-config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+
+config = load_config(config_file="config.yaml")["kowalski"]
 
 parser = argparse.ArgumentParser(description="Create a Kafka stream")
 
@@ -14,7 +13,7 @@ parser.add_argument("--topic", type=str, help="Kafka topic name")
 parser.add_argument(
     "--path_alerts",
     type=str,
-    help="path to the alerts directory in KOWALSKI_APP_PATH/data",
+    help="path to the alerts directory in data",
 )
 parser.add_argument(
     "--test",
@@ -51,7 +50,7 @@ print(f"action: {action}")
 
 stream = KafkaStream(
     topic=topic,
-    path_alerts=pathlib.Path(f"{KOWALSKI_APP_PATH}/data/{path_alerts}"),
+    path_alerts=pathlib.Path(f"data/{path_alerts}"),
     test=test,
     config=config,
 )

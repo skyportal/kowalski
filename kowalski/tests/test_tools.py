@@ -1,4 +1,3 @@
-import os
 from random import randrange
 
 import pytest
@@ -15,8 +14,8 @@ from kowalski.ingesters.ingest_catalog import run as run_catalog
 from kowalski.utils import Mongo, get_default_args, load_config, log
 
 """ load config and secrets """
-KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/kowalski")
-config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+
+config = load_config(config_file="config.yaml")["kowalski"]
 
 
 @pytest.fixture(autouse=True, scope="class")
@@ -57,7 +56,7 @@ class TestTools:
                 )
 
         run_ztf_source_features(
-            path=f"{KOWALSKI_APP_PATH}/data/ztf_source_features",
+            path="data/ztf_source_features",
             tag=tag,
             xmatch=False,
             num_processes=1,
@@ -83,7 +82,7 @@ class TestTools:
                 )
 
         run_ztf_source_classifications(
-            path=f"{KOWALSKI_APP_PATH}/data/ztf_source_classifications/",
+            path="data/ztf_source_classifications/",
             tag=tag,
             num_processes=1,
         )
@@ -118,7 +117,7 @@ class TestTools:
                 )
 
         run_ztf_matchfiles(
-            path=f"{KOWALSKI_APP_PATH}/data/ztf_matchfiles",
+            path="data/ztf_matchfiles",
             tag=tag,
             num_proc=1,
         )
@@ -145,7 +144,7 @@ class TestTools:
                 raise RuntimeError(f"Failed to drop the existing VLASS collection: {e}")
 
         run_vlass(
-            path=f"{KOWALSKI_APP_PATH}/data/catalogs",
+            path="data/catalogs",
             num_processes=1,
         )
 
@@ -166,7 +165,7 @@ class TestTools:
                 raise RuntimeError(f"Failed to drop the existing IGAPS collection: {e}")
 
         run_igaps(
-            path=f"{KOWALSKI_APP_PATH}/data/catalogs",
+            path="data/catalogs",
             num_processes=1,
         )
 
@@ -189,7 +188,7 @@ class TestTools:
                     f"Failed to drop the existing ZTF public collection: {e}"
                 )
 
-        run_ztf_public(path=f"{KOWALSKI_APP_PATH}/data/catalogs", num_proc=1)
+        run_ztf_public(path="data/catalogs", num_proc=1)
 
         ingested_entries = list(self.mongo.db[collection].find({}, {"_id": 1}))
         log(f"Ingested features of {len(ingested_entries)} sources")
@@ -220,7 +219,7 @@ class TestTools:
                 )
 
         run_ptf_matchfiles(
-            path=f"{KOWALSKI_APP_PATH}/data/catalogs",
+            path="data/catalogs",
             num_proc=1,
         )
 

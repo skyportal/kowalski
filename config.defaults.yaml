@@ -1119,7 +1119,7 @@ kowalski:
         file: /dev/shm/supervisor.sock
 
       supervisord:
-        logfile: data/logs/supervisord.log
+        logfile: logs/supervisord.log
         logfile_maxbytes: 50MB
         logfile_backups: 20
         loglevel: info
@@ -1150,9 +1150,9 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: data/logs/gunicorn_stdout.log
+        stdout_logfile: logs/gunicorn_stdout.log
         stdout_logfile_maxbytes: 30MB
-        stderr_logfile: data/logs/gunicorn_stderr.log
+        stderr_logfile: logs/gunicorn_stderr.log
         redirect_stderr: True
         environment: 'PYTHONPATH=".", PRODUCTION=1'
 
@@ -1161,7 +1161,7 @@ kowalski:
         file: /dev/shm/supervisor.sock
 
       supervisord:
-        logfile: data/logs/supervisord.log
+        logfile: logs/supervisord.log
         logfile_maxbytes: 50MB
         logfile_backups: 30
         loglevel: info
@@ -1182,7 +1182,7 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: data/logs/dask_cluster.log
+        stdout_logfile: logs/dask_cluster.log
         stdout_logfile_maxbytes: 50MB
         redirect_stderr: True
         environment: 'PYTHONPATH=".", PRODUCTION=1'
@@ -1193,7 +1193,7 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: data/logs/dask_cluster_pgir.log
+        stdout_logfile: logs/dask_cluster_pgir.log
         stdout_logfile_maxbytes: 50MB
         redirect_stderr: True
         environment: 'PYTHONPATH=".", PRODUCTION=1'
@@ -1204,7 +1204,7 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: data/logs/dask_cluster_winter.log
+        stdout_logfile: logs/dask_cluster_winter.log
         stdout_logfile_maxbytes: 50MB
         redirect_stderr: True
         environment: 'PYTHONPATH=".", PRODUCTION=1'
@@ -1215,7 +1215,7 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: data/logs/dask_cluster_turbo.log
+        stdout_logfile: logs/dask_cluster_turbo.log
         stdout_logfile_maxbytes: 50MB
         redirect_stderr: True
         environment: 'PYTHONPATH=".", PRODUCTION=1'
@@ -1226,7 +1226,7 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: data/logs/alert_broker_ztf.log
+        stdout_logfile: logs/alert_broker_ztf.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: 'PYTHONPATH=".", PRODUCTION=1'
@@ -1237,7 +1237,7 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: data/logs/alert_broker_pgir.log
+        stdout_logfile: logs/alert_broker_pgir.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: 'PYTHONPATH=".", PRODUCTION=1'
@@ -1248,7 +1248,7 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: data/logs/alert_broker_winter.log
+        stdout_logfile: logs/alert_broker_winter.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: 'PYTHONPATH=".", PRODUCTION=1'
@@ -1259,7 +1259,7 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: data/logs/alert_broker_turbo.log
+        stdout_logfile: logs/alert_broker_turbo.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: 'PYTHONPATH=".", PRODUCTION=1'
@@ -1270,7 +1270,7 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: data/logs/ops_watcher_ztf.log
+        stdout_logfile: logs/ops_watcher_ztf.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: 'PYTHONPATH=".", PRODUCTION=1'
@@ -1281,7 +1281,7 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: data/logs/tns_watcher.log
+        stdout_logfile: logs/tns_watcher.log
         stdout_logfile_maxbytes: 30MB
         redirect_stderr: True
         environment: 'PYTHONPATH=".", PRODUCTION=1'
@@ -1292,7 +1292,7 @@ kowalski:
         user: root
         autostart: true
         autorestart: true
-        stdout_logfile: data/logs/performance_reporter_stdout.log
+        stdout_logfile: logs/performance_reporter_stdout.log
         stdout_logfile_maxbytes: 10MB
         redirect_stderr: True
         environment: 'PYTHONPATH=".", PRODUCTION=1'

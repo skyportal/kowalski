@@ -27,9 +27,8 @@ from kowalski.utils import (
 # print("User's Environment variable:")
 # pprint.pprint(dict(env_var), width = 1)
 # exit()
-KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/kowalski")
-# KOWALSKI_APP_PATH = '/home/rstrausb/kowalski/'
-config = load_config(path=KOWALSKI_APP_PATH, config_file="config.yaml")["kowalski"]
+
+config = load_config(config_file="config.yaml")["kowalski"]
 init_db_sync(config=config)
 
 

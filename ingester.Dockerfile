@@ -45,59 +45,67 @@ COPY data/ztf_source_classifications/ data/ztf_source_classifications/
 COPY data/turbo_alerts/ data/turbo_alerts/
 
 COPY requirements_ingester.txt .
-
 COPY config.yaml .
 COPY version.txt .
 
-COPY kowalski/__init__.py kowalski/
-COPY kowalski/utils.py kowalski/
+COPY ["kowalski/__init__.py", \
+        "kowalski/utils.py", \
+        "kowalski/"]
 
-COPY kowalski/tools/__init__.py kowalski/tools/
-COPY kowalski/tools/check_db_entries.py kowalski/tools/
-COPY kowalski/tools/generate_supervisord_conf.py kowalski/tools/
-COPY kowalski/tools/ops_watcher_ztf.py kowalski/tools/
-COPY kowalski/tools/tns_watcher.py kowalski/tools/
-COPY kowalski/tools/performance_reporter.py kowalski/tools/
-COPY kowalski/tools/fetch_ztf_matchfiles.py kowalski/tools/
-COPY kowalski/tools/istarmap.py kowalski/tools/
+# write the same copy lines above but as a single line:
+COPY ["kowalski/tools/__init__.py", \
+        "kowalski/tools/check_db_entries.py", \
+        "kowalski/tools/generate_supervisord_conf.py", \
+        "kowalski/tools/ops_watcher_ztf.py", \
+        "kowalski/tools/tns_watcher.py", \
+        "kowalski/tools/performance_reporter.py", \
+        "kowalski/tools/fetch_ztf_matchfiles.py", \
+        "kowalski/tools/istarmap.py", \
+        "kowalski/tools/"]
 
-COPY kowalski/dask_clusters/__init__.py kowalski/dask_clusters/
-COPY kowalski/dask_clusters/dask_cluster.py kowalski/dask_clusters/
-COPY kowalski/dask_clusters/dask_cluster_pgir.py kowalski/dask_clusters/
-COPY kowalski/dask_clusters/dask_cluster_winter.py kowalski/dask_clusters/
-COPY kowalski/dask_clusters/dask_cluster_turbo.py kowalski/dask_clusters/
+COPY ["kowalski/dask_clusters/__init__.py", \
+        "kowalski/dask_clusters/dask_cluster.py", \
+        "kowalski/dask_clusters/dask_cluster_pgir.py", \
+        "kowalski/dask_clusters/dask_cluster_winter.py", \
+        "kowalski/dask_clusters/dask_cluster_turbo.py", \
+        "kowalski/dask_clusters/"]
 
-COPY kowalski/alert_brokers/__init__.py kowalski/alert_brokers/
-COPY kowalski/alert_brokers/alert_broker.py kowalski/alert_brokers/
-COPY kowalski/alert_brokers/alert_broker_ztf.py kowalski/alert_brokers/
-COPY kowalski/alert_brokers/alert_broker_pgir.py kowalski/alert_brokers/
-COPY kowalski/alert_brokers/alert_broker_winter.py kowalski/alert_brokers/
-COPY kowalski/alert_brokers/alert_broker_turbo.py kowalski/alert_brokers/
+COPY ["kowalski/alert_brokers/__init__.py", \
+        "kowalski/alert_brokers/alert_broker.py", \
+        "kowalski/alert_brokers/alert_broker_ztf.py", \
+        "kowalski/alert_brokers/alert_broker_pgir.py", \
+        "kowalski/alert_brokers/alert_broker_winter.py", \
+        "kowalski/alert_brokers/alert_broker_turbo.py", \
+        "kowalski/alert_brokers/"]
 
-COPY kowalski/ingesters/__init__.py kowalski/ingesters/
-COPY kowalski/ingesters/ingest_catalog.py kowalski/ingesters/
-COPY kowalski/ingesters/ingest_gaia_edr3.py kowalski/ingesters/
-COPY kowalski/ingesters/ingest_igaps.py kowalski/ingesters/
-COPY kowalski/ingesters/ingest_ps1_strm.py kowalski/ingesters/
-COPY kowalski/ingesters/ingest_ptf_matchfiles.py kowalski/ingesters/
-COPY kowalski/ingesters/ingest_turbo.py kowalski/ingesters/
-COPY kowalski/ingesters/ingest_vlass.py kowalski/ingesters/
-COPY kowalski/ingesters/ingest_ztf_matchfiles.py kowalski/ingesters/
-COPY kowalski/ingesters/ingest_ztf_public.py kowalski/ingesters/
-COPY kowalski/ingesters/ingest_ztf_source_classifications.py kowalski/ingesters/
-COPY kowalski/ingesters/ingest_ztf_source_features.py kowalski/ingesters/
-COPY kowalski/ingesters/ingester.py kowalski/ingesters/
 
-COPY kowalski/tests/test_alert_broker_ztf.py kowalski/tests/
-COPY kowalski/tests/test_alert_broker_pgir.py kowalski/tests/
-COPY kowalski/tests/test_alert_broker_wntr.py kowalski/tests/
-COPY kowalski/tests/test_alert_broker_turbo.py kowalski/tests/
-COPY kowalski/tests/test_ingester_ztf.py kowalski/tests/
-COPY kowalski/tests/test_ingester_pgir.py kowalski/tests/
-COPY kowalski/tests/test_ingester_wntr.py kowalski/tests/
-COPY kowalski/tests/test_ingester_turbo.py kowalski/tests/
-COPY kowalski/tests/test_tns_watcher.py kowalski/tests/
-COPY kowalski/tests/test_tools.py kowalski/tests/
+COPY ["kowalski/ingesters/__init__.py", \
+        "kowalski/ingesters/ingest_catalog.py", \
+        "kowalski/ingesters/ingest_gaia_edr3.py", \
+        "kowalski/ingesters/ingest_igaps.py", \
+        "kowalski/ingesters/ingest_ps1_strm.py", \
+        "kowalski/ingesters/ingest_ptf_matchfiles.py", \
+        "kowalski/ingesters/ingest_turbo.py", \
+        "kowalski/ingesters/ingest_vlass.py", \
+        "kowalski/ingesters/ingest_ztf_matchfiles.py", \
+        "kowalski/ingesters/ingest_ztf_public.py", \
+        "kowalski/ingesters/ingest_ztf_source_classifications.py", \
+        "kowalski/ingesters/ingest_ztf_source_features.py", \
+        "kowalski/ingesters/ingester.py", \
+        "kowalski/ingesters/"]
+
+
+COPY ["kowalski/tests/test_alert_broker_ztf.py", \
+        "kowalski/tests/test_alert_broker_pgir.py", \
+        "kowalski/tests/test_alert_broker_wntr.py", \
+        "kowalski/tests/test_alert_broker_turbo.py", \
+        "kowalski/tests/test_ingester_ztf.py", \
+        "kowalski/tests/test_ingester_pgir.py", \
+        "kowalski/tests/test_ingester_wntr.py", \
+        "kowalski/tests/test_ingester_turbo.py", \
+        "kowalski/tests/test_tns_watcher.py", \
+        "kowalski/tests/test_tools.py", \
+        "kowalski/tests/"]
 
 ENV USING_DOCKER=true
 
