@@ -230,7 +230,7 @@ def process_file(
 
     else:
         log("Unknown format. Supported formats: fits, csv")
-        return
+        return 0, 0
     # disconnect from db:
     try:
         mongo.client.close()
@@ -244,7 +244,7 @@ def process_file(
 
 def run(
     catalog_name: str,
-    path: str = "./",
+    path: str = "./data/catalogs",
     ra_col: str = None,
     dec_col: str = None,
     batch_size: int = 2048,
