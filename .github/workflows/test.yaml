@@ -35,9 +35,9 @@ jobs:
           TNS_BOT_NAME: ${{ secrets.TNS_BOT_NAME }}
           TNS_API_KEY: ${{ secrets.TNS_API_KEY }}
         run: |
-          python tools/patch_yaml.py config.yaml \
+          python kowalski/tools/patch_yaml.py config.yaml \
             --kowalski.tns.bot_id=$TNS_BOT_ID \
             --kowalski.tns.bot_name=$TNS_BOT_NAME \
             --kowalski.tns.api_key=$TNS_API_KEY
-          docker cp config.yaml kowalski_ingester_1:/app/
+          docker cp config.yaml kowalski_ingester_1:/kowalski/
           ./kowalski.py test
