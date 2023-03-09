@@ -399,7 +399,7 @@ class TestIngester:
             log("Digested and ingested: all done!")
 
         log("Checking the ZTF alert collection states")
-        num_retries = 7
+        num_retries = 13
         # alert processing takes time, which depends on the available resources
         # so allow some additional time for the processing to finish
         for i in range(num_retries):
@@ -417,7 +417,7 @@ class TestIngester:
                 print(
                     "Found an unexpected amount of alert/aux data: "
                     f"({n_alerts}/{n_alerts_aux}, expecting 313/145). "
-                    "Retrying in 30 seconds..."
+                    "Retrying in 15 seconds..."
                 )
                 time.sleep(15)
                 continue

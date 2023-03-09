@@ -149,7 +149,7 @@ class TestIngester:
                 print(
                     "Found an unexpected amount of alert/aux data: "
                     f"({n_alerts}/{n_alerts_aux}, expecting 17/15). "
-                    "Retrying in 30 seconds..."
+                    "Retrying in 15 seconds..."
                 )
                 time.sleep(15)
                 continue
