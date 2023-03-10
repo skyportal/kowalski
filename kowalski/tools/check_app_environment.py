@@ -11,14 +11,14 @@ def output(cmd):
     return success, out
 
 
-deps = {
+dependencies = {
     "python": (
         # Command to get version
         ["python", "--version"],
         # Extract *only* the version number
         lambda v: v.split()[1],
         # It must be >= 3.7
-        "3.7",
+        "3.8.0",
     ),
     # "docker": (
     #     # Command to get version
@@ -42,16 +42,11 @@ print("Checking system dependencies:")
 
 fail = []
 
-for dep, (cmd, get_version, min_version) in deps.items():
+for dep, (cmd, get_version, min_version) in dependencies.items():
     try:
         query = f"{dep} >= {min_version}"
-        success, out = output(cmd)
-        try:
-            version = get_version(out.decode("utf-8").strip())
-            print(f"[{version.rjust(8)}]".rjust(40 - len(query)), end="")
-        except:  # noqa: E722
-            raise ValueError("Could not parse version")
-
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        out, err = p.communicate()
         try:
             version = get_version(out.decode("utf-8").strip())
             print(f"[{version.rjust(8)}]".rjust(40 - len(query)), end="")
@@ -60,7 +55,6 @@ for dep, (cmd, get_version, min_version) in deps.items():
 
         if not (Version(version) >= Version(min_version)):
             raise RuntimeError(f"Required {min_version}, found {version}")
-        raise
     except Exception as e:
         fail.append((dep, e))
 
@@ -71,7 +65,7 @@ if fail:
     print("    The failed checks were:")
     print()
     for (pkg, exc) in fail:
-        cmd, get_version, min_version = deps[pkg]
+        cmd, get_version, min_version = dependencies[pkg]
         print(f'    - {pkg}: `{" ".join(cmd)}`')
         print("     ", exc)
     print()
