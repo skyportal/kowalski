@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import subprocess
 import sys
-from packaging import version as Version
+from distutils.version import LooseVersion as Version
 
 
 def output(cmd):
@@ -52,14 +52,14 @@ for dep, (cmd, get_version, min_version) in deps.items():
         except:  # noqa: E722
             raise ValueError("Could not parse version")
 
-        if not (Version.parse(version) >= Version.parse(min_version)):
+        try:
+            version = get_version(out.decode("utf-8").strip())
+            print(f"[{version.rjust(8)}]".rjust(40 - len(query)), end="")
+        except Exception:
+            raise ValueError("Could not parse version")
+
+        if not (Version(version) >= Version(min_version)):
             raise RuntimeError(f"Required {min_version}, found {version}")
-    except ValueError:
-        print(
-            f"\n[!] Sorry, but our script could not parse the output of "
-            f'`{" ".join(cmd)}`; please file a bug, or see '
-            f"`check_app_environment.py`\n"
-        )
         raise
     except Exception as e:
         fail.append((dep, e))
