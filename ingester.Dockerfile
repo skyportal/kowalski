@@ -26,6 +26,10 @@ RUN apt-get update && apt-get install -y default-jdk && \
 # Kafka test-server properties:
 COPY server.properties kafka_$scala_version-$kafka_version/config/
 
+COPY requirements/requirements_ingester.txt requirements/
+COPY config.yaml .
+COPY version.txt .
+
 # copy over the test data
 COPY data/ztf_alerts/ data/ztf_alerts/
 COPY data/pgir_alerts/ data/pgir_alerts/
@@ -36,16 +40,13 @@ COPY data/ztf_source_features/ data/ztf_source_features/
 COPY data/ztf_source_classifications/ data/ztf_source_classifications/
 COPY data/turbo_alerts/ data/turbo_alerts/
 
-COPY requirements_ingester.txt .
-COPY config.yaml .
-COPY version.txt .
-
 COPY ["kowalski/__init__.py", \
         "kowalski/utils.py", \
         "kowalski/"]
 
 # write the same copy lines above but as a single line:
 COPY ["kowalski/tools/__init__.py", \
+        "kowalski/tools/check_app_environment.py", \
         "kowalski/tools/check_db_entries.py", \
         "kowalski/tools/fetch_ztf_matchfiles.py", \
         "kowalski/tools/generate_supervisord_conf.py", \
@@ -54,6 +55,7 @@ COPY ["kowalski/tools/__init__.py", \
         "kowalski/tools/kafka_stream.py", \
         "kowalski/tools/ops_watcher_ztf.py", \
         "kowalski/tools/performance_reporter.py", \
+        "kowalski/tools/pip_install_requirements.py", \
         "kowalski/tools/tns_watcher.py", \
         "kowalski/tools/"]
 
@@ -111,7 +113,7 @@ ENV USING_DOCKER=true
 RUN pip install --upgrade pip
 
 # install python libs and generate supervisord config file
-RUN pip install -r requirements_ingester.txt --no-cache-dir
+RUN pip install -r requirements/requirements_ingester.txt --no-cache-dir
 
 # run container
 CMD make run_ingester

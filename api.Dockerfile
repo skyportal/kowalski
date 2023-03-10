@@ -8,7 +8,7 @@ RUN mkdir -p /kowalski /kowalski/data /kowalski/logs /_tmp
 
 WORKDIR /kowalski
 
-COPY requirements_api.txt .
+COPY requirements/requirements_api.txt requirements/
 
 COPY config.yaml .
 COPY version.txt .
@@ -22,7 +22,9 @@ COPY kowalski/api/middlewares.py kowalski/api/
 COPY kowalski/api/components_api.yaml kowalski/api/
 
 COPY kowalski/tools/__init__.py kowalski/tools/
+COPY kowalski/tools/check_app_environment.py kowalski/tools/
 COPY kowalski/tools/generate_supervisord_conf.py kowalski/tools/
+COPY kowalski/tools/pip_install_requirements.py kowalski/tools/
 
 COPY kowalski/tests/test_api.py kowalski/tests/
 
@@ -35,7 +37,7 @@ COPY Makefile .
 RUN pip install --upgrade pip
 
 # install python libs and generate supervisord config file
-RUN pip install -r requirements_api.txt --no-cache-dir
+RUN pip install -r requirements/requirements_api.txt --no-cache-dir
 
 # run container
 CMD make run_api

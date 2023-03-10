@@ -47,6 +47,7 @@ import os
 from pathlib import Path
 import secrets
 import string
+import sys
 import time
 import traceback
 from contextlib import contextmanager
@@ -71,6 +72,25 @@ pi = 3.141592653589793
 
 
 DEFAULT_TIMEOUT = 5  # seconds
+
+
+@contextmanager
+def status(message):
+    """
+    Borrowed from https://github.com/cesium-ml/baselayer/
+
+    :param message: message to print
+    :return:
+    """
+    print(f"[·] {message}", end="")
+    sys.stdout.flush()
+    try:
+        yield
+    except Exception:
+        print(f"\r[✗] {message}")
+        raise
+    else:
+        print(f"\r[✓] {message}")
 
 
 class TimeoutHTTPAdapter(HTTPAdapter):
