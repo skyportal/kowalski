@@ -360,16 +360,21 @@ class ZTFAlertWorker(AlertWorker, ABC):
                     f"stream_id={stream_id} to SkyPortal",
                     self.verbose > 1,
                 ):
-                    response = self.api_skyportal("PUT", "/api/photometry", photometry)
-                if response.json()["status"] == "success":
-                    log(
-                        f"Posted {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
-                    )
-                else:
-                    log(
-                        f"Failed to post {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
-                    )
-                log(response.json())
+                    try:
+                        response = self.api_skyportal(
+                            "PUT", "/api/photometry", photometry
+                        )
+                        if response.json()["status"] == "success":
+                            log(
+                                f"Posted {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
+                            )
+                        else:
+                            raise ValueError(response.json()["message"])
+                    except Exception as e:
+                        log(
+                            f"Failed to post {alert['objectId']} photometry stream_id={stream_id} to SkyPortal: {e}"
+                        )
+                        continue
 
 
 class WorkerInitializer(dask.distributed.WorkerPlugin):

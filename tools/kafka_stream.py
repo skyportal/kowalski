@@ -1,6 +1,7 @@
 import argparse
 import os
 import pathlib
+import time
 
 from utils import load_config
 from ingester import KafkaStream
@@ -21,14 +22,12 @@ parser.add_argument(
     type=bool,
     help="test mode. if in test mode, alerts will be pushed to bootstarp.test.server",
 )
-parser.add_argument("--action", type=str, help="start or stop the stream")
 
 args = parser.parse_args()
 
 topic = args.topic
 path_alerts = args.path_alerts
 test = args.test
-action = args.action
 
 if not isinstance(topic, str) or topic == "":
     raise ValueError("topic must be a non-empty string")
@@ -39,15 +38,11 @@ if not isinstance(path_alerts, str) or path_alerts == "":
 if not isinstance(test, bool):
     raise ValueError("test must be a boolean")
 
-if isinstance(action, str) and action.lower() not in ["start", "stop"]:
-    raise ValueError(
-        "action must be either start or stop. Default is start if not specified"
-    )
 print("\nParameters:")
 print(f"topic: {topic}")
 print(f"path_alerts: {path_alerts}")
 print(f"test: {test}")
-print(f"action: {action}")
+
 
 stream = KafkaStream(
     topic=topic,
@@ -56,9 +51,14 @@ stream = KafkaStream(
     config=config,
 )
 
-if action == "stop":
-    print("\nStopping Kafka stream...")
-    stream.stop()
-else:
-    print("\nStarting Kafka stream...")
-    stream.start()
+running = True
+
+while running:
+    # if the user hits Ctrl+C, stop the stream
+    try:
+        stream.start()
+        time.sleep(1000000000)
+    except KeyboardInterrupt:
+        print("\nStopping Kafka stream...")
+        stream.stop()
+        running = False
