@@ -344,10 +344,12 @@ cd kowalski
 and running:
 
 ```bash
-PYTHONPATH=. KOWALSKI_APP_PATH=../ python ../tools/kafka_stream.py --topic="<topic_listened_by_your_broker" --path="<path_to_alerts_in_KOWALSKI_APP_PATH/data/>" --test=True
+PYTHONPATH=. KOWALSKI_APP_PATH=../ python ../tools/kafka_stream.py --topic="<topic_listened_by_your_broker>" --path="<path_to_alerts_in_KOWALSKI_APP_PATH/data/>" --test=True
 ```
 
 where `<topic_listened_by_your_broker>` is the topic listened by your broker (ex: `ztf_20200301_programid3` for the ztf broker) and `<path_to_alerts_in_KOWALSKI_APP_PATH/data/>` is the path to the alerts in the `data/` directory of the kowalski app (ex: `ztf_alerts/20200202` for the ztf broker).
+
+To stop the broker, you can simply press `Ctrl+C` in the terminal where you started it.
 
 **Otherwise, you can test both ingestion and broker at the same time by running the ingester tests:**
 
