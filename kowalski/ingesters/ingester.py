@@ -200,6 +200,13 @@ class KafkaStream:
                 cmd_zookeeper_stop, stdout=stdout_zookeeper, stderr=subprocess.STDOUT
             )
 
+        # delete the content of meta.properties in logs/kafka-logs
+        # otherwise, the next time you start Kafka, it will complain that a cluster with a different ID already exists
+        # (because the ID is stored in meta.properties)
+        meta_properties = os.path.join("logs", "kafka-logs", "meta.properties")
+        if os.path.exists(meta_properties):
+            os.remove(meta_properties)
+
     def __enter__(self):
         self.start()
         self.as_context_manager = True
