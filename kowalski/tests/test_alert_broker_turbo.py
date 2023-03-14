@@ -1,8 +1,8 @@
 import fastavro
 import pytest
 from kowalski.alert_brokers.alert_broker_turbo import TURBOAlertWorker
-from kowalski.utils import log
 from kowalski.config import load_config
+from kowalski.log import log
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]

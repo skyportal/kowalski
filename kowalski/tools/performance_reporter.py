@@ -12,8 +12,8 @@ import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from kowalski.utils import log
 from kowalski.config import load_config
+from kowalski.log import log
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]

@@ -43,11 +43,11 @@ from kowalski.utils import (
     check_password_hash,
     generate_password_hash,
     init_db,
-    log,
     radec_str2geojson,
     uid,
 )
 from kowalski.config import load_config
+from kowalski.log import log
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]
@@ -2370,7 +2370,7 @@ async def ztf_alert_get_cutout(request):
         required: false
         schema:
           type: string
-          enum: [linear, log, asinh, sqrt]
+          enum: [linear,  asinh, sqrt]
       - in: query
         name: cmap
         description: "Color map to use when rendering png"
@@ -2580,7 +2580,7 @@ async def zuds_alert_get_cutout(request):
         required: false
         schema:
           type: string
-          enum: [linear, log, arcsinh, zscale]
+          enum: [linear,  arcsinh, zscale]
       - in: query
         name: cmap
         description: "Color map to use when rendering png"

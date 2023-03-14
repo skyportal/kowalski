@@ -1,7 +1,7 @@
 import os
 
-from kowalski.utils import log
 from kowalski.config import load_config
+from kowalski.log import log
 
 config = load_config(config_files=["config.yaml"])
 

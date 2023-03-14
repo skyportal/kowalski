@@ -3,7 +3,7 @@ import pathlib
 import subprocess
 import time
 from confluent_kafka import Producer
-from kowalski.utils import log
+from kowalski.log import log
 
 
 def delivery_report(err, msg):

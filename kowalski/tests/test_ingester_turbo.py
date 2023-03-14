@@ -7,8 +7,9 @@ import requests
 from kowalski.alert_brokers.alert_broker_turbo import watchdog
 from kowalski.ingesters.ingester import KafkaStream
 from test_ingester_ztf import Program, Filter
-from kowalski.utils import Mongo, init_db_sync, log
+from kowalski.utils import Mongo, init_db_sync
 from kowalski.config import load_config
+from kowalski.log import log
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]

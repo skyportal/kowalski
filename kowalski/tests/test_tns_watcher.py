@@ -2,8 +2,9 @@ import pandas
 import pytest
 
 from kowalski.tools.tns_watcher import get_tns
-from kowalski.utils import Mongo, log
+from kowalski.utils import Mongo
 from kowalski.config import load_config
+from kowalski.log import log
 
 
 """ load config and secrets """

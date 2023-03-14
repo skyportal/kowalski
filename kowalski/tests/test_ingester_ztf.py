@@ -8,8 +8,9 @@ from typing import List, Optional
 
 from kowalski.alert_brokers.alert_broker_ztf import watchdog
 from kowalski.ingesters.ingester import KafkaStream
-from kowalski.utils import init_db_sync, log, Mongo
+from kowalski.utils import init_db_sync, Mongo
 from kowalski.config import load_config
+from kowalski.log import log
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]

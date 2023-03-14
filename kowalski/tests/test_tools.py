@@ -11,8 +11,9 @@ from kowalski.ingesters.ingest_ztf_source_classifications import (
 )
 from kowalski.ingesters.ingest_ztf_source_features import run as run_ztf_source_features
 from kowalski.ingesters.ingest_catalog import run as run_catalog
-from kowalski.utils import Mongo, get_default_args, log
+from kowalski.utils import Mongo, get_default_args
 from kowalski.config import load_config
+from kowalski.log import log
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]

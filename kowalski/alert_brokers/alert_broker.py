@@ -36,13 +36,13 @@ from kowalski.utils import (
     deg2hms,
     great_circle_distance,
     in_ellipse,
-    log,
     memoize,
     radec2lb,
     time_stamp,
     timer,
 )
 from kowalski.config import load_config
+from kowalski.log import log
 
 # Tensorflow is problematic for Mac's currently, so we can add an option to disable it
 USE_TENSORFLOW = os.environ.get("USE_TENSORFLOW", True) in [

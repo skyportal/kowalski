@@ -18,7 +18,7 @@ from astropy.visualization import (
 from penquins import Kowalski
 
 from kowalski.config import load_config
-from kowalski.utils import log
+from kowalski.log import log
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]

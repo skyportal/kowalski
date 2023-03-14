@@ -13,10 +13,10 @@ from tqdm.auto import tqdm
 from kowalski.utils import (
     deg2dms,
     deg2hms,
-    log,
     Mongo,
 )
 from kowalski.config import load_config
+from kowalski.log import log
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]

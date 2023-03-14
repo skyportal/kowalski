@@ -4,7 +4,7 @@ from functools import wraps
 
 import jwt
 from aiohttp import web
-from kowalski.utils import log
+from kowalski.log import log
 from kowalski.config import load_config
 
 

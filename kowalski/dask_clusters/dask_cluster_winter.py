@@ -1,8 +1,8 @@
 import time
 
 from dask.distributed import LocalCluster
-from kowalski.utils import log
 from kowalski.config import load_config
+from kowalski.log import log
 from kowalski.alert_brokers.alert_broker_winter import WorkerInitializer  # noqa: F401
 
 """ load config and secrets """

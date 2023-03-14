@@ -3,7 +3,7 @@ import yaml
 from pathlib import Path
 import os
 
-from kowalski.utils import log
+from kowalski.log import log
 
 # Cache loading of environment
 _cache = {}

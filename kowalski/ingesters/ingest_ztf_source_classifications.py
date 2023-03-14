@@ -12,10 +12,10 @@ from tqdm import tqdm
 import kowalski.tools.istarmap as istarmap  # noqa: F401
 from kowalski.utils import (
     init_db_sync,
-    log,
     Mongo,
 )
 from kowalski.config import load_config
+from kowalski.log import log
 
 
 """ load config and secrets """

@@ -11,8 +11,8 @@ from typing import Optional, Sequence
 
 import fire
 
-from kowalski.utils import log
 from kowalski.config import load_config
+from kowalski.log import log
 
 dependencies = {
     "python": (
