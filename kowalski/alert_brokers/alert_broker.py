@@ -773,6 +773,9 @@ class AlertWorker:
             w_after_jd = df_light_curve["jd"] > jd_start
             df_light_curve = df_light_curve.loc[w_after_jd]
 
+        # convert all nan values to None
+        df_light_curve = df_light_curve.replace({np.nan: None})
+
         return df_light_curve
 
     def alert_filter__ml(self, alert: Mapping) -> dict:
@@ -1117,14 +1120,18 @@ class AlertWorker:
             f"Saving {alert['objectId']} {alert['candid']} as a Source on SkyPortal",
             self.verbose > 1,
         ):
-            response = self.api_skyportal("POST", "/api/sources", alert_thin)
-        if response.json()["status"] == "success":
-            log(f"Saved {alert['objectId']} {alert['candid']} as a Source on SkyPortal")
-        else:
-            log(
-                f"Failed to save {alert['objectId']} {alert['candid']} as a Source on SkyPortal"
-            )
-            log(response.json())
+            try:
+                response = self.api_skyportal("POST", "/api/sources", alert_thin)
+                if response.json()["status"] == "success":
+                    log(
+                        f"Saved {alert['objectId']} {alert['candid']} as a Source on SkyPortal"
+                    )
+                else:
+                    raise ValueError(response.json()["message"])
+            except Exception as e:
+                log(
+                    f"Failed to save {alert['objectId']} {alert['candid']} as a Source on SkyPortal: {e}"
+                )
 
     def alert_post_annotations(self, alert: Mapping, passed_filters: Sequence):
         """Post annotations to SkyPortal for an alert that passed user-defined filters
@@ -1142,19 +1149,26 @@ class AlertWorker:
             }
             if len(annotations["data"]) > 0:
                 with timer(
-                    f"Posting annotation for {alert['objectId']} {alert['candid']} to SkyPortal",
+                    f"Posting annotation {annotations['origin']} for {alert['objectId']} {alert['candid']} to SkyPortal",
                     self.verbose > 1,
                 ):
-                    response = self.api_skyportal(
-                        "POST",
-                        f"/api/sources/{alert['objectId']}/annotations",
-                        annotations,
-                    )
-                if response.json()["status"] == "success":
-                    log(f"Posted {alert['objectId']} annotation to SkyPortal")
-                else:
-                    log(f"Failed to post {alert['objectId']} annotation to SkyPortal")
-                    log(response.json())
+                    try:
+                        response = self.api_skyportal(
+                            "POST",
+                            f"/api/sources/{alert['objectId']}/annotations",
+                            annotations,
+                        )
+                        if response.json()["status"] == "success":
+                            log(
+                                f"Posted {alert['objectId']} {alert['candid']} annotation {annotations['origin']} to SkyPortal"
+                            )
+                        else:
+                            raise ValueError(response.json()["message"])
+                    except Exception as e:
+                        log(
+                            f"Failed to post {alert['objectId']} {alert['candid']} annotation {annotations['origin']} to SkyPortal: {e}"
+                        )
+                        continue
 
     def alert_put_annotations(self, alert: Mapping, passed_filters: Sequence):
         """Update annotations on SkyPortal for an alert that passed user-defined filters
@@ -1209,17 +1223,23 @@ class AlertWorker:
                     f"Putting annotation for {alert['objectId']} {alert['candid']} to SkyPortal",
                     self.verbose > 1,
                 ):
-                    response = self.api_skyportal(
-                        "PUT",
-                        f"/api/sources/{alert['objectId']}"
-                        f"/annotations/{existing_annotations[origin]['annotation_id']}",
-                        annotations,
-                    )
-                if response.json()["status"] == "success":
-                    log(f"Posted {alert['objectId']} annotation to SkyPortal")
-                else:
-                    log(f"Failed to post {alert['objectId']} annotation to SkyPortal")
-                    log(response.json())
+                    try:
+                        response = self.api_skyportal(
+                            "PUT",
+                            f"/api/sources/{alert['objectId']}"
+                            f"/annotations/{existing_annotations[origin]['annotation_id']}",
+                            annotations,
+                        )
+                        if response.json()["status"] == "success":
+                            log(
+                                f"Updated {alert['objectId']} annotation {origin} to SkyPortal"
+                            )
+                        else:
+                            raise ValueError(response.json()["message"])
+                    except Exception as e:
+                        log(
+                            f"Failed to put {alert['objectId']} {alert['candid']} annotation {origin} to SkyPortal: {e}"
+                        )
 
     def alert_post_thumbnails(self, alert: Mapping):
         """Post alert thumbnails to SkyPortal
@@ -1242,17 +1262,19 @@ class AlertWorker:
                 f"Posting {istrument_type} thumbnail for {alert['objectId']} {alert['candid']} to SkyPortal",
                 self.verbose > 1,
             ):
-                response = self.api_skyportal("POST", "/api/thumbnail", thumb)
-
-            if response.json()["status"] == "success":
-                log(
-                    f"Posted {alert['objectId']} {alert['candid']} {istrument_type} cutout to SkyPortal"
-                )
-            else:
-                log(
-                    f"Failed to post {alert['objectId']} {alert['candid']} {istrument_type} cutout to SkyPortal"
-                )
-                log(response.json())
+                try:
+                    response = self.api_skyportal("POST", "/api/thumbnail", thumb)
+                    if response.json()["status"] == "success":
+                        log(
+                            f"Posted {alert['objectId']} {alert['candid']} {istrument_type} cutout to SkyPortal"
+                        )
+                    else:
+                        raise ValueError(response.json()["message"])
+                except Exception as e:
+                    log(
+                        f"Failed to post {alert['objectId']} {alert['candid']} {istrument_type} cutout to SkyPortal: {e}"
+                    )
+                    continue
 
     def alert_put_photometry(self, alert):
         """PUT photometry to SkyPortal
