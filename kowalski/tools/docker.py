@@ -153,7 +153,7 @@ class DockerKowalski:
             command = ["chmod", "400", "mongo_key.yaml"]
             subprocess.run(command)
 
-    def log_docker_config():
+    def load_docker_config():
         """Log docker configuration"""
         config = "docker-compose.yaml"
         if not pathlib.Path(config).exists():
@@ -179,7 +179,7 @@ class DockerKowalski:
         if build:
             cls.build()
 
-        docker_config = cls.log_docker_config()
+        docker_config = cls.load_docker_config()
 
         command = ["docker-compose", "-f", docker_config, "up", "-d"]
 
@@ -195,7 +195,7 @@ class DockerKowalski:
         :return:
         """
         print("Shutting down Kowalski")
-        docker_config = cls.log_docker_config()
+        docker_config = cls.load_docker_config()
         command = ["docker-compose", "-f", docker_config, "down"]
 
         subprocess.run(command)
@@ -209,7 +209,7 @@ class DockerKowalski:
         """
         print("Building Kowalski")
 
-        docker_config = cls.log_docker_config()
+        docker_config = cls.load_docker_config()
         command = ["docker-compose", "-f", docker_config, "build"]
 
         # load config
