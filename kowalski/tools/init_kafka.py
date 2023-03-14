@@ -18,12 +18,16 @@ def init_kafka():
         scala_version = config["kafka"]["scala_version"]
         kafka_version = config["kafka"]["kafka_version"]
 
-        kafka_url = f"https://downloads.apache.org/kafka/{kafka_version}/kafka_{scala_version}-{kafka_version}.tgz"
-        print(f"Downloading Kafka from {kafka_url}")
+        # check if by any chance the .tar.gz file is already there
+        if not Path(f"kafka_{scala_version}-{kafka_version}.tgz").exists():
+            kafka_url = f"https://downloads.apache.org/kafka/{kafka_version}/kafka_{scala_version}-{kafka_version}.tgz"
+            print(f"Downloading Kafka from {kafka_url}")
 
-        r = requests.get(kafka_url)
-        with open(f"kafka_{scala_version}-{kafka_version}.tgz", "wb") as f:
-            f.write(r.content)
+            r = requests.get(kafka_url)
+            with open(f"kafka_{scala_version}-{kafka_version}.tgz", "wb") as f:
+                f.write(r.content)
+        else:
+            print("Kafka tarball already exists, skipping download...")
 
         print("Unpacking Kafka...")
 
