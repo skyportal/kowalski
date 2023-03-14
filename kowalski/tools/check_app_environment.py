@@ -3,10 +3,6 @@ import subprocess
 import sys
 
 from distutils.version import LooseVersion as Version
-from kowalski.utils import load_config
-
-
-config = load_config(config_file="config.yaml")["kowalski"]
 
 
 def output(cmd):
