@@ -10,13 +10,12 @@ import requests
 from kowalski.utils import (
     Mongo,
     datetime_to_jd,
-    load_config,
     radec_str2geojson,
     time_stamp,
 )
+from kowalski.config import load_config
 
 """ load config and secrets """
-
 config = load_config(config_files=["config.yaml"])["kowalski"]
 
 

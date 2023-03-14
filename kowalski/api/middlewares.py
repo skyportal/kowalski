@@ -4,7 +4,8 @@ from functools import wraps
 
 import jwt
 from aiohttp import web
-from kowalski.utils import load_config, log
+from kowalski.utils import log
+from kowalski.config import load_config
 
 
 config = load_config(config_files=["config.yaml"])["kowalski"]

@@ -8,14 +8,13 @@ from typing import List, Optional
 
 from kowalski.alert_brokers.alert_broker_ztf import watchdog
 from kowalski.ingesters.ingester import KafkaStream
-from kowalski.utils import init_db_sync, load_config, log, Mongo
-
+from kowalski.utils import init_db_sync, log, Mongo
+from kowalski.config import load_config
 
 """ load config and secrets """
-
-USING_DOCKER = os.environ.get("USING_DOCKER", False)
 config = load_config(config_files=["config.yaml"])["kowalski"]
 
+USING_DOCKER = os.environ.get("USING_DOCKER", False)
 if USING_DOCKER:
     config["server"]["host"] = "kowalski_api_1"
 

@@ -5,7 +5,8 @@ import sys
 
 import jinja2
 
-from kowalski.utils import load_config, log
+from kowalski.utils import log
+from kowalski.config import load_config
 
 config = load_config(config_files=["config.yaml"])
 

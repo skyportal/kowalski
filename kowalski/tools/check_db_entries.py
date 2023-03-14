@@ -1,6 +1,7 @@
 import argparse
 
-from kowalski.utils import Mongo, load_config
+from kowalski.utils import Mongo
+from kowalski.config import load_config
 
 
 config = load_config(config_files=["config.yaml"])["kowalski"]

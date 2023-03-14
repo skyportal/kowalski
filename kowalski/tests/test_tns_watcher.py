@@ -2,11 +2,11 @@ import pandas
 import pytest
 
 from kowalski.tools.tns_watcher import get_tns
-from kowalski.utils import load_config, log, Mongo
+from kowalski.utils import Mongo, log
+from kowalski.config import load_config
 
 
 """ load config and secrets """
-
 config = load_config(config_files=["config.yaml"])["kowalski"]
 
 

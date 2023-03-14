@@ -43,13 +43,13 @@ from kowalski.utils import (
     check_password_hash,
     generate_password_hash,
     init_db,
-    load_config,
     log,
     radec_str2geojson,
     uid,
 )
+from kowalski.config import load_config
 
-
+""" load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]
 
 

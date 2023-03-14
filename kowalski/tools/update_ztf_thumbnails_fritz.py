@@ -1,27 +1,24 @@
+import base64
+import datetime
+import gzip
+import io
+from typing import Optional, Union
+
+import fire
+import matplotlib.pyplot as plt
+import numpy as np
+import requests
 from astropy.io import fits
 from astropy.visualization import (
     AsymmetricPercentileInterval,
+    ImageNormalize,
     LinearStretch,
     LogStretch,
-    ImageNormalize,
 )
-import base64
-import datetime
-import fire
-import gzip
-import io
-import matplotlib.pyplot as plt
-import numpy as np
-import pathlib
 from penquins import Kowalski
-import requests
-import sys
-from typing import Optional, Union
 
-parent_dir = pathlib.Path(__file__).parent.absolute().parent
-sys.path.append(str(parent_dir / "kowalski"))
-from kowalski.utils import load_config, log  # noqa: E402
-
+from kowalski.config import load_config
+from kowalski.utils import log
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]

@@ -9,10 +9,10 @@ import traceback
 import pytz
 import requests
 import tqdm
-from kowalski.utils import Mongo, load_config, log, radec_str2geojson
+from kowalski.utils import Mongo, log, radec_str2geojson
+from kowalski.config import load_config
 
 """ load config and secrets """
-
 config = load_config(config_files=["config.yaml"])["kowalski"]
 
 

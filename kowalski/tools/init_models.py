@@ -1,16 +1,9 @@
 import os
 
-from kowalski.utils import load_config, log
+from kowalski.utils import log
+from kowalski.config import load_config
 
 config = load_config(config_files=["config.yaml"])
-
-# here, we want to grab the instruments from the 'ml' key in the config, and for each instrument download the models if a link is provided
-
-# for each instrument, we want to create a directory in the models directory with its name lowercased
-
-# then, we want to download the models into that directory
-
-# first, if the models directory doesn't exist, create it
 
 if not os.path.exists("models"):
     os.mkdir("models")

@@ -1,11 +1,11 @@
 import time
 
 from dask.distributed import LocalCluster
-from kowalski.utils import load_config, log
+from kowalski.utils import log
+from kowalski.config import load_config
 from kowalski.alert_brokers.alert_broker_ztf import WorkerInitializer  # noqa: F401
 
 """ load config and secrets """
-
 config = load_config(config_files=["config.yaml"])["kowalski"]
 
 

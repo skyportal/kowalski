@@ -2,7 +2,7 @@ import argparse
 import subprocess
 import sys
 
-from kowalski.utils import load_config
+from kowalski.config import load_config
 
 
 def meta(arguments):

@@ -14,13 +14,12 @@ from kowalski.utils import (
     deg2dms,
     deg2hms,
     init_db_sync,
-    load_config,
     log,
     Mongo,
 )
+from kowalski.config import load_config
 
 """ load config and secrets """
-
 config = load_config(config_files=["config.yaml"])["kowalski"]
 
 # init db if necessary

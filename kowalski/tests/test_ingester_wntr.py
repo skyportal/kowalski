@@ -6,7 +6,8 @@ import time
 from kowalski.alert_brokers.alert_broker_winter import watchdog
 from kowalski.ingesters.ingester import KafkaStream
 from test_ingester_ztf import Program, Filter
-from kowalski.utils import Mongo, init_db_sync, load_config, log
+from kowalski.utils import Mongo, init_db_sync, log
+from kowalski.config import load_config
 
 """
 Essentially the same as the ZTF ingester tests (test_ingester_ztf.py), except -
@@ -15,10 +16,9 @@ Essentially the same as the ZTF ingester tests (test_ingester_ztf.py), except -
 """
 
 """ load config and secrets """
-
-USING_DOCKER = os.environ.get("USING_DOCKER", False)
 config = load_config(config_files=["config.yaml"])["kowalski"]
 
+USING_DOCKER = os.environ.get("USING_DOCKER", False)
 if USING_DOCKER:
     config["server"]["host"] = "kowalski_api_1"
 

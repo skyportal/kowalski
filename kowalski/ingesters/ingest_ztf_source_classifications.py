@@ -12,14 +12,13 @@ from tqdm import tqdm
 import kowalski.tools.istarmap as istarmap  # noqa: F401
 from kowalski.utils import (
     init_db_sync,
-    load_config,
     log,
     Mongo,
 )
+from kowalski.config import load_config
 
 
 """ load config and secrets """
-
 config = load_config(config_files=["config.yaml"])["kowalski"]
 # init db if necessary
 init_db_sync(config=config)

@@ -4,7 +4,8 @@ from typing import List
 
 import pytest
 from kowalski.api.api import app_factory
-from kowalski.utils import load_config, uid
+from kowalski.utils import uid
+from kowalski.config import load_config
 
 
 config = load_config(config_files=["config.yaml"])["kowalski"]

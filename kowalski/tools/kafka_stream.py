@@ -2,7 +2,7 @@ import argparse
 import pathlib
 import time
 
-from kowalski.utils import load_config
+from kowalski.config import load_config
 from kowalski.ingesters.ingester import KafkaStream
 
 

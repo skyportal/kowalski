@@ -14,10 +14,10 @@ from typing import Mapping, Sequence
 import dask.distributed
 from kowalski.alert_brokers.alert_broker import AlertConsumer, AlertWorker, EopError
 from bson.json_util import loads as bson_loads
-from kowalski.utils import init_db_sync, load_config, log, timer
+from kowalski.utils import init_db_sync, log, timer
+from kowalski.config import load_config
 
 """ load config and secrets """
-
 config = load_config(config_files=["config.yaml"])["kowalski"]
 
 

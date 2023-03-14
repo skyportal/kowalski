@@ -16,19 +16,15 @@ from kowalski.utils import (
     deg2dms,
     deg2hms,
     init_db_sync,
-    load_config,
     log,
     Mongo,
 )
+from kowalski.config import load_config
 
 
 """ load config and secrets """
-# env_var=os.environ
-# print("User's Environment variable:")
-# pprint.pprint(dict(env_var), width = 1)
-# exit()
-
 config = load_config(config_files=["config.yaml"])["kowalski"]
+
 init_db_sync(config=config)
 
 

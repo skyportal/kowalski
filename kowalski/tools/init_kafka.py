@@ -3,7 +3,7 @@ import tarfile
 
 import requests
 
-from kowalski.utils import load_config
+from kowalski.config import load_config
 
 config = load_config(config_files=["config.yaml"])["kowalski"]
 

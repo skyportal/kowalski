@@ -1,10 +1,10 @@
 import fastavro
 import pytest
 from kowalski.alert_brokers.alert_broker_pgir import PGIRAlertWorker
-from kowalski.utils import load_config, log
+from kowalski.utils import log
+from kowalski.config import load_config
 
 """ load config and secrets """
-
 config = load_config(config_files=["config.yaml"])["kowalski"]
 
 
