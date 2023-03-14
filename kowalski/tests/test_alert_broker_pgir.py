@@ -62,13 +62,26 @@ class TestAlertBrokerPGIR:
         """Test cross matching with external catalog"""
         alert, _ = self.worker.alert_mongify(self.alert)
         xmatches = self.worker.alert_filter__xmatch(alert)
-        assert len(xmatches) > 0
+        catalogs_to_xmatch = config["database"].get("xmatch", {}).get("PGIR", {}).keys()
+        assert isinstance(xmatches, dict)
+        assert len(list(xmatches.keys())) == len(catalogs_to_xmatch)
+        assert set(xmatches.keys()) == set(catalogs_to_xmatch)
+        assert all([isinstance(xmatches[c], list) for c in catalogs_to_xmatch])
+        assert all([len(xmatches[c]) >= 0 for c in catalogs_to_xmatch])
+        # TODO: add alerts with xmatches results to test against
 
     def test_alert_filter__xmatch_clu(self):
         """Test cross matching with the CLU catalog"""
         alert, _ = self.worker.alert_mongify(self.alert)
-        xmatches_clu = self.worker.alert_filter__xmatch_clu(alert)
-        assert len(xmatches_clu) > 0
+        xmatches_clu = self.worker.alert_filter__xmatch_clu(
+            alert, clu_version="CLU_TEST"
+        )
+        assert isinstance(xmatches_clu, dict)
+        assert len(xmatches_clu.keys()) == 1
+        assert "CLU_TEST" in xmatches_clu.keys()
+        assert isinstance(xmatches_clu["CLU_TEST"], list)
+        assert len(xmatches_clu["CLU_TEST"]) >= 0
+        # TODO: add alerts with xmatches results to test against
 
     def test_alert_filter__user_defined(self):
         """Test pushing an alert through a filter"""
