@@ -31,7 +31,8 @@ kowalski:
     default.topic.config:
       auto.offset.reset: "earliest"
     group: "kowalski"
-
+    scala_version: "2.13"
+    kafka_version: "3.4.0"
     bootstrap.servers: "192.168.0.64:9092,192.168.0.65:9092,192.168.0.66:9092"
     zookeeper: "192.168.0.64:2181"
     bootstrap.test.servers: "localhost:9092"
