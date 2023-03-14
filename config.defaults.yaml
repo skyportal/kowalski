@@ -1120,3 +1120,9 @@ kowalski:
     # Used by the performance_reporter.py task to post Slack messages
     slack_bot_token:
     slack_channel_id:
+
+  enabled:
+    ztf: True
+    pgir: True
+    wntr: True
+    turbo: True
