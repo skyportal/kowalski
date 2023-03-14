@@ -27,6 +27,8 @@ jobs:
           cp docker-compose.defaults.yaml docker-compose.yaml
       - name: Build and spin up
         run: make docker_build && make docker_up
+      - name: Cooldown to let the app start
+        run: sleep 10
       - name: Patch config and run tests
         env:
           TNS_BOT_ID: ${{ secrets.TNS_BOT_ID }}
