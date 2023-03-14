@@ -45,7 +45,7 @@ jobs:
       - name: Collect Docker Logs
         uses: jwalton/gh-docker-logs@v2.2.1
         with:
-          images: 'dmitryduev/kowalski_ingester,dmitryduev/kowalski_api,kowalski-mongo'
+          images: 'dmitryduev/kowalski_ingester,dmitryduev/kowalski_api,kowalski_mongo'
           dest: './logs'
       - name: Upload logs
         uses: actions/upload-artifact@v2
