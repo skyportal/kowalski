@@ -29,7 +29,7 @@ jobs:
       - name: Set up configs
         run: |
           cp docker-compose.defaults.yaml docker-compose.yaml
-          cat << EOF > docker.yaml
+          cat << EOF >> docker.yaml
             tns:
               url: https://www.wis-tns.org
               bot_id: $TNS_BOT_ID
