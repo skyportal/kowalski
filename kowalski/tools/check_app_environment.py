@@ -1,10 +1,7 @@
 #!/usr/bin/env python
-from pathlib import Path
 import subprocess
 import sys
-import tarfile
 
-import requests
 from distutils.version import LooseVersion as Version
 from kowalski.utils import load_config
 
@@ -80,52 +77,6 @@ if fail:
     print("    Please refer to the README.md " "for installation instructions.")
     print()
     sys.exit(-1)
-
-print()
-
-print("-" * 20)
-
-print()
-
-# now, we check if kafka is present (i.e, that there is an existing directory in the config file)
-# if not, we download it and install it
-print("Checking Kafka installation:")
-kafka_path = config["kafka"]["path"]
-
-path_kafka = Path(kafka_path)
-if not path_kafka.exists():
-    print("Kafka not found, downloading and installing...")
-    scala_version = config["kafka"]["scala_version"]
-    kafka_version = config["kafka"]["kafka_version"]
-
-    kafka_url = f"https://downloads.apache.org/kafka/{kafka_version}/kafka_{scala_version}-{kafka_version}.tgz"
-    print(f"Downloading Kafka from {kafka_url}")
-
-    r = requests.get(kafka_url)
-    with open(f"kafka_{scala_version}-{kafka_version}.tgz", "wb") as f:
-        f.write(r.content)
-
-    print("Unpacking Kafka...")
-
-    tar = tarfile.open(f"kafka_{scala_version}-{kafka_version}.tgz", "r:gz")
-    tar.extractall(path=path_kafka.parent)
-else:
-    print("Kafka found!")
-
-# we copy the server.properties file to the kafka config directory
-# there is an existing one in the kafka directory, so we need to overwrite it
-print("Copying server.properties to Kafka config directory...")
-path_server_properties = Path("server.properties")
-path_kafka_config = Path(kafka_path) / "config"
-path_kafka_config_server_properties = path_kafka_config / "server.properties"
-
-with open(path_server_properties, "r") as f:
-    server_properties = f.read()
-
-with open(path_kafka_config_server_properties, "w") as f:
-    f.write(server_properties)
-
-print("Done!")
 
 print()
 

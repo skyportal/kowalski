@@ -65,19 +65,22 @@ setup_all_macos: setup python_dependencies_api python_dependencies_ingester_maco
 init_models:
 	$(PYTHON) kowalski/tools/init_models.py
 
-run: setup_all init_models
+init_kafka:
+	$(PYTHON) kowalski/tools/init_kafka.py
+
+run: setup_all init_models init_kafka
 	$(SUPERVISORD)
 
-run_macos : setup_all_macos init_models
+run_macos : setup_all_macos init_models init_kafka
 	$(SUPERVISORD)
 
 run_api: setup_api
 	$(SUPERVISORD_API)
 
-run_ingester: setup_ingester init_models
+run_ingester: setup_ingester init_models init_kafka
 	$(SUPERVISORD_INGESTER)
 
-run_ingester_macos: setup_ingester_macos init_models
+run_ingester_macos: setup_ingester_macos init_models init_kafka
 	$(SUPERVISORD_INGESTER)
 
 monitor:
@@ -89,10 +92,10 @@ monitor_api:
 monitor_ingester:
 	$(SUPERVISORCTL_INGESTER) status
 
-test: setup_all init_models
+test: setup_all init_models init_kafka
 	$(PYTHON) kowalski/tools/tests.py
 
-test_macos: setup_all_macos init_models
+test_macos: setup_all_macos init_models init_kafka
 	$(PYTHON) kowalski/tools/tests.py
 
 docker_up: setup

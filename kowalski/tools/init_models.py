@@ -91,3 +91,6 @@ def init_models():
 if __name__ == "__main__":
     log("Initializing models...")
     init_models()
+    print()
+    print("-" * 20)
+    print()
