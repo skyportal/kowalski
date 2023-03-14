@@ -47,10 +47,8 @@ jobs:
         with:
           images: 'dmitryduev/kowalski_ingester,dmitryduev/kowalski_api,kowalski-mongo'
           dest: './logs'
-      - name: Tar logs
-        run: tar cvzf ./logs.tgz ./logs
       - name: Upload logs
         uses: actions/upload-artifact@v2
         with:
-          name: logs.tgz
-          path: ./logs.tgz
+          name: logs
+          path: ./logs
