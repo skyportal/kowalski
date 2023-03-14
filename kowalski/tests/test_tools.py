@@ -15,7 +15,7 @@ from kowalski.utils import Mongo, get_default_args, load_config, log
 
 """ load config and secrets """
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 
 @pytest.fixture(autouse=True, scope="class")

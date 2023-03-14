@@ -10,7 +10,8 @@ import time
 from typing import Optional, Sequence
 
 import fire
-import yaml
+
+from kowalski.utils import load_config, log
 
 dependencies = {
     "python": (
@@ -151,6 +152,17 @@ class DockerKowalski:
             command = ["chmod", "400", "mongo_key.yaml"]
             subprocess.run(command)
 
+    def log_docker_config():
+        """Log docker configuration"""
+        config = "docker-compose.yaml"
+        if not pathlib.Path(config).exists():
+            log(
+                "Warning: docker-compose.yaml is missing. You are running on the default docker-compose configuration. To configure your system, "
+                "please copy `docker-compose.defaults.yaml` to `docker-compose.yaml` and modify it as you see fit."
+            )
+            config = "docker-compose.defaults.yaml"
+        return config
+
     @classmethod
     def up(cls, build: bool = False):
         """
@@ -166,21 +178,24 @@ class DockerKowalski:
         if build:
             cls.build()
 
-        command = ["docker-compose", "-f", "docker-compose.yaml", "up", "-d"]
+        docker_config = cls.log_docker_config()
+
+        command = ["docker-compose", "-f", docker_config, "up", "-d"]
 
         # start up Kowalski
         print("Starting up")
         subprocess.run(command)
 
     @staticmethod
-    def down():
+    def down(cls):
         """
         ✋ Shut down Kowalski
 
         :return:
         """
         print("Shutting down Kowalski")
-        command = ["docker-compose", "-f", "docker-compose.yaml", "down"]
+        docker_config = cls.log_docker_config()
+        command = ["docker-compose", "-f", docker_config, "down"]
 
         subprocess.run(command)
 
@@ -193,12 +208,11 @@ class DockerKowalski:
         """
         print("Building Kowalski")
 
-        # always use docker-compose.yaml
-        command = ["docker-compose", "-f", "docker-compose.yaml", "build"]
+        docker_config = cls.log_docker_config()
+        command = ["docker-compose", "-f", docker_config, "build"]
 
         # load config
-        with open(pathlib.Path("config.yaml")) as config_yaml:
-            config = yaml.load(config_yaml, Loader=yaml.FullLoader)["kowalski"]
+        config = load_config(["config.yaml"])["kowalski"]
 
         # get git version:
         git_hash_date = get_git_hash_date()
@@ -229,10 +243,8 @@ class DockerKowalski:
         """
         print("Ingesting catalog dumps into a running Kowalski instance")
 
-        with open(
-            pathlib.Path(__file__).parent.absolute() / "config.yaml"
-        ) as config_yaml:
-            config = yaml.load(config_yaml, Loader=yaml.FullLoader)["kowalski"]
+        # load config
+        config = load_config(["config.yaml"])["kowalski"]
 
         command = [
             "docker",

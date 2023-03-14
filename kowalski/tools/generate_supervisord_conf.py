@@ -7,7 +7,7 @@ import jinja2
 
 from kowalski.utils import load_config, log
 
-config = load_config(config_file="config.yaml")
+config = load_config(config_files=["config.yaml"])
 
 
 def fill_config_file_values(template_paths):

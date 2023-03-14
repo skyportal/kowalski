@@ -17,7 +17,7 @@ Essentially the same as the ZTF ingester tests (test_ingester_ztf.py), except -
 """ load config and secrets """
 
 USING_DOCKER = os.environ.get("USING_DOCKER", False)
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 if USING_DOCKER:
     config["server"]["host"] = "kowalski_api_1"

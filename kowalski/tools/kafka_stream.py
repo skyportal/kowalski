@@ -6,7 +6,7 @@ from kowalski.utils import load_config
 from kowalski.ingesters.ingester import KafkaStream
 
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 parser = argparse.ArgumentParser(description="Create a Kafka stream")
 

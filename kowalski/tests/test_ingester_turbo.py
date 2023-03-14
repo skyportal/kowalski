@@ -13,7 +13,7 @@ from kowalski.utils import Mongo, init_db_sync, load_config, log
 """ load config and secrets """
 
 USING_DOCKER = os.environ.get("USING_DOCKER", False)
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 if USING_DOCKER:
     config["server"]["host"] = "kowalski_api_1"

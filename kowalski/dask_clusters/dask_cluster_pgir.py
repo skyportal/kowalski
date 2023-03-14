@@ -6,7 +6,7 @@ from kowalski.alert_brokers.alert_broker_pgir import WorkerInitializer  # noqa: 
 
 """ load config and secrets """
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 
 if __name__ == "__main__":

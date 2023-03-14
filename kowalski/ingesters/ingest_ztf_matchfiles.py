@@ -27,7 +27,7 @@ from kowalski.utils import (
 
 """ load config and secrets """
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 init_db_sync(config=config)
 
 

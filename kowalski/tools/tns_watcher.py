@@ -13,7 +13,7 @@ from kowalski.utils import Mongo, load_config, log, radec_str2geojson
 
 """ load config and secrets """
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 
 def mongify(doc):

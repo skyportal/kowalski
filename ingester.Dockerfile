@@ -27,7 +27,7 @@ RUN apt-get update && apt-get install -y default-jdk && \
 COPY server.properties kafka_$scala_version-$kafka_version/config/
 
 COPY requirements/requirements_ingester.txt requirements/
-COPY config.yaml .
+COPY docker.yaml config.yaml
 COPY version.txt .
 
 # copy over the test data

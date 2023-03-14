@@ -50,7 +50,7 @@ from kowalski.utils import (
 )
 
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 
 class Handler:

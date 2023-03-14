@@ -14,7 +14,7 @@ from urllib.parse import urljoin
 from kowalski.utils import load_config
 
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 
 def collect_urls(readout_channel: int) -> list:

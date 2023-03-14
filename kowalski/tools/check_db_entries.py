@@ -3,7 +3,7 @@ import argparse
 from kowalski.utils import Mongo, load_config
 
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 mongo = Mongo(
     host=config["database"]["host"],
     port=config["database"]["port"],

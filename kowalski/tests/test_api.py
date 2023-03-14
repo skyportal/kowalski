@@ -7,7 +7,7 @@ from kowalski.api.api import app_factory
 from kowalski.utils import load_config, uid
 
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 
 async def get_admin_credentials(aiohttp_client):

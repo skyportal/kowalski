@@ -73,6 +73,9 @@ pi = 3.141592653589793
 
 DEFAULT_TIMEOUT = 5  # seconds
 
+# Cache loading of environment
+_cache = {}
+
 
 @contextmanager
 def status(message):
@@ -194,11 +197,30 @@ class Config(dict):
         print("=" * 78)
 
 
-def load_config(path="./", config_file="config.yaml"):
+def load_config(config_files=["config.yaml"]):
     """
     Load config and secrets
     """
-    return Config([os.path.abspath(Path(os.path.join(path, config_file)).absolute())])
+    if not _cache:
+        missing = [cfg for cfg in config_files if not os.path.isfile(cfg)]
+        if missing:
+            log(f'Missing config files: {", ".join(missing)}; continuing.')
+        if "config.yaml" in missing:
+            log(
+                "Warning: You are running on the default configuration. To configure your system, "
+                "please copy `config.defaults.yaml` to `config.yaml` and modify it as you see fit."
+            )
+
+        all_configs = [
+            Path("config.defaults.yaml"),
+        ] + config_files
+        all_configs = [cfg for cfg in all_configs if os.path.isfile(cfg)]
+        all_configs = [os.path.abspath(Path(c).absolute()) for c in all_configs]
+
+        cfg = Config(all_configs)
+        _cache.update({"cfg": cfg})
+
+    return _cache["cfg"]
 
 
 def time_stamp():

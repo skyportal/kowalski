@@ -63,7 +63,7 @@ if USE_TENSORFLOW:
 
 """ load config and secrets """
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 
 class EopError(Exception):

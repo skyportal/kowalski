@@ -7,7 +7,7 @@ from aiohttp import web
 from kowalski.utils import load_config, log
 
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 
 @web.middleware

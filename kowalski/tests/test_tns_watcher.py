@@ -7,7 +7,7 @@ from kowalski.utils import load_config, log, Mongo
 
 """ load config and secrets """
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 
 class TestTNSWatcher:

@@ -18,7 +18,7 @@ from kowalski.utils import init_db_sync, load_config, log, timer
 
 """ load config and secrets """
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 
 class ZTFAlertConsumer(AlertConsumer, ABC):

@@ -45,117 +45,21 @@ The easiest way to interact with a `Kowalski` instance is by using a python clie
 
 ## Cloning and Environment configuration
 
+### Clone the repository
 Start off by creating your own kowalski fork and github, and cloning it, then `cd` into the cloned directory:
 
 ```bash
 git clone https://github.com/<your_github_id>/kowalski.git
 cd kowalski
 ```
-Make sure you have a `python` environment that meets the requirements to run `Kowalski`. You can use both conda and virtualenv. Using virtualenv, you can do:
 
-```bash
-virtualenv env
-source env/bin/activate
-pip install -r requirements.txt
-```
-
-## Spin up your own `kowalski` **using Docker**
-
-### Setting up config files
-
-You need config files in order to run `Kowalski`. You can start off by copying the default config/secrets over:
-
-```bash
-cp config.defaults.yaml config.yaml
-cp docker-compose.defaults.yaml docker-compose.yaml
-```
-
-`config.yaml` contains the API and ingester configs, the `supervisord` config for the API and ingester containers,
-together with all the secrets, so be careful when committing code / pushing docker images.
-
-However, if you want to run in a production setting, be sure to modify `config.yaml` and choose strong passwords!
-
-`docker-compose.yaml` serves as a config file for `docker-compose`, and can be used for different Kowalski deployment modes.
-Kowalski comes with several template `docker-compose` configs (see [below](#different-deployment-scenarios) for more info).
-
-### Building Kowalski
-
-Finally, once you've set the config files, you can build an instance of Kowalski.
-You can do this with the following command:
-
-```bash
-make docker_build
-```
-
-You have now successfully built a `Kowalski` instance!
-Any time you want to rebuild `kowalski`, you need to re-run this command.
-
-### Running Kowalski
-
-* `make docker_up` to start up a pre-built Kowalski instance
-
-### Running the tests
-
-You can check that a running docker `Kowalski` instance is working by using the Kowalski test suite:
-
-```bash
-make docker_test
-```
-
-### Shutting down `Kowalski`
-
-```bash
-make docker_down
-```
-
-## Spin up your own `kowalski` **without Docker**
-
-### Setting up config files
-
-Similar to the Docker setup, you need config files in order to run `Kowalski`. You can start off by copying the default config/secrets over. Here however, the default config file is `config.local.yaml`:
-
-```bash
-cp config.default.yaml config.yaml
-```
-
-When running locallym, you'll need to change some values in the database configuration. This will be addressed in the next section.
-
-### Setting up the MongoDB database
-
-You will need to edit the `database` section to point to your local mongodb instance, or to a mongodb atlas cluster, in which case you should set `database.srv` to `true`, and `database.replica_set` to the name of your cluster or simply `null`.
-If you are using a mongodb atlas cluster, kowalski won't be able to create admin users, so you will need to do so manually on the cluster's web interface. You will need to create 2 users: admin user and user, based on what usernames and passwords you've set in the config file.
-
-You can find detailed instructions on how to set up a MongoDB cluster [here](https://www.mongodb.com/docs/manual/installation/). **Note that if you run your own MongoDB cluster, you will need to set the `database.host` to the IP address of your machine, or to `localhost` if you are running the cluster on the same machine as the API. You also need to set `database.replica_set` to `null` if you are not usin/specifying a replica set.**
-
-We also need to set the admin and user roles for the database. To do so, login to mongdb:
-
-```bash
-mongosh --host 127.0.0.1 --port 27017
-```
-and then from within the mongo terminal, set (using the default values from the config):
-
-```bash
-use admin
-db.createUser( { user: "mongoadmin", pwd: "mongoadminsecret", roles: [ { role: "userAdmin", db: "admin" } ] } )
-db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "admin" } ] } )
-use kowalski
-db.createUser( { user: "mongoadmin", pwd: "mongoadminsecret", roles: [ { role: "userAdmin", db: "kowalski" } ] } )
-db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "kowalski" } ] } )
-```
-
-*We recommend using MongoDB atlas when running locally to avoid having to setup a momgodb cluster. Don't forget seting the `database.host` to you atlas url.*
-
-### Setup, startup and tests on Linux amd64
-
-#### System dependencies
+### Environment setup **on Linux amd64**
 
 First, you'll need to install few system dependencies:
 
 ```bash
 sudo apt install -y default-jdk wget
 ```
-
-#### Python dependencies
 
 Make sure you have a version of python that is 3.8 or above before following the next steps.
 
@@ -173,33 +77,7 @@ to create your virtual environment. If you are told that pip is not found, try u
 
 The python dependencies will be install automatically when you start the app. The same will happen for Kafka and the ML models.
 
-#### Starting the app
-
-To start the app, run:
-
-```bash
-make run
-```
-
-This will start the API, the dask clusters and alert brokers.
-
-#### Run the tests
-
-To run the tests, run:
-
-```bash
-make test
-```
-
-If you want to run a specific test, you can do so by running:
-
-```bash
-PYTHONPATH=. pytest -s kowalski/tests/<test_file.py>
-```
-
-### Setup, startup and tests on MacOS arm64 (M1 and M2 processors)
-
-#### System dependencies
+### Environment setup **on MacOS arm64 (M1 or M2)**
 
 First, you need to install several system dependencies using [homebrew](https://brew.sh):
 
@@ -253,6 +131,71 @@ to create your virtual environment. If you are told that pip is not found, try u
 
 The python dependencies will be install automatically when you start the app. The same will happen for Kafka and the ML models.
 
+## Spin up your own `kowalski` **without Docker**
+
+### Setting up config files
+
+Similar to the Docker setup, you need config files in order to run `Kowalski`. You can start off by copying the default config/secrets over. Here however, the default config file is `config.local.yaml`:
+
+```bash
+cp config.default.yaml config.yaml
+```
+
+### Setting up the MongoDB database
+
+#### Running a local MongoDB instance
+If you are running a local mongodb instance, the default config file should work out of the box, except if you are using a different port, a replica set, different database name or different usernames/passwords. In that case, you will need to edit the `database` section of the config file.
+
+You can find detailed instructions on how to set up a MongoDB cluster [here](https://www.mongodb.com/docs/manual/installation/).
+
+We also need to set the admin and user roles for the database. To do so, login to mongdb:
+
+```bash
+mongosh --host 127.0.0.1 --port 27017
+```
+and then from within the mongo terminal, set (using the default values from the config):
+
+```bash
+use admin
+db.createUser( { user: "mongoadmin", pwd: "mongoadminsecret", roles: [ { role: "userAdmin", db: "admin" } ] } )
+db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "admin" } ] } )
+use kowalski
+db.createUser( { user: "mongoadmin", pwd: "mongoadminsecret", roles: [ { role: "userAdmin", db: "kowalski" } ] } )
+db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "kowalski" } ] } )
+```
+
+#### Using MongoDB Atlas or a remote MongoDB instance
+
+If you are using a mongodb atlas cluster, kowalski won't be able to create admin users, so you will need to do so manually on the cluster's web interface. You will need to create 2 users: admin user and user, based on what usernames and passwords you've set in the config file in the `database` section. *Don't forget to also allow access from your IP address, or simply allow access from anywhere.*
+
+### Start and test the app **on Linux amd64**
+
+#### Starting the app
+
+To start the app, run:
+
+```bash
+make run
+```
+
+This will start the API, the dask clusters and alert brokers.
+
+#### Run the tests
+
+To run the tests, run:
+
+```bash
+make test
+```
+
+If you want to run a specific test, you can do so by running:
+
+```bash
+PYTHONPATH=. pytest -s kowalski/tests/<test_file.py>
+```
+
+### Start and test the app **on MacOS arm64 (M1 or M2)**
+
 #### Starting the app
 
 To start the app, run:
@@ -277,7 +220,7 @@ If you want to run a specific test, you can do so by running:
 PYTHONPATH=. pytest -s kowalski/tests/<test_file.py>
 ```
 
-### Ingester (Pushing alerts to a kafka)
+### Ingester (Pushing alerts to a local kafka topic)
 
 Once the broker is running, you might want to create a local kafka stream of alerts to test it. To do so, you can run the ingester with
 
@@ -295,7 +238,55 @@ where `<topic_listened_by_your_broker>` is the topic listened by your broker (ex
 
 To stop the broker, you can simply press `Ctrl+C` in the terminal where you started it.
 
-## Different Deployment scenarios (using Docker)
+
+## Spin up your own `kowalski` **using Docker**
+
+### Setting up config files
+
+You need config files in order to run `Kowalski`. When running in docker, this is done with the `docker.yaml` file, which is already configured to use a database running in a mongodb container. If you need to make any other changes, you can copy the relevant sections from the `config.defaults.yaml` file into `docker.yaml`. You also need to create a `docker-compose.yaml` file. You can start off by copying the default config/secrets over:
+
+```bash
+cp docker-compose.defaults.yaml docker-compose.yaml
+```
+
+`config.defaults.yaml` contains the API and ingester configs, together with all the secrets. So be careful when committing code / pushing docker images.
+
+However, if you want to run in a production setting, be sure to modify `docker.yaml` and choose strong passwords!
+
+`docker-compose.yaml` serves as a config file for `docker-compose`, and can be used for different Kowalski deployment modes.
+Kowalski comes with several template `docker-compose` configs (see [below](#different-deployment-scenarios) for more info).
+
+### Building Kowalski
+
+Finally, once you've set the config files, you can build an instance of Kowalski.
+You can do this with the following command:
+
+```bash
+make docker_build
+```
+
+You have now successfully built a `Kowalski` instance!
+Any time you want to rebuild `kowalski`, you need to re-run this command.
+
+### Running Kowalski
+
+* `make docker_up` to start up a pre-built Kowalski instance
+
+### Running the tests
+
+You can check that a running docker `Kowalski` instance is working by using the Kowalski test suite:
+
+```bash
+make docker_test
+```
+
+### Shutting down `Kowalski`
+
+```bash
+make docker_down
+```
+
+### Different Deployment scenarios (using Docker)
 
 `Kowalski` uses `docker-compose` under the hood and requires a `docker-compose.yaml` file.
 There are several available deployment scenarios:
@@ -304,19 +295,19 @@ There are several available deployment scenarios:
 - Bare-bones + broker for `SkyPortal` / `Fritz`
 - Behind `traefik`
 
-### Bare-bones
+#### Bare-bones
 
 Use `docker-compose.defaults.yaml` as a template for `docker-compose.yaml`.
 Note that the environment variables for the `mongo` service must match
 `admin_*` under `kowalski.database` in `config.yaml`.
 
-### Bare-bones + broker for [`SkyPortal`](https://skyportal.io/) / [`Fritz`](https://github.com/fritz-marshal/fritz)
+#### Bare-bones + broker for [`SkyPortal`](https://skyportal.io/) / [`Fritz`](https://github.com/fritz-marshal/fritz)
 
 Use `docker-compose.fritz.defaults.yaml` as a template for `docker-compose.yaml`.
 If you want the alert ingester to post (filtered) alerts to `SkyPortal`, make sure
 `{"misc": {"broker": true}}` in `config.yaml`.
 
-### Behind `traefik`
+#### Behind `traefik`
 
 Use `docker-compose.traefik.defaults.yaml` as a template for `docker-compose.yaml`.
 

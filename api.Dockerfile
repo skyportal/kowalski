@@ -10,7 +10,7 @@ WORKDIR /kowalski
 
 COPY requirements/requirements_api.txt requirements/
 
-COPY config.yaml .
+COPY docker.yaml config.yaml
 COPY version.txt .
 
 COPY kowalski/__init__.py kowalski/

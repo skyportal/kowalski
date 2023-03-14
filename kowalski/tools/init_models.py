@@ -2,7 +2,7 @@ import os
 
 from kowalski.utils import load_config, log
 
-config = load_config(config_file="config.yaml")
+config = load_config(config_files=["config.yaml"])
 
 # here, we want to grab the instruments from the 'ml' key in the config, and for each instrument download the models if a link is provided
 

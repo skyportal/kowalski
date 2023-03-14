@@ -5,7 +5,7 @@ import requests
 
 from kowalski.utils import load_config
 
-config = load_config(config_file="config.yaml")["kowalski"]
+config = load_config(config_files=["config.yaml"])["kowalski"]
 
 
 def init_kafka():
