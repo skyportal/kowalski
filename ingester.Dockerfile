@@ -106,6 +106,8 @@ COPY ["kowalski/tests/test_alert_broker_ztf.py", \
 
 COPY conf/supervisord_ingester.conf.template conf/
 
+COPY server.properties .
+
 COPY Makefile .
 
 ENV USING_DOCKER=true
