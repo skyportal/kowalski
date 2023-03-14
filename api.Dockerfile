@@ -8,23 +8,28 @@ RUN mkdir -p /kowalski /kowalski/data /kowalski/logs /_tmp
 
 WORKDIR /kowalski
 
-COPY requirements/requirements_api.txt requirements/
+COPY requirements/ requirements/
 
 COPY docker.yaml config.yaml
 COPY version.txt .
 
-COPY kowalski/__init__.py kowalski/
-COPY kowalski/utils.py kowalski/
+COPY ["kowalski/__init__.py", \
+        "kowalski/utils.py", \
+        "kowalski/config.py", \
+        "kowalski/log.py", \
+        "kowalski/"]
 
-COPY kowalski/api/__init__.py kowalski/api/
-COPY kowalski/api/api.py kowalski/api/
-COPY kowalski/api/middlewares.py kowalski/api/
-COPY kowalski/api/components_api.yaml kowalski/api/
+COPY ["kowalski/api/__init__.py", \
+        "kowalski/api/api.py", \
+        "kowalski/api/middlewares.py", \
+        "kowalski/api/components_api.yaml", \
+        "kowalski/api/"]
 
-COPY kowalski/tools/__init__.py kowalski/tools/
-COPY kowalski/tools/check_app_environment.py kowalski/tools/
-COPY kowalski/tools/generate_supervisord_conf.py kowalski/tools/
-COPY kowalski/tools/pip_install_requirements.py kowalski/tools/
+COPY ["kowalski/tools/__init__.py", \
+        "kowalski/tools/check_app_environment.py", \
+        "kowalski/tools/generate_supervisord_conf.py", \
+        "kowalski/tools/pip_install_requirements.py", \
+        "kowalski/tools/"]
 
 COPY kowalski/tests/test_api.py kowalski/tests/
 
@@ -37,7 +42,8 @@ COPY Makefile .
 RUN pip install --upgrade pip
 
 # install python libs and generate supervisord config file
-RUN pip install -r requirements/requirements_api.txt --no-cache-dir
+RUN pip install -r requirements/requirements.txt --no-cache-dir && \
+    pip install -r requirements/requirements_api.txt --no-cache-dir
 
 # run container
 CMD make run_api

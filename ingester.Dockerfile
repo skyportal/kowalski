@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y default-jdk && \
 # Kafka test-server properties:
 COPY server.properties kafka_$scala_version-$kafka_version/config/
 
-COPY requirements/requirements_ingester.txt requirements/
+COPY requirements/ requirements/
 COPY docker.yaml config.yaml
 COPY version.txt .
 
@@ -42,6 +42,8 @@ COPY data/turbo_alerts/ data/turbo_alerts/
 
 COPY ["kowalski/__init__.py", \
         "kowalski/utils.py", \
+        "kowalski/config.py", \
+        "kowalski/log.py", \
         "kowalski/"]
 
 # write the same copy lines above but as a single line:
@@ -116,7 +118,8 @@ ENV USING_DOCKER=true
 RUN pip install --upgrade pip
 
 # install python libs and generate supervisord config file
-RUN pip install -r requirements/requirements_ingester.txt --no-cache-dir
+RUN pip install -r requirements/requirements.txt --no-cache-dir && \
+    pip install -r requirements/requirements_ingester.txt --no-cache-dir
 
 # run container
 CMD make run_ingester
