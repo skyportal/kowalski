@@ -51,6 +51,7 @@ COPY ["kowalski/tools/__init__.py", \
         "kowalski/tools/fetch_ztf_matchfiles.py", \
         "kowalski/tools/generate_supervisord_conf.py", \
         "kowalski/tools/init_models.py", \
+        "kowalski/tools/init_kafka.py", \
         "kowalski/tools/istarmap.py", \
         "kowalski/tools/kafka_stream.py", \
         "kowalski/tools/ops_watcher_ztf.py", \
