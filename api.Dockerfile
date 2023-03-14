@@ -10,6 +10,7 @@ WORKDIR /kowalski
 
 COPY requirements/ requirements/
 
+COPY config.defaults.yaml config.defaults.yaml
 COPY docker.yaml config.yaml
 COPY version.txt .
 

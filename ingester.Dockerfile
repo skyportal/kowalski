@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y default-jdk && \
 COPY server.properties kafka_$scala_version-$kafka_version/config/
 
 COPY requirements/ requirements/
+COPY config.defaults.yaml config.defaults.yaml
 COPY docker.yaml config.yaml
 COPY version.txt .
 
