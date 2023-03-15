@@ -27,6 +27,10 @@ jobs:
             ~/.cache/pip
           key: ${{ runner.os }}-${{ hashFiles('**/requirements*.txt') }}
       - name: Set up configs
+        env:
+          TNS_BOT_ID: ${{ secrets.TNS_BOT_ID }}
+          TNS_BOT_NAME: ${{ secrets.TNS_BOT_NAME }}
+          TNS_API_KEY: ${{ secrets.TNS_API_KEY }}
         run: |
           cp docker-compose.defaults.yaml docker-compose.yaml
           cat << EOF >> docker.yaml
