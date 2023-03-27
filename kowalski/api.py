@@ -2350,7 +2350,7 @@ class ZTFMMATriggerDelete(Model, ABC):
     user: str
 
 
-class ZTFMMAHandler(Handler):
+class ZTFMMATriggerHandler(Handler):
     """Handlers to work with ZTF triggers"""
 
     def __init__(self, test: bool = False):
@@ -3161,6 +3161,8 @@ async def app_factory():
     filter_handler = FilterHandler()
     ztf_trigger_handler = ZTFTriggerHandler()
     ztf_trigger_handler_test = ZTFTriggerHandler(test=True)
+    ztf_mma_trigger_handler = ZTFMMATriggerHandler
+    ztf_mma_trigger_handler_test = ZTFMMATriggerHandler(test=True)
 
     # add routes manually
     s.add_routes(
@@ -3185,8 +3187,17 @@ async def app_factory():
             web.get("/api/triggers/ztf", ztf_trigger_handler.get),
             web.put("/api/triggers/ztf", ztf_trigger_handler.put),
             web.delete("/api/triggers/ztf", ztf_trigger_handler.delete),
+            web.get("/api/triggers/ztf.test", ztf_trigger_handler_test.get),
             web.put("/api/triggers/ztf.test", ztf_trigger_handler_test.put),
             web.delete("/api/triggers/ztf.test", ztf_trigger_handler_test.delete),
+            web.get("/api/triggers/ztfmma", ztf_mma_trigger_handler.get),
+            web.put("/api/triggers/ztfmma", ztf_mma_trigger_handler.put),
+            web.delete("/api/triggers/ztfmma", ztf_mma_trigger_handler.delete),
+            web.get("/api/triggers/ztfmma.test", ztf_mma_trigger_handler_test.get),
+            web.put("/api/triggers/ztfmma.test", ztf_mma_trigger_handler_test.put),
+            web.delete(
+                "/api/triggers/ztfmma.test", ztf_mma_trigger_handler_test.delete
+            ),
             # lab:
             web.get(
                 "/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}",
