@@ -138,7 +138,7 @@ The python dependencies will be install automatically when you start the app. Th
 Similar to the Docker setup, you need config files in order to run `Kowalski`. You can start off by copying the default config/secrets over. Here however, the default config file is `config.local.yaml`:
 
 ```bash
-cp config.default.yaml config.yaml
+cp config.defaults.yaml config.yaml
 ```
 
 ### Setting up the MongoDB database
@@ -162,6 +162,7 @@ db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "adm
 use kowalski
 db.createUser( { user: "mongoadmin", pwd: "mongoadminsecret", roles: [ { role: "userAdmin", db: "kowalski" } ] } )
 db.createUser( { user: "ztf", pwd: "ztf", roles: [ { role: "readWrite", db: "kowalski" } ] } )
+exit
 ```
 
 #### Using MongoDB Atlas or a remote MongoDB instance
@@ -476,10 +477,10 @@ ZTF:
       cone_search_radius: 2
       cone_search_unit: "arcsec"
       filter: {}
-      projection:
-      _id: 1
-      coordinates.radec_str: 1
-      j_m: 1
-      h_m: 1
-      k_m: 1
+      projection: #column for your catalog that you want to have in the crossmatch results
+         _id: 1
+         coordinates.radec_str: 1
+         j_m: 1
+         h_m: 1
+         k_m: 1
 ```
