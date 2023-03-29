@@ -39,6 +39,20 @@ kowalski:
     zookeeper.test: "localhost:2181"
     path: "kafka_2.13-3.4.0"
 
+  gcn:
+    server: gcn.nasa.gov
+    client_group_id: null
+    client_id: null
+    client_secret: null
+    notice_types:
+      - FERMI_GBM_FIN_POS
+      - FERMI_GBM_SUBTHRESH
+      - LVC_PRELIMINARY
+      - LVC_INITIAL
+      - LVC_UPDATE
+      - LVC_RETRACTION
+      - LVC_TEST
+
   database:
     max_pool_size: 200
     host: "localhost"
@@ -67,6 +81,8 @@ kowalski:
       alerts_wntr_aux: "WNTR_alerts_aux"
       alerts_turbo: "TURBO_alerts"
       alerts_turbo_aux: "TURBO_alerts_aux"
+      alerts_gcn: "GCN_alerts"
+      alerts_gcn_aux: "GCN_alerts_aux"
 
     indexes:
       ZTF_alerts:
@@ -319,6 +335,29 @@ kowalski:
             - ["candidate.jd", -1]
             - ["candidate.scorr", -1]
             - ["candidate.dmag2mass", -1]
+          unique: false
+
+      GCN_alerts:
+        - name: dateobs
+          fields:
+            - ["dateobs", -1]
+          unique: true
+
+      GCN_alerts_aux:
+        - name: center_dateobs
+          fields:
+            - ["center", "2dsphere"]
+            - ["dateobs", -1]
+          unique: false
+        - name: contour50_dateobs
+          fields:
+            - ["contour50", "2dsphere"]
+            - ["dateobs", -1]
+          unique: false
+        - name: contour90_dateobs
+          fields:
+            - ["contour90", "2dsphere"]
+            - ["dateobs", -1]
           unique: false
 
     filters:
@@ -1107,6 +1146,16 @@ kowalski:
     lifetime_stagger: 1 hours
     lifetime_restart: true
 
+  dask_gcn:
+    host: 127.0.0.1
+    scheduler_port: 8792
+    dashboard_address: :8793
+    n_workers: 4
+    threads_per_worker: 1
+    lifetime: 24 hours
+    lifetime_stagger: 1 hours
+    lifetime_restart: true
+
   misc:
     # working stand-alone or in conjunction with a SkyPortal instance?
     broker: False
@@ -1127,3 +1176,4 @@ kowalski:
     pgir: True
     wntr: True
     turbo: True
+    gcn: True

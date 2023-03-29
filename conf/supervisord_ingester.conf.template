@@ -58,6 +58,16 @@ stdout_logfile_maxbytes = 50MB
 redirect_stderr = True
 environment = PYTHONPATH=".", PRODUCTION=1
 
+[program:dask-cluster-gcn]
+command = python kowalski/dask_clusters/dask_cluster_gcn.py
+directory = ./
+autostart = {{ enabled.gcn }}
+autorestart = True
+stdout_logfile = logs/dask_cluster_gcn.log
+stdout_logfile_maxbytes = 50MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1
+
 [program:alert-broker-ztf]
 command = python kowalski/alert_brokers/alert_broker_ztf.py
 directory = ./
@@ -94,6 +104,16 @@ directory = ./
 autostart = {{ enabled.turbo }}
 autorestart = True
 stdout_logfile = logs/alert_broker_turbo.log
+stdout_logfile_maxbytes = 30MB
+redirect_stderr = True
+environment = PYTHONPATH=".", PRODUCTION=1
+
+[program:alert-broker-gcn]
+command = python kowalski/alert_brokers/alert_broker_gcn.py
+directory = ./
+autostart = {{ enabled.gcn }}
+autorestart = True
+stdout_logfile = logs/alert_broker_gcn.log
 stdout_logfile_maxbytes = 30MB
 redirect_stderr = True
 environment = PYTHONPATH=".", PRODUCTION=1
