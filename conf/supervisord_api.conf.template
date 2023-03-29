@@ -1,5 +1,5 @@
 [unix_http_server]
-file = ./conf/supervisor.sock
+file = ./conf/supervisord.sock
 
 [supervisord]
 logfile = logs/supervisord.log
@@ -15,7 +15,7 @@ minprocs = 200
 supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
 
 [supervisorctl]
-serverurl = unix://./conf/supervisor.conf
+serverurl = unix://./conf/supervisord.sock
 
 [program:gunicorn]
 command = gunicorn -w {{ server.processes }} --bind {{ server.host }}:{{ server.port }} --worker-tmp-dir ./conf/ --worker-class aiohttp.GunicornUVLoopWebWorker --log-level=DEBUG --timeout {{ server.timeout }} --max-requests {{ server.max_requests }} kowalski.api.api:app_factory

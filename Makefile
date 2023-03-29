@@ -84,13 +84,13 @@ run_ingester_macos: setup_ingester_macos init_models init_kafka
 	$(SUPERVISORD_INGESTER)
 
 monitor:
-	$(SUPERVISORCTL) status
+	$(SUPERVISORCTL) -i
 
 monitor_api:
-	$(SUPERVISORCTL_API) status
+	$(SUPERVISORCTL_API) -i
 
 monitor_ingester:
-	$(SUPERVISORCTL_INGESTER) status
+	$(SUPERVISORCTL_INGESTER) -i
 
 test: setup_all init_models init_kafka
 	$(PYTHON) kowalski/tools/tests.py
