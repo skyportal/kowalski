@@ -61,6 +61,7 @@ COPY ["kowalski/tools/__init__.py", \
         "kowalski/tools/performance_reporter.py", \
         "kowalski/tools/pip_install_requirements.py", \
         "kowalski/tools/tns_watcher.py", \
+        "kowalski/tools/watch_logs.py", \
         "kowalski/tools/"]
 
 COPY ["kowalski/dask_clusters/__init__.py", \

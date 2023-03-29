@@ -99,16 +99,20 @@ test_macos: setup_all_macos init_models init_kafka
 	$(PYTHON) kowalski/tools/tests.py
 
 docker_up: setup
-	$(PYTHON) ./kowalski/tools/docker.py up $(FLAGS)
+	$(PYTHON) kowalski/tools/docker.py up $(FLAGS)
 
 docker_down: setup
-	$(PYTHON) ./kowalski/tools/docker.py down $(FLAGS)
+	$(PYTHON) kowalski/tools/docker.py down $(FLAGS)
 
 docker_build: setup
-	$(PYTHON) ./kowalski/tools/docker.py build $(FLAGS)
+	$(PYTHON) kowalski/tools/docker.py build $(FLAGS)
 
 docker_test: setup
 	$(PYTHON) kowalski/tools/tests.py --use_docker
 
 docker_seed : setup
-	$(PYTHON) ./kowalski/tools/docker.py seed $(FLAGS)
+	$(PYTHON) kowalski/tools/docker.py seed $(FLAGS)
+
+log: ## Monitor log files for all services.
+log: setup
+	$(PYTHON) kowalski/tools/watch_logs.py
