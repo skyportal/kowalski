@@ -2217,8 +2217,14 @@ class ZTFTriggerHandler(Handler):
               schema:
                 type: object
         responses:
-          '200':
+          '201':
             description: queue submitted
+            content:
+              application/json:
+                schema:
+                  type: object
+          '200':
+            description: queue already exists
             content:
               application/json:
                 schema:
@@ -2255,10 +2261,10 @@ class ZTFTriggerHandler(Handler):
             response = await client_session.put(url, json=_data, timeout=10)
         server.stop()
 
-        if response.status == 200:
+        if response.status == 201:
             return self.success(message="submitted", data=dict(response.headers))
 
-        elif response.status == 201:
+        elif response.status == 200:
             data = dict(response.headers)
             return self.error(
                 message=f"Submitted queue {data['queue_name']} already exists",
@@ -2443,13 +2449,13 @@ class ZTFMMATriggerHandler(Handler):
               schema:
                 type: object
         responses:
-          '200':
+          '201':
             description: trigger submitted
             content:
               application/json:
                 schema:
                   type: object
-          '201`:
+          '200`:
             description: trigger already exists
             content:
               application/json:
@@ -2487,10 +2493,10 @@ class ZTFMMATriggerHandler(Handler):
             response = await client_session.put(url, json=_data, timeout=10)
         server.stop()
 
-        if response.status == 200:
+        if response.status == 201:
             return self.success(message="submitted", data=dict(response.headers))
 
-        elif response.status == 201:
+        elif response.status == 200:
             data = dict(response.headers)
             return self.error(
                 message=f"Submitted trigger {data['trigger_name']} already exists",
