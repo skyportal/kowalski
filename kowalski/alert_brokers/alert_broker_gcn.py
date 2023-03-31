@@ -113,7 +113,6 @@ class GCNAlertConsumer:
 
         # set up own mongo client
         self.collection_alerts = config["database"]["collections"]["alerts_gcn"]
-        self.collection_alerts_aux = config["database"]["collections"]["alerts_gcn_aux"]
 
         self.mongo = Mongo(
             host=config["database"]["host"],
@@ -132,18 +131,6 @@ class GCNAlertConsumer:
                 try:
                     ind = [tuple(ii) for ii in index["fields"]]
                     self.mongo.db[self.collection_alerts].create_index(
-                        keys=ind,
-                        name=index["name"],
-                        background=True,
-                        unique=index["unique"],
-                    )
-                except Exception as e:
-                    log(e)
-
-            for index in config["database"]["indexes"][self.collection_alerts_aux]:
-                try:
-                    ind = [tuple(ii) for ii in index["fields"]]
-                    self.mongo.db[self.collection_alerts_aux].create_index(
                         keys=ind,
                         name=index["name"],
                         background=True,
@@ -186,72 +173,67 @@ class GCNAlertConsumer:
             raise ValueError("xml file is not valid VOEvent")
 
         dateobs = get_dateobs(root)
-        trigger = get_trigger(root)
+        triggerid = get_trigger(root)
 
-        notice_content = lxml.etree.tostring(root)
-
-        alert = {
-            "dateobs": dateobs,
-            "triggerid": trigger,
-            "date_created": datetime.datetime.utcnow(),
-        }
+        if dateobs is None and triggerid is None:
+            log(f"Alert from {topic} has no dateobs or triggerid, skipping")
+            return
 
         # get worker running current task
         worker = dask.distributed.get_worker()
         alert_worker = worker.plugins["worker-init"].alert_worker
 
+        # we try to get by triggerid, if an alert already exists with that triggerid, we use its dateobs instead
+        if triggerid is not None:
+            existing = alert_worker.mongo.db[alert_worker.collection_alerts].find_one(
+                {"triggerid": triggerid}, {"_id": 0, "dateobs": 1}
+            )
+            if existing is not None:
+                dateobs = existing["dateobs"]
+
+        alert = {
+            "dateobs": dateobs,
+            "triggerid": triggerid,
+            "notice_type": topic,
+            "notice_content": lxml.etree.tostring(root),
+            "date_created": datetime.datetime.utcnow(),
+        }
+
         # return if this alert packet has already been processed and ingested into collection_alerts:
         if (
             alert_worker.mongo.db[alert_worker.collection_alerts].count_documents(
-                {"triggerid": trigger, "dateobs": dateobs}, limit=1
+                {"dateobs": dateobs, "triggerid": triggerid}, limit=1
             )
             == 1
         ):
             return
 
-        with timer(f"Ingesting {dateobs} - {trigger}", alert_worker.verbose > 1):
-            alert_worker.mongo.insert_one(
-                collection=alert_worker.collection_alerts, document=alert
-            )
-
-        alert_aux = {
-            "dateobs": dateobs,
-            "triggerid": trigger,
-            "notice_type": topic,
-            "notice_content": notice_content,
-            "date_created": datetime.datetime.utcnow(),
-        }
-
         # we generate the skymap
         with timer(
-            f"Generating skymap for {dateobs} - {trigger}", alert_worker.verbose > 1
+            f"Generating skymap for {dateobs} - {topic}", alert_worker.verbose > 1
         ):
             skymap = alert_worker.generate_skymap(root, topic)
-
-        # we ingest the skymap
-        # with timer(f"Mongofication of skymap for {dateobs} - {trigger}", alert_worker.verbose > 1):
-        #     skymap = alert_worker.skymap_mongify(skymap)
 
         if skymap is not None:
             # we generate the contour
             with timer(
-                f"Generating contour for {dateobs} - {trigger}",
+                f"Generating contour for {dateobs} - {topic}",
                 alert_worker.verbose > 1,
             ):
                 contours = alert_worker.generate_contours(skymap)
-                alert_aux = {**alert_aux, **contours}
+                alert["localization"] = contours
 
-            # we ingest the contour
-            with timer(
-                f"Ingesting skymap for {dateobs} - {trigger}", alert_worker.verbose > 1
-            ):
-                alert_worker.mongo.insert_one(
-                    collection=alert_worker.collection_alerts_aux, document=alert_aux
-                )
+        with timer(f"Ingesting {dateobs} - {topic}", alert_worker.verbose > 1):
+            alert_worker.mongo.insert_one(
+                collection=alert_worker.collection_alerts, document=alert
+            )
 
+        del contours
         del skymap
         del alert
-        del alert_aux
+        del triggerid
+        del dateobs
+        del root
 
     def poll(self):
         """Polls Kafka broker to consume a topic."""

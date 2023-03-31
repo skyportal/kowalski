@@ -1,3 +1,5 @@
+import datetime
+
 import fastavro
 import pytest
 from kowalski.alert_brokers.alert_broker_ztf import ZTFAlertWorker
@@ -61,8 +63,12 @@ class TestAlertBrokerZTF:
 
     def test_alert_filter__xmatch(self):
         """Test cross matching with external catalog"""
-        alert, _ = self.worker.alert_mongify(self.alert)
-        xmatches = self.worker.alert_filter__xmatch(alert)
+        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        prv_candidates = [
+            {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
+            for prv_candidate in prv_candidates
+        ]
+        xmatches = self.worker.alert_filter__xmatch(alert, prv_candidates)
         catalogs_to_xmatch = config["database"].get("xmatch", {}).get("ZTF", {}).keys()
         assert isinstance(xmatches, dict)
         assert len(list(xmatches.keys())) == len(catalogs_to_xmatch)
@@ -70,6 +76,11 @@ class TestAlertBrokerZTF:
         assert all([isinstance(xmatches[c], list) for c in catalogs_to_xmatch])
         assert all([len(xmatches[c]) >= 0 for c in catalogs_to_xmatch])
         # TODO: add alerts with xmatches results to test against
+        alerts_gcn = config["database"]["collections"]["alerts_gcn"]
+        assert len(xmatches[alerts_gcn]) == 1
+        assert xmatches[alerts_gcn][0]["dateobs"] == datetime.datetime.strptime(
+            "2020-01-25T09:49:00", "%Y-%m-%dT%H:%M:%S"
+        )
 
     def test_alert_filter__xmatch_clu(self):
         """Test cross matching with the CLU catalog"""

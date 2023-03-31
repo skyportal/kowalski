@@ -104,7 +104,7 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
             with timer(
                 f"Cross-match of {object_id} {candid}", alert_worker.verbose > 1
             ):
-                xmatches = alert_worker.alert_filter__xmatch(alert)
+                xmatches = alert_worker.alert_filter__xmatch(alert, prv_candidates)
             # CLU cross-match:
             with timer(
                 f"CLU cross-match {object_id} {candid}", alert_worker.verbose > 1

@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import requests
 from astropy.io import fits
+from astropy.time import Time
 from astropy.visualization import (
     AsymmetricPercentileInterval,
     ImageNormalize,
@@ -826,7 +827,7 @@ class AlertWorker:
 
         return scores
 
-    def alert_filter__xmatch(self, alert: Mapping) -> dict:
+    def alert_filter__xmatch(self, alert: Mapping, prv_candidates: list) -> dict:
         """Cross-match alerts against external catalogs"""
 
         xmatches = dict()
@@ -840,41 +841,101 @@ class AlertWorker:
             """ catalogs """
             cross_match_config = config["database"]["xmatch"][self.instrument]
             for catalog in cross_match_config:
-                # cone search radius:
-                catalog_cone_search_radius = float(
-                    cross_match_config[catalog]["cone_search_radius"]
-                )
-                # convert to rad:
-                if cross_match_config[catalog]["cone_search_unit"] == "arcsec":
-                    catalog_cone_search_radius *= np.pi / 180.0 / 3600.0
-                elif cross_match_config[catalog]["cone_search_unit"] == "arcmin":
-                    catalog_cone_search_radius *= np.pi / 180.0 / 60.0
-                elif cross_match_config[catalog]["cone_search_unit"] == "deg":
-                    catalog_cone_search_radius *= np.pi / 180.0
-                elif cross_match_config[catalog]["cone_search_unit"] == "rad":
-                    pass
-                else:
-                    raise Exception(
-                        f"Unknown cone search radius units for {catalog}."
-                        " Must be one of [deg, rad, arcsec, arcmin]"
+                cross_match_type = cross_match_config[catalog].get("type", "point")
+                if cross_match_type == "point":
+                    # cone search radius:
+                    catalog_cone_search_radius = float(
+                        cross_match_config[catalog]["cone_search_radius"]
+                    )
+                    # convert to rad:
+                    if cross_match_config[catalog]["cone_search_unit"] == "arcsec":
+                        catalog_cone_search_radius *= np.pi / 180.0 / 3600.0
+                    elif cross_match_config[catalog]["cone_search_unit"] == "arcmin":
+                        catalog_cone_search_radius *= np.pi / 180.0 / 60.0
+                    elif cross_match_config[catalog]["cone_search_unit"] == "deg":
+                        catalog_cone_search_radius *= np.pi / 180.0
+                    elif cross_match_config[catalog]["cone_search_unit"] == "rad":
+                        pass
+                    else:
+                        raise Exception(
+                            f"Unknown cone search radius units for {catalog}."
+                            " Must be one of [deg, rad, arcsec, arcmin]"
+                        )
+
+                    catalog_filter = cross_match_config[catalog]["filter"]
+                    catalog_projection = cross_match_config[catalog]["projection"]
+
+                    object_position_query = dict()
+                    object_position_query["coordinates.radec_geojson"] = {
+                        "$geoWithin": {
+                            "$centerSphere": [
+                                [ra_geojson, dec_geojson],
+                                catalog_cone_search_radius,
+                            ]
+                        }
+                    }
+                    s = self.mongo.db[catalog].find(
+                        {**object_position_query, **catalog_filter},
+                        {**catalog_projection},
+                    )
+                    xmatches[catalog] = list(s)
+
+                elif cross_match_type == "localization":
+
+                    contour = cross_match_config[catalog].get("contour", "contour90")
+
+                    object_position_query = dict()
+                    object_position_query[f"localization.{contour}"] = {
+                        "$geoIntersects": {
+                            "$geometry": [ra_geojson, dec_geojson],
+                        }
+                    }
+
+                    # we want to create a list of jd of all the prv candidates that have a magpsf
+                    # + the current alert jd if it has a magpsf
+                    detections_jd = (
+                        [
+                            prv_candidate["jd"]
+                            for prv_candidate in prv_candidates
+                            if "magpsf" in prv_candidate
+                        ]
+                        + [alert["candidate"]["jd"]]
+                        if "magpsf" in alert["candidate"]
+                        else []
                     )
 
-                catalog_filter = cross_match_config[catalog]["filter"]
-                catalog_projection = cross_match_config[catalog]["projection"]
+                    first_detected, last_detected = min(detections_jd), max(
+                        detections_jd
+                    )
+                    nb_detections = len(detections_jd)
 
-                object_position_query = dict()
-                object_position_query["coordinates.radec_geojson"] = {
-                    "$geoWithin": {
-                        "$centerSphere": [
-                            [ra_geojson, dec_geojson],
-                            catalog_cone_search_radius,
-                        ]
+                    if (
+                        first_detected is None
+                        or last_detected is None
+                        or nb_detections == 0
+                    ):
+                        xmatches[catalog] = []
+                        continue
+
+                    first_detected = Time(first_detected, format="jd").datetime
+                    last_detected = Time(last_detected, format="jd").datetime
+
+                    object_position_query["dateobs"] = {
+                        "$lte": first_detected,
+                        "$gte": last_detected
+                        - datetime.timedelta(
+                            days=cross_match_config[catalog].get("max_days", 14)
+                        ),
                     }
-                }
-                s = self.mongo.db[catalog].find(
-                    {**object_position_query, **catalog_filter}, {**catalog_projection}
-                )
-                xmatches[catalog] = list(s)
+
+                    catalog_filter = cross_match_config[catalog]["filter"]
+                    catalog_projection = cross_match_config[catalog]["projection"]
+
+                    s = self.mongo.db[catalog].find(
+                        {**object_position_query, **catalog_filter},
+                        {**catalog_projection},
+                    )
+                    xmatches[catalog] = list(s)
 
         except Exception as e:
             log(str(e))
