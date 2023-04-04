@@ -2592,8 +2592,6 @@ class ZTFObsHistoryHandler(Handler):
         :return:
         ---
         summary: Get ZTF Observation History
-        tags:
-          - lab
 
         parameters:
           - in: query
