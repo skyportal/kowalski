@@ -2455,7 +2455,7 @@ class ZTFMMATriggerHandler(Handler):
               application/json:
                 schema:
                   type: object
-          '200`:
+          '200':
             description: trigger already exists
             content:
               application/json:
