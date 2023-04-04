@@ -126,7 +126,7 @@ def make_ztf_mma_trigger(
     ]
 
     return {
-        "target_name": target_name,
+        "trigger_name": target_name,
         "trigger_time": trigger_time,
         "fields": fields,
         "user": user,
@@ -952,6 +952,8 @@ async def test_mma_triggers_ztf(aiohttp_client):
     resp = await client.put(
         "/api/triggers/ztfmma.test", json=ztf_mma_trigger, headers=headers, timeout=5
     )
+
+    print(resp)
 
     assert resp.status == 200
     result = await resp.json()
