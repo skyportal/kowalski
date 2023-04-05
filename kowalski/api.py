@@ -2406,7 +2406,7 @@ class ZTFMMATriggerHandler(Handler):
         ZTFMMATriggerGet(**_data)
 
         if self.test:
-            return self.success(message="submitted")
+            return self.success(message="submitted", data=[{"trigger_name": "test"}])
 
         server = SSHTunnelForwarder(
             (config["ztf"]["mountain_ip"], config["ztf"]["mountain_port"]),
