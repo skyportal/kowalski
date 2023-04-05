@@ -953,8 +953,6 @@ async def test_mma_triggers_ztf(aiohttp_client):
         "/api/triggers/ztfmma.test", json=ztf_mma_trigger, headers=headers, timeout=5
     )
 
-    print(resp)
-
     assert resp.status == 200
     result = await resp.json()
     assert result["status"] == "success"
