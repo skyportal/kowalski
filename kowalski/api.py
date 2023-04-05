@@ -2116,7 +2116,7 @@ class ZTFTriggerGet(Model, ABC):
     """Data model for ZTF queue retrieval for streamlined validation"""
 
     queue_name: Optional[str]
-    user: str
+    user: Optional[str]
 
 
 class ZTFTriggerDelete(Model, ABC):
@@ -2174,9 +2174,8 @@ class ZTFTriggerHandler(Handler):
 
         # validate
         ZTFTriggerGet(**_data)
-
         if self.test:
-            return self.success(message="submitted")
+            return self.success(message="submitted", data=[{"queue_name": "test"}])
 
         server = SSHTunnelForwarder(
             (config["ztf"]["mountain_ip"], config["ztf"]["mountain_port"]),
@@ -2347,7 +2346,7 @@ class ZTFMMATriggerGet(Model, ABC):
     """Data model for ZTF MMA trigger retrieval for streamlined validation"""
 
     trigger_name: Optional[str]
-    user: str
+    user: Optional[str]
 
 
 class ZTFMMATriggerDelete(Model, ABC):
