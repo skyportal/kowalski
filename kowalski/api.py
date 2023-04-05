@@ -3165,7 +3165,7 @@ async def app_factory():
     filter_handler = FilterHandler()
     ztf_trigger_handler = ZTFTriggerHandler()
     ztf_trigger_handler_test = ZTFTriggerHandler(test=True)
-    ztf_mma_trigger_handler = ZTFMMATriggerHandler
+    ztf_mma_trigger_handler = ZTFMMATriggerHandler()
     ztf_mma_trigger_handler_test = ZTFMMATriggerHandler(test=True)
 
     # add routes manually
