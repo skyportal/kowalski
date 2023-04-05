@@ -112,6 +112,27 @@ def make_ztf_trigger(
     }
 
 
+def make_ztf_mma_trigger(
+    target_name: str = "".join(
+        random.choice(string.ascii_uppercase + string.digits) for _ in range(9)
+    ),
+    trigger_time: float = random.random(),
+    fields: List[dict] = [{}],
+    user: str = "provisioned-admin",
+):
+    fields = [
+        {"field_id": 550, "probability": 0.5},
+        {"field_id": 650, "probability": 0.25},
+    ]
+
+    return {
+        "trigger_name": target_name,
+        "trigger_time": trigger_time,
+        "fields": fields,
+        "user": user,
+    }
+
+
 @pytest.mark.asyncio
 async def test_auth(aiohttp_client):
     """
@@ -902,6 +923,46 @@ async def test_triggers_ztf(aiohttp_client):
     # delete
     resp = await client.delete(
         "/api/triggers/ztf.test", json=ztf_trigger, headers=headers, timeout=5
+    )
+
+    assert resp.status == 200
+    result = await resp.json()
+    assert result["status"] == "success"
+    assert "message" in result
+
+
+@pytest.mark.asyncio
+async def test_mma_triggers_ztf(aiohttp_client):
+    """Test saving, testing, retrieving, modifying, and removing a ZTF MMA trigger: /api/triggers/ztfmma
+
+    :param aiohttp_client:
+    :return:
+    """
+    client = await aiohttp_client(await app_factory())
+
+    # authorize as admin, regular users cannot do this
+    credentials = await get_admin_credentials(aiohttp_client)
+    access_token = credentials["token"]
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    ztf_mma_trigger = make_ztf_mma_trigger()
+
+    # put
+    resp = await client.put(
+        "/api/triggers/ztfmma.test", json=ztf_mma_trigger, headers=headers, timeout=5
+    )
+
+    print(resp)
+
+    assert resp.status == 200
+    result = await resp.json()
+    assert result["status"] == "success"
+    assert "message" in result
+
+    # delete
+    resp = await client.delete(
+        "/api/triggers/ztfmma.test", json=ztf_mma_trigger, headers=headers, timeout=5
     )
 
     assert resp.status == 200
