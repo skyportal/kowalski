@@ -278,3 +278,27 @@ class TestTools:
         log(f"Ingested features of {len(ingested_entries)} sources")
 
         assert len(ingested_entries) == total_good_docs
+
+    def test_ingest_catalog_from_parquet(self):
+        collection = "PARQUET_CATALOG"
+
+        # check if the collection exists, drop it if it does
+        if collection in self.mongo.db.list_collection_names():
+            log(f"Collection {collection} already exists, dropping it...")
+            try:
+                self.mongo.db[collection].drop()
+            except Exception as e:
+                raise RuntimeError(f"Failed to drop the existing CLU collection: {e}")
+
+        total_good_docs, _ = run_catalog(
+            catalog_name=collection,
+            path="data/catalogs/ztf_000250_zg_c01_q1_dr5.parquet",
+            batch_size=10,
+            max_docs=100,
+            format="parquet",
+        )
+
+        ingested_entries = list(self.mongo.db[collection].find({}, {"_id": 1}))
+        log(f"Ingested features of {len(ingested_entries)} sources")
+
+        assert len(ingested_entries) == total_good_docs

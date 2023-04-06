@@ -1,23 +1,18 @@
 """
-This tool will digest zipped IGAPS source data from http://www.star.ucl.ac.uk/IGAPS/catalogue/ and ingest the data into Kowalski.
+This tool will catalogs with different formats (fits, csv, and parquet) to Kowalski
 """
 
+import os
+import pathlib
+import time
+
 import fire
+import istarmap  # noqa: F401
 import numpy as np
 import pandas as pd
-import os
+import pyarrow.parquet as pq
 from astropy.io import fits
-import pathlib
-
-import istarmap  # noqa: F401
-from utils import (
-    deg2dms,
-    deg2hms,
-    init_db_sync,
-    load_config,
-    log,
-    Mongo,
-)
+from utils import Mongo, deg2dms, deg2hms, init_db_sync, load_config, log
 
 """ load config and secrets """
 KOWALSKI_APP_PATH = os.environ.get("KOWALSKI_APP_PATH", "/app")
@@ -36,6 +31,9 @@ def process_file(
     max_docs=None,
     format="fits",
 ):
+    if format not in ("fits", "csv", "parquet"):
+        log("Format not supported")
+        return
 
     # connect to MongoDB:
     log("Connecting to DB")
@@ -77,7 +75,7 @@ def process_file(
 
         if ra_col is None:
             try:
-                ra_col = [col for col in names if col.lower() == "ra"][0]
+                ra_col = [col for col in names if col.lower() in ["ra", "objra"]][0]
             except IndexError:
                 log("RA column not found")
                 return
@@ -89,7 +87,7 @@ def process_file(
 
         if dec_col is None:
             try:
-                dec_col = [col for col in names if col.lower() == "dec"][0]
+                dec_col = [col for col in names if col.lower() in ["dec", "objdec"]][0]
             except IndexError:
                 log("Dec column not found")
                 return
@@ -171,9 +169,9 @@ def process_file(
             log(f"{file}: processing batch # {chunk_index + 1}")
             if ra_col is None:
                 try:
-                    ra_col = [col for col in names if col.lower() == "ra"][0]
+                    ra_col = [col for col in names if col.lower() in ["ra", "objra"]][0]
                 except IndexError:
-                    log("No RA/Dec columns found")
+                    log("No RA column found")
                     return
             else:
                 # verify that the columns exist
@@ -183,9 +181,11 @@ def process_file(
 
             if dec_col is None:
                 try:
-                    dec_col = [col for col in names if col.lower() == "dec"][0]
+                    dec_col = [
+                        col for col in names if col.lower() in ["dec", "objdec"]
+                    ][0]
                 except IndexError:
-                    log("No RA/Dec columns found")
+                    log("No Dec column found")
                     return
             else:
                 # verify that the columns exist
@@ -210,7 +210,7 @@ def process_file(
                         deg2dms(document[dec_col]),
                     ]
                     # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
-                    _radec_geojson = [document[ra_col] - 180.0, document[ra_col]]
+                    _radec_geojson = [document[ra_col] - 180.0, document[dec_col]]
                     document["coordinates"]["radec_geojson"] = {
                         "type": "Point",
                         "coordinates": _radec_geojson,
@@ -229,8 +229,124 @@ def process_file(
             # ingest batch
             mongo.insert_many(collection=collection, documents=batch)
 
+    elif format == "parquet":
+        df = pq.read_table(file).to_pandas()
+        names = list(df.columns)
+        if ra_col is None:
+            try:
+                ra_col = [col for col in names if col.lower() in ["ra", "objra"]][0]
+            except IndexError:
+                log("No RA column found")
+                return
+        else:
+            # verify that the columns exist
+            if ra_col not in names:
+                log(f"Provided RA column {ra_col} not found")
+                return
+
+        if dec_col is None:
+            try:
+                dec_col = [col for col in names if col.lower() in ["dec", "objdec"]][0]
+            except IndexError:
+                log("No Dec column found")
+                return
+        else:
+            # verify that the columns exist
+            if dec_col not in names:
+                log(f"Provided DEC column {dec_col} not found")
+                return
+        batch = []
+
+        def convert_nparray_to_list(value):
+            if isinstance(value, np.ndarray):
+                return [convert_nparray_to_list(v) for v in value]
+            elif isinstance(value, np.integer):
+                return int(value)
+            elif isinstance(value, np.floating):
+                return float(value)
+            elif isinstance(value, np.bool_):
+                return bool(value)
+            elif pd.isna(value):
+                return None
+            else:
+                return value
+
+        for index, row in df.iterrows():
+            if max_docs and total_good_documents + total_bad_documents >= max_docs:
+                break
+            try:
+                document = {}
+                # drop any value with NAType
+                for k, v in row.to_dict().items():
+                    if isinstance(v, (pd.core.series.Series, np.ndarray)):
+                        # recursively convert np arrays and series to lists
+                        try:
+                            document[k] = convert_nparray_to_list(v)
+                        except Exception as e:
+                            log(f"Failed to convert {k} to list: {str(e)}")
+                    # if its a numerical type other than the python ones (like np.int64), convert to python type
+                    elif isinstance(v, np.integer):
+                        document[k] = int(v)
+                    elif isinstance(v, np.floating):
+                        document[k] = float(v)
+                    elif isinstance(v, np.bool_):
+                        document[k] = bool(v)
+                    elif pd.isna(v):
+                        document[k] = None
+                    else:
+                        document[k] = v
+
+                # if there is already a key called radec_geojson, then delete it
+                if "radec_geojson" in document.keys():
+                    del document["radec_geojson"]
+
+                # GeoJSON for 2D indexing
+                document["coordinates"] = dict()
+                # string format: H:M:S, D:M:S
+                document["coordinates"]["radec_str"] = [
+                    deg2hms(document[ra_col]),
+                    deg2dms(document[dec_col]),
+                ]
+                # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
+                _radec_geojson = [document[ra_col] - 180.0, document[dec_col]]
+                document["coordinates"]["radec_geojson"] = {
+                    "type": "Point",
+                    "coordinates": _radec_geojson,
+                }
+                batch.append(document)
+                total_good_documents += 1
+            except Exception as exception:
+                total_bad_documents += 1
+                log(str(exception))
+
+            # ingest in batches
+            try:
+                if (
+                    len(batch) % batch_size == 0
+                    and len(batch) != 0
+                    or len(batch) == max_docs
+                ):
+                    mongo.insert_many(
+                        collection=collection,
+                        documents=batch,
+                    )
+                    # flush:
+                    batch = []
+            except Exception as exception:
+                log(str(exception))
+
+        while len(batch) > 0:
+            try:
+                mongo.insert_many(collection=collection, documents=batch)
+                # flush:
+                batch = []
+            except Exception as e:
+                log(e)
+                log("Failed, waiting 5 seconds to retry")
+                time.sleep(5)
+
     else:
-        log("Unknown format. Supported formats: fits, csv")
+        log("Unknown format. Supported formats: fits, csv, parquet")
         return
     # disconnect from db:
     try:
