@@ -24,6 +24,5 @@ autostart = True
 autorestart = True
 stdout_logfile = logs/gunicorn_stdout.log
 stdout_logfile_maxbytes = 30MB
-stderr_logfile = logs/gunicorn_stderr.log
 redirect_stderr = True
 environment = PYTHONPATH=".", PRODUCTION=1
