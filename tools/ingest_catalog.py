@@ -1,5 +1,5 @@
 """
-This tool will catalogs with different formats to Kowalski
+This tool will catalogs with different formats (fits, csv, and parquet) to Kowalski
 """
 
 import os

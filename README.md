@@ -562,15 +562,15 @@ The best way to see if the model is being loaded correctly is to run the broker 
 
 ### Ingest Catalogs in Kowalski (fits, csv)
 
-To ingest a new catalog into Kowalski from a fits or csv file, you can use the `ingest_catalog.py` script in the `tools` directory. To use it, run:
+To ingest a new catalog into Kowalski from a fits, csv, or parquet file, you can use the `ingest_catalog.py` script in the `tools` directory. To use it, run:
 
 ```bash
-PYTHONPATH=. KOWALSKI_APP_PATH=../ python ../tools/ingest_catalog.py --catalog_name="TEST" --path="data/catalogs/<your_file.fits_or_csv>" --max_docs=500 --ra_col="RA" --dec_col="DEC" --format="<fits_or_csv>"
+PYTHONPATH=. KOWALSKI_APP_PATH=../ python ../tools/ingest_catalog.py --catalog_name="TEST" --path="data/catalogs/<your_file.fits_csv_or_parquet>" --max_docs=500 --ra_col="RA" --dec_col="DEC" --format="<fits_or_csv>"
 ```
 
-The max_docs argument is optional, and if not provided, the entire catalog will be ingested. If you want to specify the RA and Dec columns, you can use the `--ra_col` and `--dec_col` arguments; if not provided, the script will try to find the RA and Dec columns in the catalog. The format argument is also optional, and if not provided, the script will try to process the file as a fits file. The catalog name argument and the path are required.
+The max_docs argument is optional, and if not provided, the entire catalog will be ingested. We advise setting it to somewhere between 1 and 10 the first time, to assess if the catalog is being ingested as expected before ingesting the rest. If you want to specify the RA and Dec columns, you can use the `--ra_col` and `--dec_col` arguments; if not provided, the script will try to find the RA and Dec columns in the catalog. The format argument is also optional, and if not provided, the script will try to process the file as a fits file. The catalog name argument and the path are required.
 
-Once a catalog has been added, you can perform cross-matches between the catalog and candidates. To do so, add the catalog and the cross-match conditions (like the search radius) in the `database.xmath.<instrument_name>` section of the config file.
+Once a catalog has been added, you can perform cross-matches between the catalog and candidates. To do so, add the catalog and the cross-match conditions (like the search radius) in the `database.xmatch.<instrument_name>` section of the config file.
 
 Here is an example of how to add a cross-match between the ZTF alert stream and a catalog called `TEST`, which has some columns called `j_m`, `h_m`, and `k_m`, and for which we want to perform a cross-match with a search radius of 2 arcsec:
 
