@@ -2190,7 +2190,7 @@ class ZTFTriggerHandler(Handler):
         server.start()
         url = f"http://{server.local_bind_address[0]}:{server.local_bind_address[1]}/queues"
         async with ClientSession() as client_session:
-            async with client_session.get(url, params=_data, timeout=10) as response:
+            async with client_session.get(url, json=_data, timeout=10) as response:
                 response_json = await response.json()
         server.stop()
 
@@ -2420,7 +2420,7 @@ class ZTFMMATriggerHandler(Handler):
         server.start()
         url = f"http://{server.local_bind_address[0]}:{server.local_bind_address[1]}/mma_skymaps"
         async with ClientSession() as client_session:
-            async with client_session.get(url, params=_data, timeout=10) as response:
+            async with client_session.get(url, json=_data, timeout=10) as response:
                 response_json = await response.json()
         server.stop()
 
