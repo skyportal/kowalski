@@ -2169,8 +2169,10 @@ class ZTFTriggerHandler(Handler):
                 schema:
                   type: object
         """
-
-        _data = await request.json()
+        try:
+            _data = await request.json()
+        except Exception:
+            _data = {}
 
         # validate
         ZTFTriggerGet(**_data)
@@ -2399,7 +2401,10 @@ class ZTFMMATriggerHandler(Handler):
                   type: object
         """
 
-        _data = await request.json()
+        try:
+            _data = await request.json()
+        except Exception:
+            _data = {}
 
         # validate
         ZTFMMATriggerGet(**_data)
