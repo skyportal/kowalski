@@ -2150,7 +2150,7 @@ class ZTFTriggerHandler(Handler):
           - triggers
 
         requestBody:
-          required: true
+          required: false
           content:
             application/json:
               schema:
@@ -2173,6 +2173,12 @@ class ZTFTriggerHandler(Handler):
             _data = await request.json()
         except Exception:
             _data = {}
+            trigger_name = request.query.get("trigger_name", None)
+            user = request.query.get("user", None)
+            if trigger_name:
+                _data["trigger_name"] = trigger_name
+            if user:
+                _data["user"] = user
 
         # validate
         ZTFTriggerGet(**_data)
@@ -2381,7 +2387,7 @@ class ZTFMMATriggerHandler(Handler):
           - triggers
 
         requestBody:
-          required: true
+          required: false
           content:
             application/json:
               schema:
@@ -2405,6 +2411,12 @@ class ZTFMMATriggerHandler(Handler):
             _data = await request.json()
         except Exception:
             _data = {}
+            trigger_name = request.query.get("trigger_name", None)
+            user = request.query.get("user", None)
+            if trigger_name:
+                _data["trigger_name"] = trigger_name
+            if user:
+                _data["user"] = user
 
         # validate
         ZTFMMATriggerGet(**_data)
