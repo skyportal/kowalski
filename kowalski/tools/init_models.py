@@ -83,8 +83,9 @@ def init_models():
                     os.system(
                         f"wget -O {os.path.join('models', instrument.lower(), name + '.tar.gz')} {model['url']}"
                     )
+                os.mkdir(os.path.join("models", instrument.lower(), name))
                 os.system(
-                    f"tar -xvf {os.path.join('models', instrument.lower(), name + '.tar.gz')} -C {os.path.join('models', instrument.lower())}"
+                    f"tar -xvf {os.path.join('models', instrument.lower(), name + '.tar.gz')} -C {os.path.join('models', instrument.lower(), name)} --strip-components 1"
                 )
                 downloaded_models.append(name)
 
