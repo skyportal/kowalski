@@ -4,24 +4,48 @@ FROM python:3.10
 RUN apt-get update
 
 # place to keep our app and the data:
-RUN mkdir -p /app /data /data/logs /_tmp
+RUN mkdir -p /kowalski /kowalski/data /kowalski/logs /_tmp
 
-# copy over the config and the code
-COPY ["config.yaml", "version.txt", "kowalski/generate_supervisord_conf.py",\
-      "kowalski/middlewares.py", "kowalski/utils.py",\
-      "kowalski/components_api.yaml", "kowalski/api.py", "kowalski/requirements_api.txt", "tests/test_api.py",\
-      "/app/"]
+WORKDIR /kowalski
 
-# change working directory to /app
-WORKDIR /app
+COPY requirements/ requirements/
+
+COPY config.defaults.yaml config.defaults.yaml
+COPY docker.yaml config.yaml
+COPY version.txt .
+
+COPY ["kowalski/__init__.py", \
+        "kowalski/utils.py", \
+        "kowalski/config.py", \
+        "kowalski/log.py", \
+        "kowalski/"]
+
+COPY ["kowalski/api/__init__.py", \
+        "kowalski/api/api.py", \
+        "kowalski/api/middlewares.py", \
+        "kowalski/api/components_api.yaml", \
+        "kowalski/api/"]
+
+COPY ["kowalski/tools/__init__.py", \
+        "kowalski/tools/check_app_environment.py", \
+        "kowalski/tools/generate_supervisord_conf.py", \
+        "kowalski/tools/pip_install_requirements.py", \
+        "kowalski/tools/watch_logs.py", \
+        "kowalski/tools/"]
+
+COPY kowalski/tests/test_api.py kowalski/tests/
+
+COPY conf/supervisord_api.conf.template conf/
+
+COPY Makefile .
+
 
 # upgrade pip
 RUN pip install --upgrade pip
 
 # install python libs and generate supervisord config file
-RUN pip install -r /app/requirements_api.txt --no-cache-dir && \
-    python generate_supervisord_conf.py api
+RUN pip install -r requirements/requirements.txt --no-cache-dir && \
+    pip install -r requirements/requirements_api.txt --no-cache-dir
 
 # run container
-#CMD python api.py
-CMD /usr/local/bin/supervisord -n -c supervisord_api.conf
+CMD make run_api

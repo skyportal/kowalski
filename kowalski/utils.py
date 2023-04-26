@@ -19,8 +19,6 @@ __all__ = [
     "init_db_sync",
     "jd_to_date",
     "jd_to_datetime",
-    "load_config",
-    "log",
     "memoize",
     "mjd_to_datetime",
     "Mongo",
@@ -42,9 +40,9 @@ import hashlib
 import inspect
 import io
 import math
-import os
 import secrets
 import string
+import sys
 import time
 import traceback
 from contextlib import contextmanager
@@ -56,19 +54,39 @@ import bson.json_util as bju
 import numpy as np
 import pandas as pd
 import pymongo
-import yaml
 from astropy.io import fits
 from motor.motor_asyncio import AsyncIOMotorClient
 from numba import jit
 from pymongo.errors import BulkWriteError
 from requests.adapters import HTTPAdapter
 
-LOG_DIR = os.getenv("KOWALSKI_LOG_DIR", "./logs")
+from kowalski.log import time_stamp, log
+
+LOG_DIR = "./logs"
 
 pi = 3.141592653589793
 
 
 DEFAULT_TIMEOUT = 5  # seconds
+
+
+@contextmanager
+def status(message):
+    """
+    Borrowed from https://github.com/cesium-ml/baselayer/
+
+    :param message: message to print
+    :return:
+    """
+    print(f"[·] {message}", end="")
+    sys.stdout.flush()
+    try:
+        yield
+    except Exception:
+        print(f"\r[✗] {message}")
+        raise
+    else:
+        print(f"\r[✓] {message}")
 
 
 class TimeoutHTTPAdapter(HTTPAdapter):
@@ -87,37 +105,6 @@ class TimeoutHTTPAdapter(HTTPAdapter):
             return super().send(request, **kwargs)
         except AttributeError:
             kwargs["timeout"] = DEFAULT_TIMEOUT
-
-
-def load_config(path="/app", config_file="config.yaml"):
-    """
-    Load config and secrets
-    """
-    with open(os.path.join(path, config_file)) as cyaml:
-        config = yaml.load(cyaml, Loader=yaml.FullLoader)
-
-    return config
-
-
-def time_stamp():
-    """
-
-    :return: UTC time -> string
-    """
-    return datetime.datetime.utcnow().strftime("%Y%m%d_%H:%M:%S")
-
-
-def log(message):
-    timestamp = time_stamp()
-    print(f"{timestamp}: {message}")
-
-    if not os.path.isdir(LOG_DIR):
-        os.mkdir(LOG_DIR)
-
-    date = timestamp.split("_")[0]
-    with open(os.path.join(LOG_DIR, f"kowalski_{date}.log"), "a") as logfile:
-        logfile.write(f"{timestamp}: {message}\n")
-        logfile.flush()
 
 
 def forgiving_true(expression):

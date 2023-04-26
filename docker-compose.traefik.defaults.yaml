@@ -3,6 +3,7 @@ version: "3.7"
 volumes:
   mongodb:
   data:
+  logs:
 
 services:
 
@@ -42,7 +43,8 @@ services:
     #    entrypoint: python -m pytest -s test_api.py
     image: dmitryduev/kowalski_api:latest
     volumes:
-      - data:/data
+      - data:/kowalski/data
+      - logs:/kowalski/logs
     expose:
       - "4000"
     # fixme: comment out ports if deploying behind traefik
@@ -79,7 +81,8 @@ services:
     ports:
       - "8787:8787"
     volumes:
-      - data:/data
+      - data:/kowalski/data
+      - logs:/kowalski/logs
     links:
       - mongo:kowalski-mongo
     restart: always

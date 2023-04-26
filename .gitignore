@@ -9,4 +9,6 @@ mongo_key.yaml
 version.txt
 /kafka*
 models/
-logs
+logs/
+conf/*
+!conf/*.template

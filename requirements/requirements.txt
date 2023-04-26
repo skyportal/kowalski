@@ -1,0 +1,8 @@
+deepdiff==6.2.3
+fire==0.5.0
+gsutil==5.20
+jinja2>=2.11.2
+PyYAML==6.0
+questionary==1.10.0
+requests==2.28.2
+supervisor==4.2.5

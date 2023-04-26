@@ -1,0 +1,5 @@
+kowalski:
+  database:
+    host: "mongo"
+    port: 27017 # if not null, must be same as in entrypoint of mongo container
+    replica_set: "rs0"

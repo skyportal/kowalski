@@ -14,30 +14,45 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
-      - uses: actions/setup-python@v1
+      - uses: actions/setup-python@v2
         with:
-          python-version: "3.8"
+          python-version: "3.10"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install "wheel>=0.36.0"
-          pip install -r requirements.txt
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/pip
+          key: ${{ runner.os }}-${{ hashFiles('**/requirements*.txt') }}
       - name: Set up configs
-        run: |
-          cp config.defaults.yaml config.yaml
-          cp docker-compose.defaults.yaml docker-compose.yaml
-      - name: Build and spin up
-        run: |
-          ./kowalski.py up --build
-      - name: Patch config and run tests
         env:
           TNS_BOT_ID: ${{ secrets.TNS_BOT_ID }}
           TNS_BOT_NAME: ${{ secrets.TNS_BOT_NAME }}
           TNS_API_KEY: ${{ secrets.TNS_API_KEY }}
         run: |
-          python tools/patch_yaml.py config.yaml \
-            --kowalski.tns.bot_id=$TNS_BOT_ID \
-            --kowalski.tns.bot_name=$TNS_BOT_NAME \
-            --kowalski.tns.api_key=$TNS_API_KEY
-          docker cp config.yaml kowalski_ingester_1:/app/
-          ./kowalski.py test
+          cp docker-compose.defaults.yaml docker-compose.yaml
+          cat << EOF >> docker.yaml
+            tns:
+              url: https://www.wis-tns.org
+              bot_id: $TNS_BOT_ID
+              bot_name: $TNS_BOT_NAME
+              api_key: $TNS_API_KEY
+          EOF
+      - name: Build and spin up
+        run: make docker_build && make docker_up
+      - name: Cooldown to let the app start
+        run: sleep 10
+      - name: Run tests
+        run: make docker_test
+      - name: Collect Docker Logs
+        uses: jwalton/gh-docker-logs@v2.2.1
+        with:
+          images: 'dmitryduev/kowalski_ingester,dmitryduev/kowalski_api,kowalski_mongo'
+          dest: './logs'
+      - name: Upload logs
+        uses: actions/upload-artifact@v2
+        with:
+          name: logs
+          path: ./logs
