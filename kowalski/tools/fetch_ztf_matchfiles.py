@@ -96,7 +96,7 @@ def fetch_url(argument_list: Sequence):
 
 def run(
     tag: str = "20210401",
-    path_out: str = "./",
+    path_out: str = "./data/",
     force: bool = False,
     upload_to_gcp: bool = False,
     remove_upon_upload_to_gcp: bool = False,

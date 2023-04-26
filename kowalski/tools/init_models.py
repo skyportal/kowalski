@@ -53,9 +53,15 @@ def init_models():
                     )
                     existing_models.append(name)
                     continue
-                os.system(
-                    f"wget -O {os.path.join('models', instrument.lower(), name)} {model['url']}"
-                )
+                if "://" not in model["url"]:
+                    # its a path on disk, so copy the file over
+                    os.system(
+                        f"cp {model['url']} {os.path.join('models', instrument.lower(), name)}"
+                    )
+                else:
+                    os.system(
+                        f"wget -O {os.path.join('models', instrument.lower(), name)} {model['url']}"
+                    )
                 downloaded_models.append(name)
 
             if format == "pb":
@@ -68,9 +74,15 @@ def init_models():
                     )
                     existing_models.append(name)
                     continue
-                os.system(
-                    f"wget -O {os.path.join('models', instrument.lower(), name)} {model['url']}"
-                )
+                if "://" not in model["url"]:
+                    # its a path on disk, so copy the file over
+                    os.system(
+                        f"cp {model['url']} {os.path.join('models', instrument.lower(), name)}"
+                    )
+                else:
+                    os.system(
+                        f"wget -O {os.path.join('models', instrument.lower(), name)} {model['url']}"
+                    )
                 os.system(
                     f"tar -xvf {os.path.join('models', instrument.lower(), name)} -C {os.path.join('models', instrument.lower())}"
                 )
