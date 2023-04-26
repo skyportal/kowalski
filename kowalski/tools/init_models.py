@@ -66,7 +66,7 @@ def init_models():
 
             if format == "pb":
                 # here instead, we want to download the model (which will be a compressed tarball) and extract it in a directory with the name of the model
-                name = f"{model_name}.{model['version']}.pb"
+                name = f"{model_name}.{model['version']}"
                 # first check if the model already exists
                 if os.path.exists(os.path.join("models", instrument.lower(), name)):
                     print(
@@ -77,14 +77,14 @@ def init_models():
                 if "://" not in model["url"]:
                     # its a path on disk, so copy the file over
                     os.system(
-                        f"cp {model['url']} {os.path.join('models', instrument.lower(), name)}"
+                        f"cp {model['url']} {os.path.join('models', instrument.lower(), name + '.tar.gz')}"
                     )
                 else:
                     os.system(
-                        f"wget -O {os.path.join('models', instrument.lower(), name)} {model['url']}"
+                        f"wget -O {os.path.join('models', instrument.lower(), name + '.tar.gz')} {model['url']}"
                     )
                 os.system(
-                    f"tar -xvf {os.path.join('models', instrument.lower(), name)} -C {os.path.join('models', instrument.lower())}"
+                    f"tar -xvf {os.path.join('models', instrument.lower(), name + '.tar.gz')} -C {os.path.join('models', instrument.lower())}"
                 )
                 downloaded_models.append(name)
 
