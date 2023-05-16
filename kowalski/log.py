@@ -2,6 +2,9 @@ import datetime
 import os
 
 LOG_DIR = "./logs"
+USING_DOCKER = os.environ.get("USING_DOCKER", False)
+if USING_DOCKER:
+    LOG_DIR = "/data/logs"
 
 
 def time_stamp():

@@ -97,7 +97,9 @@ def fetch_url(argument_list: Sequence):
 def run(
     tag: str = "20210401",
     path_out: str = "./data/",
-    force: bool = False,
+    refresh_csv: bool = False,
+    csv_only: bool = False,
+    only_download_missing: bool = False,
     upload_to_gcp: bool = False,
     remove_upon_upload_to_gcp: bool = False,
 ):
@@ -105,7 +107,9 @@ def run(
 
     :param tag: matchfiles release time tag
     :param path_out: output path for fetched data
-    :param force: forcefully reload url list and re-try fetching everything
+    :param refresh_csv: forcefully reload url list and re-try fetching everything
+    :param csv_only: only fetch urls and store them in a csv file, do not download
+    :param only_download_missing: only download matchfiles that are not on disk yet
     :param upload_to_gcp: upload to Google Cloud Storage?
     :param remove_upon_upload_to_gcp: remove afterwards?
     :return:
@@ -118,8 +122,9 @@ def run(
     n_rc = 64
 
     path_urls = pathlib.Path(path_out) / f"ztf_matchfiles_{tag}.csv"
+    path_exists = path_urls.exists()
 
-    if not path_urls.exists() or force:
+    if not path_exists or refresh_csv:
         # store urls
         urls = []
 
@@ -138,59 +143,80 @@ def run(
         df_mf = pd.read_csv(path_urls)
         print(df_mf)
 
-    # check what's (already) on GCS:
-    on_cloud = []
-    if upload_to_gcp:
-        for readout_channel in tqdm(range(0, n_rc), total=n_rc):
-            on_cloud_readout_channel = (
-                subprocess.check_output(
+    if not csv_only:
+        # check what's (already) on GCS:
+        on_cloud = []
+        if upload_to_gcp:
+            for readout_channel in tqdm(range(0, n_rc), total=n_rc):
+                on_cloud_readout_channel = (
+                    subprocess.check_output(
+                        [
+                            "gsutil",
+                            "ls",
+                            f"gs://ztf-matchfiles-{tag}/{readout_channel}/",
+                        ]
+                    )
+                    .decode("utf-8")
+                    .strip()
+                    .split("\n")
+                )
+                on_cloud.extend(
                     [
-                        "gsutil",
-                        "ls",
-                        f"gs://ztf-matchfiles-{tag}/{readout_channel}/",
+                        pathlib.Path(table).name
+                        for table in on_cloud_readout_channel
+                        if table.endswith("pytable")
                     ]
                 )
-                .decode("utf-8")
-                .strip()
-                .split("\n")
+
+        # matchfiles that are not on GCS:
+        mask_to_be_fetched = ~(df_mf["name"].isin(on_cloud))
+
+        print(f"Downloading {mask_to_be_fetched.sum()} matchfiles:")
+
+        argument_lists = [
+            (path, row.url) for row in df_mf.loc[mask_to_be_fetched].itertuples()
+        ]
+
+        total = len(argument_lists)
+
+        if path_exists and only_download_missing:
+            # remove the ones that are already downloaded
+            argument_lists = [
+                argument_list
+                for argument_list in argument_lists
+                if not (path / pathlib.Path(argument_list[1]).name).exists()
+            ]
+            print(
+                f"{total - len(argument_lists)} matchfiles already downloaded, only downloading {len(argument_lists)}"
             )
-            on_cloud.extend(
+
+        # download
+        with mp.Pool(processes=4) as pool:
+            for _ in tqdm(
+                pool.imap(fetch_url, argument_lists), total=len(argument_lists)
+            ):
+                pass
+
+        # move to GCS:
+        if upload_to_gcp:
+            # move to gs
+            subprocess.run(
                 [
-                    pathlib.Path(table).name
-                    for table in on_cloud_readout_channel
-                    if table.endswith("pytable")
+                    "gsutil",
+                    "-m",
+                    "mv",
+                    str(path / "*.pytable"),
+                    f"gs://ztf-matchfiles-{tag}/",
                 ]
             )
+            # remove locally
+            if remove_upon_upload_to_gcp:
+                subprocess.run(["rm", "rf", f"/_tmp/ztf_matchfiles_{tag}/"])
 
-    # matchfiles that are not on GCS:
-    mask_to_be_fetched = ~(df_mf["name"].isin(on_cloud))
-
-    print(f"Downloading {mask_to_be_fetched.sum()} matchfiles:")
-
-    argument_lists = [
-        (path, row.url) for row in df_mf.loc[mask_to_be_fetched].itertuples()
-    ]
-
-    # download
-    with mp.Pool(processes=4) as pool:
-        for _ in tqdm(pool.imap(fetch_url, argument_lists), total=len(argument_lists)):
-            pass
-
-    # move to GCS:
-    if upload_to_gcp:
-        # move to gs
-        subprocess.run(
-            [
-                "gsutil",
-                "-m",
-                "mv",
-                str(path / "*.pytable"),
-                f"gs://ztf-matchfiles-{tag}/",
-            ]
-        )
-        # remove locally
-        if remove_upon_upload_to_gcp:
-            subprocess.run(["rm", "rf", f"/_tmp/ztf_matchfiles_{tag}/"])
+    else:
+        print("CSV only, skipping download and upload to GCS")
+        # print how many matchfiles are listed in the csv
+        print(f"CSV lists {len(df_mf)} matchfiles")
 
 
 if __name__ == "__main__":
