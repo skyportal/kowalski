@@ -84,8 +84,30 @@ sources_fields_to_exclude = [
 ]
 
 
+def track_failures(tag, file_name, exception):
+    # we want the process file method to be able to save to a csv file
+    # the file name and exception that occured if any
+    # this way we can track which files failed to process, why, and reprocess them later
+    # the csv file will be used by the ingest_ztf_matchfiles.py script
+    # to reprocess the failed files
+
+    # path is extracted from the file name (e.g. /data/20230309/ztf_123456_zg_c01_q1_match.pytable)
+    # will give us /data/20230309
+    path = "/".join(file_name.split("/")[:-1])
+    output = f"{path}/ztf_matchfiles_failures_{str(tag)}.csv"
+    if not os.path.isfile(output):
+        with open(output, "w") as f:
+            f.write("file_name,exception\n")
+
+    # both need to be one line strings to be read properly
+    # as the exception can contain commas, we need to replace them with semicolons
+    with open(output, "a") as f:
+        exception = str(exception).replace(",", ";").replace("\n", " ")
+        f.write(f"{file_name},{exception}\n")
+
+
 def process_file(argument_list: Sequence):
-    file_name, collections, batch_size, rm_file, dry_run = argument_list
+    file_name, collections, tag, batch_size, rm_file, dry_run = argument_list
     try:
         # connect to MongoDB:
         mongo = Mongo(
@@ -317,6 +339,7 @@ def process_file(argument_list: Sequence):
         traceback.print_exc()
         log(e)
         # if there was an error, return without potentially deleting the file
+        track_failures(tag=tag, file_name=file_name, exception=e)
         return
 
     try:
@@ -333,6 +356,7 @@ def run(
     batch_size: int = 2048,
     rm: bool = False,
     dry_run: bool = False,
+    failures_only: bool = False,
 ):
     """Preprocess and Ingest ZTF matchfiles into Kowalski
 
@@ -342,6 +366,7 @@ def run(
     :param batch_size: batch size for light curve data ingestion
     :param rm: remove matchfiles after ingestion?
     :param dry_run: dry run?
+    :param failures_only: ingest only failed matchfiles?
     :return:
     """
     # connect to MongoDB:
@@ -387,9 +412,35 @@ def run(
 
     files = [str(f) for f in pathlib.Path(path).glob("ztf_*.pytable")]
 
-    log(f"# files to process: {len(files)}")
+    if failures_only:
+        # find the csv files that has the list of failed matchfiles and the exception
+        # this file is located where the matchfiles are.
+        # there could be multiple files, so we need to find the latest one
+        # the name format is ztf_matchfiles_failures_YYYYMMDD_HHMMSS.csv
+        # the file contains two columns: matchfile name and exception
 
-    input_list = [(f, collections, batch_size, rm, dry_run) for f in sorted(files)]
+        # find all csv files, sort by timestamp and get the latest one
+        csv_files = [
+            str(f) for f in pathlib.Path(path).glob("ztf_matchfiles_failures_*.csv")
+        ]
+        csv_files_timestamps = [(f, os.path.getmtime(f)) for f in csv_files]
+        csv_files_timestamps.sort(key=lambda x: x[1])
+        csv_file = csv_files_timestamps[-1][0]
+
+        # read the csv file and get the list of failed matchfiles to filter the list of files
+        df = pd.read_csv(csv_file)
+        failed_matchfiles = df["file_name"].tolist()
+        files = [f for f in files if f in failed_matchfiles]
+        print(f"Only processing {len(files)} failed matchfiles")
+    else:
+        log(f"# files to process: {len(files)}")
+
+    # the tag_ingestion will be used when keeping track of failures for a given ingestion
+    tag_ingestion = f"{tag}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+    input_list = [
+        (f, collections, tag_ingestion, batch_size, rm, dry_run) for f in sorted(files)
+    ]
     # for a more even job distribution:
     random.shuffle(input_list)
 
