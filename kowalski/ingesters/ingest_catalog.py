@@ -28,6 +28,7 @@ def process_file(
     collection,
     ra_col=None,
     dec_col=None,
+    id_col=None,
     batch_size=2048,
     max_docs=None,
     format="fits",
@@ -72,6 +73,21 @@ def process_file(
 
         if max_docs is not None and isinstance(max_docs, int):
             dataframe = dataframe.iloc[:max_docs]
+
+        if id_col is not None:
+            if id_col not in names:
+                log(f"Provided ID column {id_col} not found")
+                return
+            if dataframe[id_col].isnull().values.any():
+                log(f"ID column {id_col} has null values")
+                return
+            if not isinstance(dataframe[id_col].iloc[0], str):
+                if not isinstance(dataframe[id_col].iloc[0], (int, np.integer)):
+                    log(f"ID column {id_col} is not a string or an integer")
+                    return
+                if dataframe[id_col].iloc[0] < 0:
+                    log(f"ID column {id_col} has negative values")
+                    return
 
         if ra_col is None:
             try:
@@ -122,6 +138,13 @@ def process_file(
                 for document in batch
             ]
 
+            if id_col is not None:
+                for document in batch:
+                    if id_col not in document.keys():
+                        log(f"Provided ID column {id_col} not found")
+                        return
+                    document["_id"] = document.pop(id_col)
+
             bad_document_indexes = []
 
             for document_index, document in enumerate(batch):
@@ -167,6 +190,25 @@ def process_file(
 
             names = list(dataframe_chunk.columns)
             log(f"{file}: processing batch # {chunk_index + 1}")
+
+            if id_col is not None:
+                if id_col not in names:
+                    log(f"Provided ID column {id_col} not found")
+                    return
+                # if there is any row where this is None, return
+                if dataframe_chunk[id_col].isnull().values.any():
+                    log(f"ID column {id_col} has null values")
+                    return
+                if not isinstance(dataframe_chunk[id_col].iloc[0], str):
+                    if not isinstance(
+                        dataframe_chunk[id_col].iloc[0], (int, np.integer)
+                    ):
+                        log(f"ID column {id_col} is not a string or an integer")
+                        return
+                    if dataframe_chunk[id_col].iloc[0] < 0:
+                        log(f"ID column {id_col} has negative values")
+                        return
+
             if ra_col is None:
                 try:
                     ra_col = [col for col in names if col.lower() in ["ra", "objra"]][0]
@@ -197,6 +239,13 @@ def process_file(
             dataframe_chunk = dataframe_chunk[dataframe_chunk["Quality_flag"] == 0]
 
             batch = dataframe_chunk.to_dict(orient="records")
+
+            if id_col is not None:
+                for document in batch:
+                    if id_col not in document.keys():
+                        log(f"Provided ID column {id_col} not found")
+                        return
+                    document["_id"] = document.pop(id_col)
 
             bad_document_indexes = []
 
@@ -232,6 +281,21 @@ def process_file(
     elif format == "parquet":
         df = pq.read_table(file).to_pandas()
         names = list(df.columns)
+        if id_col is not None:
+            if id_col not in names:
+                log(f"Provided ID column {id_col} not found")
+                return
+            # if there is any row where this is None, return
+            if df[id_col].isnull().values.any():
+                log(f"ID column {id_col} has null values")
+                return
+            if not isinstance(df[id_col].iloc[0], str):
+                if not isinstance(df[id_col].iloc[0], (int, np.integer)):
+                    log(f"ID column {id_col} is not a string or an integer")
+                    return
+                if df[id_col].iloc[0] < 0:
+                    log(f"ID column {id_col} has negative values")
+                    return
         if ra_col is None:
             try:
                 ra_col = [col for col in names if col.lower() in ["ra", "objra"]][0]
@@ -295,6 +359,12 @@ def process_file(
                         document[k] = None
                     else:
                         document[k] = v
+
+                if id_col is not None:
+                    if id_col not in document.keys():
+                        log(f"Provided ID column {id_col} not found")
+                        return
+                    document["_id"] = document.pop(id_col)
 
                 # if there is already a key called radec_geojson, then delete it
                 if "radec_geojson" in document.keys():
@@ -364,6 +434,7 @@ def run(
     path: str = "./data/catalogs",
     ra_col: str = None,
     dec_col: str = None,
+    id_col: str = None,
     batch_size: int = 2048,
     max_docs: int = None,
     format: str = "fits",
@@ -394,7 +465,14 @@ def run(
     )
 
     total_good_documents, total_bad_documents = process_file(
-        path, catalog_name, ra_col, dec_col, batch_size, max_docs, format
+        path,
+        catalog_name,
+        ra_col,
+        dec_col,
+        id_col,
+        batch_size,
+        max_docs,
+        format,
     )
     return total_good_documents, total_bad_documents
 
