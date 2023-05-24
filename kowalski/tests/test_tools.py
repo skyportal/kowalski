@@ -297,6 +297,7 @@ class TestTools:
             path="data/catalogs/ztf_000250_zg_c01_q1_dr5.parquet",
             batch_size=10,
             max_docs=100,
+            id_col="objectid",
             format="parquet",
         )
 
