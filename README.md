@@ -459,7 +459,7 @@ The best way to see if the model is being loaded correctly is to run the broker 
 
 ### Ingest Catalogs in Kowalski (fits, csv)
 
-To ingest a new catalog into Kowalski from a fits, csv, or parquet file, you can use the `ingest_catalog.py` script in the `tools` directory. To use it, run:
+To ingest a new catalog into Kowalski from a fits, csv, or parquet file, you can use the `ingest_catalog.py` script in the `ingesters` directory. To use it, run:
 
 ```bash
 PYTHONPATH=. python kowalski/ingesters/ingest_catalog.py --catalog_name="TEST" --path="data/catalogs/<your_file.fits_csv_or_parquet>" --max_docs=500 --ra_col="RA" --dec_col="DEC" --format="<fits_csv_or_parquet>"
