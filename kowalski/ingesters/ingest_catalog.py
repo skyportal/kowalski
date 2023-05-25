@@ -192,9 +192,6 @@ def process_file(
                 if dec_col not in names:
                     log(f"Provided Dec column {dec_col} not found")
                     return
-            # dataframe_chunk = dataframe_chunk[names]
-            dataframe_chunk = dataframe_chunk[dataframe_chunk["Duplicate_flag"] < 2]
-            dataframe_chunk = dataframe_chunk[dataframe_chunk["Quality_flag"] == 0]
 
             batch = dataframe_chunk.to_dict(orient="records")
 
