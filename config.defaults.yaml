@@ -730,8 +730,8 @@ kowalski:
           use_distance: True
           distance_value: "z"
           distance_method: "redshift"
-          cm_at_redshift: 30 # in kpc
-          cm_low_redshift: 5 # arcsec
+          cm_at_distance: 30 # in kpc
+          cm_low_distance: 300 # arcsec
           filter: {}
           projection:
             _id: 1
@@ -753,8 +753,8 @@ kowalski:
           use_distance: True
           distance_value: "DistMpc"
           distance_method: "mpc"
-          cm_at_redshift: 30 # in kpc
-          cm_low_redshift: 5 # arcsec
+          cm_at_distance: 30 # in kpc
+          cm_low_distance: 300 # arcsec
           filter: {}
           projection:
             _id: 1
@@ -928,8 +928,8 @@ kowalski:
           use_distance: True
           distance_value: "z"
           distance_method: "redshift"
-          cm_at_redshift: 30 # in kpc
-          cm_low_redshift: 5 # arcsec
+          cm_at_distance: 30 # in kpc
+          cm_low_distance: 300 # arcsec
           filter: {}
           projection:
             _id: 1
@@ -1084,8 +1084,8 @@ kowalski:
           use_distance: True
           distance_value: "z"
           distance_method: "redshift"
-          cm_at_redshift: 30 # in kpc
-          cm_low_redshift: 5 # arcsec
+          cm_at_distance: 30 # in kpc
+          cm_low_distance: 5 # arcsec
           filter: {}
           projection:
             _id: 1

@@ -940,8 +940,8 @@ class AlertWorker:
         matches = []
 
         try:
-            catalog_cm_at_redshift = cross_match_config[catalog]["cm_at_redshift"]
-            catalog_cm_low_redshift = cross_match_config[catalog]["cm_low_redshift"]
+            catalog_cm_at_distance = cross_match_config[catalog]["cm_at_distance"]
+            catalog_cm_low_distance = cross_match_config[catalog]["cm_low_distance"]
             # cone search radius:
             catalog_cone_search_radius = float(
                 cross_match_config[catalog]["cone_search_radius"]
@@ -1031,22 +1031,22 @@ class AlertWorker:
                             if redshift < 0.01:
                                 # for nearby galaxies and galaxies with negative redshifts, do a 5 arc-minute cross-match
                                 # (cross-match radius would otherwise get un-physically large for nearby galaxies)
-                                cm_radius = catalog_cm_low_redshift / 3600
+                                cm_radius = catalog_cm_low_distance / 3600
                             else:
                                 # For distant galaxies, set the cross-match radius to 30 kpc at the redshift of the host galaxy
                                 cm_radius = (
-                                    catalog_cm_at_redshift * (0.05 / redshift) / 3600
+                                    catalog_cm_at_distance * (0.05 / redshift) / 3600
                                 )
                         else:
                             distmpc = galaxy[distance_value]
 
-                            if distmpc < 5:  # TODO: discuss what this value should be
-                                cm_radius = catalog_cm_low_redshift / 3600
+                            if distmpc < 40:  # TODO: discuss what this value should be
+                                cm_radius = catalog_cm_low_distance / 3600
                             else:
                                 # For distant galaxies, set the cross-match radius to 30 kpc at the distance (in Mpc) of the host galaxy
                                 cm_radius = np.rad2deg(
                                     np.arctan(
-                                        catalog_cm_at_redshift / (distmpc * 10**3)
+                                        catalog_cm_at_distance / (distmpc * 10**3)
                                     )
                                 )
 
@@ -1068,8 +1068,13 @@ class AlertWorker:
                                     * (redshift / 0.05),
                                     2,
                                 )
-                            elif distmpc is not None:
-                                distance_kpc = distmpc * 10**3
+                            elif distmpc > 0.005:
+                                distance_kpc = round(
+                                    great_circle_distance(ra, dec, alpha1, delta01)
+                                    * distmpc
+                                    * 10**3,
+                                    2,
+                                )
                             else:
                                 distance_kpc = -1
 
