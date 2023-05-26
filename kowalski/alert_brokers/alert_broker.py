@@ -1070,7 +1070,9 @@ class AlertWorker:
                                 )
                             elif distmpc > 0.005:
                                 distance_kpc = round(
-                                    great_circle_distance(ra, dec, alpha1, delta01)
+                                    np.deg2rad(
+                                        great_circle_distance(ra, dec, alpha1, delta01)
+                                    )
                                     * distmpc
                                     * 10**3,
                                     2,
