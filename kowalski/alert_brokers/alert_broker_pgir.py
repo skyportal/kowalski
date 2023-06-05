@@ -87,14 +87,6 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
                 f"Cross-match of {object_id} {candid}", alert_worker.verbose > 1
             ):
                 xmatches = alert_worker.alert_filter__xmatch(alert)
-            # CLU cross-match:
-            with timer(
-                f"CLU cross-match {object_id} {candid}", alert_worker.verbose > 1
-            ):
-                xmatches = {
-                    **xmatches,
-                    **alert_worker.alert_filter__xmatch_clu(alert),
-                }
 
             # Crossmatch new alert with most recent ZTF_alerts and insert
             with timer(

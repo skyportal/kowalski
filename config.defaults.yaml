@@ -724,6 +724,69 @@ kowalski:
             yMeanPSFMag: 1
             yMeanPSFMagErr: 1
 
+        CLU_20190625:
+          cone_search_radius: 3
+          cone_search_unit: "deg"
+          use_distance: True
+          distance_value: "z"
+          distance_method: "redshift"
+          cm_at_distance: 30 # in kpc
+          cm_low_distance: 300 # arcsec
+          filter: {}
+          projection:
+            _id: 1
+            name: 1
+            ra: 1
+            dec: 1
+            a: 1
+            b2a: 1
+            pa: 1
+            z: 1
+            sfr_fuv: 1
+            mstar: 1
+            sfr_ha: 1
+            coordinates.radec_str: 1
+
+        NED_BetaV3:
+          cone_search_radius: 3
+          cone_search_unit: "deg"
+          use_distance: True
+          distance_value: "DistMpc"
+          distance_method: "mpc"
+          cm_at_distance: 30 # in kpc
+          cm_low_distance: 300 # arcsec
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            ra: 1
+            dec: 1
+            objname: 1
+            objtype: 1
+            z: 1
+            z_unc: 1
+            z_tech: 1
+            z_qual: 1
+            DistMpc: 1
+            DistMpc_unc: 1
+            ebv: 1
+            m_Ks: 1
+            m_Ks_unc: 1
+            tMASSphot: 1
+            Mstar: 1
+            Mstar_unc: 1
+
+        milliquas:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            Name: 1
+            Descrip: 1
+            Qpct: 1
+
       PGIR:
         2MASS_PSC:
           cone_search_radius: 8
@@ -870,6 +933,29 @@ kowalski:
             yMeanPSFMag: 1
             yMeanPSFMagErr: 1
 
+        CLU_20190625:
+          cone_search_radius: 3
+          cone_search_unit: "deg"
+          use_distance: True
+          distance_value: "z"
+          distance_method: "redshift"
+          cm_at_distance: 30 # in kpc
+          cm_low_distance: 300 # arcsec
+          filter: {}
+          projection:
+            _id: 1
+            name: 1
+            ra: 1
+            dec: 1
+            a: 1
+            b2a: 1
+            pa: 1
+            z: 1
+            sfr_fuv: 1
+            mstar: 1
+            sfr_ha: 1
+            coordinates.radec_str: 1
+
       WNTR:
         2MASS_PSC:
           cone_search_radius: 2
@@ -1002,6 +1088,29 @@ kowalski:
             zMeanPSFMagErr: 1
             yMeanPSFMag: 1
             yMeanPSFMagErr: 1
+
+        CLU_20190625:
+          cone_search_radius: 3
+          cone_search_unit: "deg"
+          use_distance: True
+          distance_value: "z"
+          distance_method: "redshift"
+          cm_at_distance: 30 # in kpc
+          cm_low_distance: 5 # arcsec
+          filter: {}
+          projection:
+            _id: 1
+            name: 1
+            ra: 1
+            dec: 1
+            a: 1
+            b2a: 1
+            pa: 1
+            z: 1
+            sfr_fuv: 1
+            mstar: 1
+            sfr_ha: 1
+            coordinates.radec_str: 1
 
   ml:
     ZTF:

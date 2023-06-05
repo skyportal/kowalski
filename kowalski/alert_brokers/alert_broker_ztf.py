@@ -87,14 +87,6 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 f"Cross-match of {object_id} {candid}", alert_worker.verbose > 1
             ):
                 xmatches = alert_worker.alert_filter__xmatch(alert)
-            # CLU cross-match:
-            with timer(
-                f"CLU cross-match {object_id} {candid}", alert_worker.verbose > 1
-            ):
-                xmatches = {
-                    **xmatches,
-                    **alert_worker.alert_filter__xmatch_clu(alert),
-                }
 
             alert_aux = {
                 "_id": object_id,

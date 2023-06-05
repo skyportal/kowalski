@@ -1,6 +1,5 @@
 __all__ = ["AlertConsumer", "AlertWorker", "EopError"]
 
-from ast import literal_eval as make_tuple
 import base64
 import datetime
 import gzip
@@ -28,6 +27,9 @@ from astropy.visualization import (
     LogStretch,
 )
 from requests.packages.urllib3.util.retry import Retry
+
+from kowalski.config import load_config
+from kowalski.log import log
 from kowalski.utils import (
     Mongo,
     TimeoutHTTPAdapter,
@@ -41,8 +43,6 @@ from kowalski.utils import (
     time_stamp,
     timer,
 )
-from kowalski.config import load_config
-from kowalski.log import log
 
 # Tensorflow is problematic for Mac's currently, so we can add an option to disable it
 USE_TENSORFLOW = os.environ.get("USE_TENSORFLOW", True) in [
@@ -302,7 +302,7 @@ class AlertWorker:
         )
         if isinstance(self.allowed_features, str):
             try:
-                self.allowed_features = make_tuple(self.allowed_features)
+                self.allowed_features = literal_eval(self.allowed_features)
             except Exception:
                 log(
                     f"Invalid format for ml.{self.instrument}.allowed_features, must be a tuple of strings"
@@ -363,7 +363,7 @@ class AlertWorker:
                         model_feature_names = self.allowed_features
                     if isinstance(model_feature_names, str):
                         try:
-                            model_feature_names = make_tuple(model_feature_names)
+                            model_feature_names = literal_eval(model_feature_names)
                         except Exception:
                             raise ValueError(
                                 f"Invalid ml.{self.instrument}.models.{model}.feature_names, must be a tuple of strings"
@@ -832,6 +832,8 @@ class AlertWorker:
         xmatches = dict()
 
         try:
+            ra = float(alert["candidate"]["ra"])
+            dec = float(alert["candidate"]["dec"])
             ra_geojson = float(alert["candidate"]["ra"])
             # geojson-friendly ra:
             ra_geojson -= 180.0
@@ -840,101 +842,141 @@ class AlertWorker:
             """ catalogs """
             cross_match_config = config["database"]["xmatch"][self.instrument]
             for catalog in cross_match_config:
-                # cone search radius:
-                catalog_cone_search_radius = float(
-                    cross_match_config[catalog]["cone_search_radius"]
+                try:
+                    # if the catalog has "distance", "ra", "dec" in its config, then it is a catalog with distance
+                    if cross_match_config[catalog].get("use_distance", False):
+                        matches = self.alert_filter__xmatch_distance(
+                            ra,
+                            dec,
+                            ra_geojson,
+                            dec_geojson,
+                            catalog,
+                            cross_match_config,
+                        )
+                    else:
+                        matches = self.alert_filter__xmatch_no_distance(
+                            ra_geojson, dec_geojson, catalog, cross_match_config
+                        )
+                except Exception as e:
+                    log(f"Failed to cross-match {catalog}: {str(e)}")
+                    matches = []
+                xmatches[catalog] = matches
+
+        except Exception as e:
+            log(f"Failed catalogs cross-match: {str(e)}")
+
+        return xmatches
+
+    def alert_filter__xmatch_no_distance(
+        self,
+        ra_geojson: float,
+        dec_geojson: float,
+        catalog: str,
+        cross_match_config: dict,
+    ) -> dict:
+        """Cross-match alerts against external catalogs"""
+
+        matches = []
+
+        try:
+            # cone search radius:
+            catalog_cone_search_radius = float(
+                cross_match_config[catalog]["cone_search_radius"]
+            )
+            # convert to rad:
+            if cross_match_config[catalog]["cone_search_unit"] == "arcsec":
+                catalog_cone_search_radius *= np.pi / 180.0 / 3600.0
+            elif cross_match_config[catalog]["cone_search_unit"] == "arcmin":
+                catalog_cone_search_radius *= np.pi / 180.0 / 60.0
+            elif cross_match_config[catalog]["cone_search_unit"] == "deg":
+                catalog_cone_search_radius *= np.pi / 180.0
+            elif cross_match_config[catalog]["cone_search_unit"] == "rad":
+                pass
+            else:
+                raise Exception(
+                    f"Unknown cone search radius units for {catalog}."
+                    " Must be one of [deg, rad, arcsec, arcmin]"
                 )
-                # convert to rad:
-                if cross_match_config[catalog]["cone_search_unit"] == "arcsec":
-                    catalog_cone_search_radius *= np.pi / 180.0 / 3600.0
-                elif cross_match_config[catalog]["cone_search_unit"] == "arcmin":
-                    catalog_cone_search_radius *= np.pi / 180.0 / 60.0
-                elif cross_match_config[catalog]["cone_search_unit"] == "deg":
-                    catalog_cone_search_radius *= np.pi / 180.0
-                elif cross_match_config[catalog]["cone_search_unit"] == "rad":
-                    pass
-                else:
-                    raise Exception(
-                        f"Unknown cone search radius units for {catalog}."
-                        " Must be one of [deg, rad, arcsec, arcmin]"
-                    )
 
-                catalog_filter = cross_match_config[catalog]["filter"]
-                catalog_projection = cross_match_config[catalog]["projection"]
+            catalog_filter = cross_match_config[catalog]["filter"]
+            catalog_projection = cross_match_config[catalog]["projection"]
 
-                object_position_query = dict()
-                object_position_query["coordinates.radec_geojson"] = {
-                    "$geoWithin": {
-                        "$centerSphere": [
-                            [ra_geojson, dec_geojson],
-                            catalog_cone_search_radius,
-                        ]
-                    }
+            object_position_query = dict()
+            object_position_query["coordinates.radec_geojson"] = {
+                "$geoWithin": {
+                    "$centerSphere": [
+                        [ra_geojson, dec_geojson],
+                        catalog_cone_search_radius,
+                    ]
                 }
-                s = self.mongo.db[catalog].find(
-                    {**object_position_query, **catalog_filter}, {**catalog_projection}
-                )
-                xmatches[catalog] = list(s)
+            }
+            s = self.mongo.db[catalog].find(
+                {**object_position_query, **catalog_filter}, {**catalog_projection}
+            )
+            matches = list(s)
 
         except Exception as e:
             log(str(e))
 
-        return xmatches
+        return matches
 
-    def alert_filter__xmatch_clu(
-        self, alert: Mapping, clu_version: str = "CLU_20190625"
+    def alert_filter__xmatch_distance(
+        self,
+        ra: float,
+        dec: float,
+        ra_geojson: float,
+        dec_geojson: float,
+        catalog: str,
+        cross_match_config: dict,
     ) -> dict:
         """
-        Run cross-match with the CLU catalog
+        Run cross-match with catalogs that have a distance value
 
         :param alert:
-        :param clu_version: CLU catalog version
+        :param catalog: name of the catalog (collection) to cross-match with
         :return:
         """
 
-        xmatches = dict()
-
-        # cone search radius in deg:
-        cone_search_radius_clu = 3.0
-        # convert deg to rad:
-        cone_search_radius_clu *= np.pi / 180.0
+        matches = []
 
         try:
-            ra = float(alert["candidate"]["ra"])
-            dec = float(alert["candidate"]["dec"])
+            catalog_cm_at_distance = cross_match_config[catalog]["cm_at_distance"]
+            catalog_cm_low_distance = cross_match_config[catalog]["cm_low_distance"]
+            # cone search radius:
+            catalog_cone_search_radius = float(
+                cross_match_config[catalog]["cone_search_radius"]
+            )
+            # convert to rad:
+            if cross_match_config[catalog]["cone_search_unit"] == "arcsec":
+                catalog_cone_search_radius *= np.pi / 180.0 / 3600.0
+            elif cross_match_config[catalog]["cone_search_unit"] == "arcmin":
+                catalog_cone_search_radius *= np.pi / 180.0 / 60.0
+            elif cross_match_config[catalog]["cone_search_unit"] == "deg":
+                catalog_cone_search_radius *= np.pi / 180.0
+            elif cross_match_config[catalog]["cone_search_unit"] == "rad":
+                pass
 
-            # geojson-friendly ra:
-            ra_geojson = float(alert["candidate"]["ra"]) - 180.0
-            dec_geojson = dec
-
-            catalog_filter = {}
-            catalog_projection = {
-                "_id": 1,
-                "name": 1,
-                "ra": 1,
-                "dec": 1,
-                "a": 1,
-                "b2a": 1,
-                "pa": 1,
-                "z": 1,
-                "sfr_fuv": 1,
-                "mstar": 1,
-                "sfr_ha": 1,
-                "coordinates.radec_str": 1,
-            }
+            catalog_filter = cross_match_config[catalog]["filter"]
+            catalog_projection = cross_match_config[catalog]["projection"]
 
             # first do a coarse search of everything that is around
             object_position_query = dict()
             object_position_query["coordinates.radec_geojson"] = {
                 "$geoWithin": {
-                    "$centerSphere": [[ra_geojson, dec_geojson], cone_search_radius_clu]
+                    "$centerSphere": [
+                        [ra_geojson, dec_geojson],
+                        catalog_cone_search_radius,
+                    ]
                 }
             }
             galaxies = list(
-                self.mongo.db[clu_version].find(
+                self.mongo.db[catalog].find(
                     {**object_position_query, **catalog_filter}, {**catalog_projection}
                 )
             )
+
+            distance_value = cross_match_config[catalog]["distance_value"]
+            distance_method = cross_match_config[catalog]["distance_method"]
 
             # these guys are very big, so check them separately
             M31 = {
@@ -946,6 +988,7 @@ class AlertWorker:
                 "b2a": 0.32,
                 "pa": 35.0,
                 "z": -0.00100100006,
+                "DistMpc": 0.778,
                 "sfr_fuv": None,
                 "mstar": 253816876.412914,
                 "sfr_ha": 0,
@@ -960,57 +1003,92 @@ class AlertWorker:
                 "b2a": 0.59,
                 "pa": 23.0,
                 "z": -0.000597000006,
+                "DistMpc": 0.869,
                 "sfr_fuv": None,
                 "mstar": 4502777.420493,
                 "sfr_ha": 0,
                 "coordinates": {"radec_str": ["01:33:50.8900", "30:39:36.800"]},
             }
 
-            # do elliptical matches
-            matches = []
+            if distance_value == "z" or distance_method in ["redshift", "z"]:
+                M31[distance_value] = M31["z"]
+                M33[distance_value] = M33["z"]
+            else:
+                M31[distance_value] = M31["DistMpc"]
+                M33[distance_value] = M33["DistMpc"]
 
             for galaxy in galaxies + [M31, M33]:
-                alpha1, delta01 = galaxy["ra"], galaxy["dec"]
+                try:
+                    alpha1, delta01 = galaxy["ra"], galaxy["dec"]
 
-                redshift = galaxy["z"]
+                    redshift, distmpc = None, None
+                    if distance_value == "z" or distance_method in [
+                        "redshift",
+                        "z",
+                    ]:
+                        redshift = galaxy[distance_value]
 
-                if redshift < 0.01:
-                    # for nearby galaxies and galaxies with negative redshifts, do a 5 arc-minute cross-match
-                    # (cross-match radius would otherwise get un-physically large for nearby galaxies)
-                    cm_radius = 300.0 / 3600
+                        if redshift < 0.01:
+                            # for nearby galaxies and galaxies with negative redshifts, do a `catalog_cm_low_distance` arc-minute cross-match
+                            # (cross-match radius would otherwise get un-physically large for nearby galaxies)
+                            cm_radius = catalog_cm_low_distance / 3600
+                        else:
+                            # For distant galaxies, set the cross-match radius to 30 kpc at the redshift of the host galaxy
+                            cm_radius = (
+                                catalog_cm_at_distance * (0.05 / redshift) / 3600
+                            )
+                    else:
+                        distmpc = galaxy[distance_value]
 
-                else:
-                    # For distant galaxies, set the cross-match radius to 30 kpc at the redshift of the host galaxy
-                    cm_radius = 30.0 * (0.05 / redshift) / 3600
+                        if distmpc < 40:
+                            # for nearby galaxies, do a `catalog_cm_low_distance` arc-minute cross-match
+                            cm_radius = catalog_cm_low_distance / 3600
+                        else:
+                            # For distant galaxies, set the cross-match radius to 30 kpc at the distance (in Mpc) of the host galaxy
+                            cm_radius = np.rad2deg(
+                                np.arctan(catalog_cm_at_distance / (distmpc * 10**3))
+                            )
 
-                in_galaxy = in_ellipse(ra, dec, alpha1, delta01, cm_radius, 1, 0)
+                    in_galaxy = in_ellipse(ra, dec, alpha1, delta01, cm_radius, 1, 0)
 
-                if in_galaxy:
-                    match = galaxy
-                    distance_arcsec = round(
-                        great_circle_distance(ra, dec, alpha1, delta01) * 3600, 2
-                    )
-                    # also add a physical distance parameter for redshifts in the Hubble flow
-                    if redshift > 0.005:
-                        distance_kpc = round(
-                            great_circle_distance(ra, dec, alpha1, delta01)
-                            * 3600
-                            * (redshift / 0.05),
+                    if in_galaxy:
+                        match = galaxy
+                        distance_arcsec = round(
+                            great_circle_distance(ra, dec, alpha1, delta01) * 3600,
                             2,
                         )
-                    else:
-                        distance_kpc = -1
+                        # also add a physical distance parameter for redshifts in the Hubble flow
+                        if redshift is not None and redshift > 0.005:
+                            distance_kpc = round(
+                                great_circle_distance(ra, dec, alpha1, delta01)
+                                * 3600
+                                * (redshift / 0.05),
+                                2,
+                            )
+                        elif distmpc > 0.005:
+                            distance_kpc = round(
+                                np.deg2rad(
+                                    great_circle_distance(ra, dec, alpha1, delta01)
+                                )
+                                * distmpc
+                                * 10**3,
+                                2,
+                            )
+                        else:
+                            distance_kpc = -1
 
-                    match["coordinates"]["distance_arcsec"] = distance_arcsec
-                    match["coordinates"]["distance_kpc"] = distance_kpc
-                    matches.append(match)
+                        match["coordinates"]["distance_arcsec"] = distance_arcsec
+                        match["coordinates"]["distance_kpc"] = distance_kpc
+                        matches.append(match)
+                except Exception as e:
+                    log(str(e))
 
-            xmatches[clu_version] = matches
+            return matches
 
         except Exception as e:
             log(str(e))
 
-        return xmatches
+        return matches
 
     def alert_filter__user_defined(
         self,
