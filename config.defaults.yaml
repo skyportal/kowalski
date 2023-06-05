@@ -776,6 +776,17 @@ kowalski:
             Mstar: 1
             Mstar_unc: 1
 
+        milliquas:
+          cone_search_radius: 2
+          cone_search_unit: "arcsec"
+          filter: {}
+          projection:
+            _id: 1
+            coordinates.radec_str: 1
+            Name: 1
+            Descrip: 1
+            Qpct: 1
+
       PGIR:
         2MASS_PSC:
           cone_search_radius: 8
