@@ -1017,74 +1017,71 @@ class AlertWorker:
                 M31[distance_value] = M31["DistMpc"]
                 M33[distance_value] = M33["DistMpc"]
 
-                for galaxy in galaxies + [M31, M33]:
-                    try:
-                        alpha1, delta01 = galaxy["ra"], galaxy["dec"]
+            for galaxy in galaxies + [M31, M33]:
+                try:
+                    alpha1, delta01 = galaxy["ra"], galaxy["dec"]
 
-                        redshift, distmpc = None, None
-                        if distance_value == "z" or distance_method in [
-                            "redshift",
-                            "z",
-                        ]:
-                            redshift = galaxy[distance_value]
+                    redshift, distmpc = None, None
+                    if distance_value == "z" or distance_method in [
+                        "redshift",
+                        "z",
+                    ]:
+                        redshift = galaxy[distance_value]
 
-                            if redshift < 0.01:
-                                # for nearby galaxies and galaxies with negative redshifts, do a 5 arc-minute cross-match
-                                # (cross-match radius would otherwise get un-physically large for nearby galaxies)
-                                cm_radius = catalog_cm_low_distance / 3600
-                            else:
-                                # For distant galaxies, set the cross-match radius to 30 kpc at the redshift of the host galaxy
-                                cm_radius = (
-                                    catalog_cm_at_distance * (0.05 / redshift) / 3600
-                                )
+                        if redshift < 0.01:
+                            # for nearby galaxies and galaxies with negative redshifts, do a `catalog_cm_low_distance` arc-minute cross-match
+                            # (cross-match radius would otherwise get un-physically large for nearby galaxies)
+                            cm_radius = catalog_cm_low_distance / 3600
                         else:
-                            distmpc = galaxy[distance_value]
+                            # For distant galaxies, set the cross-match radius to 30 kpc at the redshift of the host galaxy
+                            cm_radius = (
+                                catalog_cm_at_distance * (0.05 / redshift) / 3600
+                            )
+                    else:
+                        distmpc = galaxy[distance_value]
 
-                            if distmpc < 40:  # TODO: discuss what this value should be
-                                cm_radius = catalog_cm_low_distance / 3600
-                            else:
-                                # For distant galaxies, set the cross-match radius to 30 kpc at the distance (in Mpc) of the host galaxy
-                                cm_radius = np.rad2deg(
-                                    np.arctan(
-                                        catalog_cm_at_distance / (distmpc * 10**3)
-                                    )
-                                )
+                        if distmpc < 40:
+                            # for nearby galaxies, do a `catalog_cm_low_distance` arc-minute cross-match
+                            cm_radius = catalog_cm_low_distance / 3600
+                        else:
+                            # For distant galaxies, set the cross-match radius to 30 kpc at the distance (in Mpc) of the host galaxy
+                            cm_radius = np.rad2deg(
+                                np.arctan(catalog_cm_at_distance / (distmpc * 10**3))
+                            )
 
-                        in_galaxy = in_ellipse(
-                            ra, dec, alpha1, delta01, cm_radius, 1, 0
+                    in_galaxy = in_ellipse(ra, dec, alpha1, delta01, cm_radius, 1, 0)
+
+                    if in_galaxy:
+                        match = galaxy
+                        distance_arcsec = round(
+                            great_circle_distance(ra, dec, alpha1, delta01) * 3600,
+                            2,
                         )
-
-                        if in_galaxy:
-                            match = galaxy
-                            distance_arcsec = round(
-                                great_circle_distance(ra, dec, alpha1, delta01) * 3600,
+                        # also add a physical distance parameter for redshifts in the Hubble flow
+                        if redshift is not None and redshift > 0.005:
+                            distance_kpc = round(
+                                great_circle_distance(ra, dec, alpha1, delta01)
+                                * 3600
+                                * (redshift / 0.05),
                                 2,
                             )
-                            # also add a physical distance parameter for redshifts in the Hubble flow
-                            if redshift is not None and redshift > 0.005:
-                                distance_kpc = round(
+                        elif distmpc > 0.005:
+                            distance_kpc = round(
+                                np.deg2rad(
                                     great_circle_distance(ra, dec, alpha1, delta01)
-                                    * 3600
-                                    * (redshift / 0.05),
-                                    2,
                                 )
-                            elif distmpc > 0.005:
-                                distance_kpc = round(
-                                    np.deg2rad(
-                                        great_circle_distance(ra, dec, alpha1, delta01)
-                                    )
-                                    * distmpc
-                                    * 10**3,
-                                    2,
-                                )
-                            else:
-                                distance_kpc = -1
+                                * distmpc
+                                * 10**3,
+                                2,
+                            )
+                        else:
+                            distance_kpc = -1
 
-                            match["coordinates"]["distance_arcsec"] = distance_arcsec
-                            match["coordinates"]["distance_kpc"] = distance_kpc
-                            matches.append(match)
-                    except Exception as e:
-                        log(str(e))
+                        match["coordinates"]["distance_arcsec"] = distance_arcsec
+                        match["coordinates"]["distance_kpc"] = distance_kpc
+                        matches.append(match)
+                except Exception as e:
+                    log(str(e))
 
             return matches
 
