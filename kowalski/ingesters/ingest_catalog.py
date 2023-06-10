@@ -332,13 +332,15 @@ def process_file(
             else:
                 return value
 
-        for index, row in df.iterrows():
+        for row in df.itertuples():
             if max_docs and total_good_documents + total_bad_documents >= max_docs:
                 break
             try:
                 document = {}
                 # drop any value with NAType
-                for k, v in row.to_dict().items():
+                for k, v in row._asdict().items():
+                    if k == "Index":
+                        continue
                     if isinstance(v, (pd.core.series.Series, np.ndarray)):
                         # recursively convert np arrays and series to lists
                         try:
