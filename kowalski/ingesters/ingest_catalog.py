@@ -277,8 +277,14 @@ def process_file(
 
     elif format == "parquet":
         df = pq.read_table(file).to_pandas()
+        for name in list(df.columns):
+            if name.startswith("_"):
+                df.rename(columns={name: name[1:]}, inplace=True)
         names = list(df.columns)
+
         if id_col is not None:
+            if id_col.startswith("_"):
+                id_col = id_col[1:]
             if id_col not in names:
                 log(f"Provided ID column {id_col} not found")
                 return
