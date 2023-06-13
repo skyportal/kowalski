@@ -1130,9 +1130,9 @@ class ZTFAlert:
         self.alert["candidate"]["peakmag"] = min(
             [30]
             + [
-                alert["candidate"]["magpsf"]
-                for alert in alert_history
-                if alert["candidate"].get("magpsf", None) is not None
+                a["candidate"]["magpsf"]
+                for a in alert_history
+                if a["candidate"].get("magpsf", None) is not None
             ]
         )
         # add an age field to the alert (alert["candidate"].jd - alert["candidate"].jdstarthist)
