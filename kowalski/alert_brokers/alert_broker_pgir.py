@@ -60,9 +60,25 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
         with timer(f"Mongification of {object_id} {candid}", alert_worker.verbose > 1):
             alert, prv_candidates = alert_worker.alert_mongify(alert)
 
+        # create alert history
+        all_prv_candidates = deepcopy(prv_candidates) + [deepcopy(alert["candidate"])]
+        with timer(
+            f"Gather all previous candidates for {object_id} {candid}",
+            alert_worker.verbose > 1,
+        ):
+            # get all prv_candidates for this objectId:
+            existing_aux = alert_worker.mongo.db[
+                alert_worker.collection_alerts_aux
+            ].find_one({"_id": object_id}, {"prv_candidates": 1})
+            if (
+                existing_aux is not None
+                and len(existing_aux.get("prv_candidates", [])) > 0
+            ):
+                all_prv_candidates += existing_aux["prv_candidates"]
+
         # ML models:
         with timer(f"MLing of {object_id} {candid}", alert_worker.verbose > 1):
-            scores = alert_worker.alert_filter__ml(alert)
+            scores = alert_worker.alert_filter__ml(alert, all_prv_candidates)
             alert["classifications"] = scores
 
         with timer(f"Ingesting {object_id} {candid}", alert_worker.verbose > 1):

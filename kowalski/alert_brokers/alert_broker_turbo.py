@@ -60,11 +60,6 @@ class TURBOAlertConsumer(AlertConsumer, ABC):
         with timer(f"Mongification of {object_id} {candid}", alert_worker.verbose > 1):
             alert, prv_candidates = alert_worker.alert_mongify(alert)
 
-        # ML models:
-        with timer(f"MLing of {object_id} {candid}", alert_worker.verbose > 1):
-            scores = alert_worker.alert_filter__ml(alert)
-            alert["classifications"] = scores
-
         with timer(f"Ingesting {object_id} {candid}", alert_worker.verbose > 1):
             alert_worker.mongo.insert_one(
                 collection=alert_worker.collection_alerts, document=alert
