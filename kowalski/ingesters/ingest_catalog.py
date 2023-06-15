@@ -277,8 +277,14 @@ def process_file(
 
     elif format == "parquet":
         df = pq.read_table(file).to_pandas()
+        for name in list(df.columns):
+            if name.startswith("_"):
+                df.rename(columns={name: name[1:]}, inplace=True)
         names = list(df.columns)
+
         if id_col is not None:
+            if id_col.startswith("_"):
+                id_col = id_col[1:]
             if id_col not in names:
                 log(f"Provided ID column {id_col} not found")
                 return
@@ -332,13 +338,15 @@ def process_file(
             else:
                 return value
 
-        for index, row in df.iterrows():
+        for row in df.itertuples():
             if max_docs and total_good_documents + total_bad_documents >= max_docs:
                 break
             try:
                 document = {}
                 # drop any value with NAType
-                for k, v in row.to_dict().items():
+                for k, v in row._asdict().items():
+                    if k == "Index":
+                        continue
                     if isinstance(v, (pd.core.series.Series, np.ndarray)):
                         # recursively convert np arrays and series to lists
                         try:
