@@ -1119,12 +1119,26 @@ def ccd_quad_to_rc(ccd: int, quad: int) -> int:
 
 
 class ZTFAlert:
-    def __init__(self, alert, models, label=None, **kwargs):
+    def __init__(self, alert, alert_history, models, label=None, **kwargs):
         self.kwargs = kwargs
 
         self.label = label
 
         self.alert = deepcopy(alert)
+
+        # add a peakmag field to the alert (min of all magpsf)
+        self.alert["candidate"]["peakmag"] = min(
+            [30]
+            + [
+                a["candidate"]["magpsf"]
+                for a in alert_history
+                if a["candidate"].get("magpsf", None) is not None
+            ]
+        )
+        # add an age field to the alert (alert["candidate"].jd - alert["candidate"].jdstarthist)
+        self.alert["candidate"]["age"] = self.alert["candidate"]["jd"] - self.alert[
+            "candidate"
+        ].get("jdstarthist", self.alert["candidate"]["jd"])
 
         triplet_normalize = kwargs.get("triplet_normalize", True)
         to_tpu = kwargs.get("to_tpu", False)

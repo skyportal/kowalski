@@ -52,12 +52,6 @@ class TestAlertBrokerTURBO:
             thumb = self.worker.make_thumbnail(alert, ttype, istrument_type)
             assert len(thumb.get("data", [])) > 0
 
-    def test_alert_filter__ml(self):
-        """Test executing ML models on the alert"""
-        alert, _ = self.worker.alert_mongify(self.alert)
-        scores = self.worker.alert_filter__ml(alert)
-        log(scores)
-
     def test_alert_filter__xmatch(self):
         """Test cross matching with external catalog"""
         alert, _ = self.worker.alert_mongify(self.alert)

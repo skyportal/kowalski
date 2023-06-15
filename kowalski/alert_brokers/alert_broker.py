@@ -777,7 +777,7 @@ class AlertWorker:
 
         return df_light_curve
 
-    def alert_filter__ml(self, alert: Mapping) -> dict:
+    def alert_filter__ml(self, alert: Mapping, alert_history: list = []) -> dict:
         """Execute ML models on a ZTF-like alert
 
         :param alert:
@@ -792,33 +792,43 @@ class AlertWorker:
         if self.instrument == "ZTF":
             try:
                 with timer("ZTFAlert(alert)"):
-                    ztf_alert = ZTFAlert(alert, self.ml_models)
+                    ztf_alert = ZTFAlert(alert, alert_history, self.ml_models)
 
                 for model_name in self.ml_models.keys():
                     inputs = {}
-                    with timer(f"Prepping features for {model_name}"):
-                        if self.ml_models[model_name]["feature_names"] is not False:
-                            features = ztf_alert.data["features"][model_name]
-                            inputs["features"] = np.expand_dims(features, axis=[0, -1])
-                        if self.ml_models[model_name]["triplet"] is not False:
-                            triplet = ztf_alert.data["triplet"]
-                            inputs["triplet"] = np.expand_dims(triplet, axis=[0])
-                        if len(inputs.keys()) == 1:
-                            inputs = inputs[list(inputs.keys())[0]]
-                        else:
-                            inputs = [
-                                inputs[k] for k in self.ml_models[model_name]["order"]
-                            ]
+                    try:
+                        with timer(f"Prepping features for {model_name}"):
+                            if self.ml_models[model_name]["feature_names"] is not False:
+                                features = ztf_alert.data["features"][model_name]
+                                inputs["features"] = np.expand_dims(
+                                    features, axis=[0, -1]
+                                )
+                            if self.ml_models[model_name]["triplet"] is not False:
+                                triplet = ztf_alert.data["triplet"]
+                                inputs["triplet"] = np.expand_dims(triplet, axis=[0])
+                            if len(inputs.keys()) == 1:
+                                inputs = inputs[list(inputs.keys())[0]]
+                            else:
+                                inputs = [
+                                    inputs[k]
+                                    for k in self.ml_models[model_name]["order"]
+                                ]
 
-                    with timer(model_name):
-                        score = self.ml_models[model_name]["model"].predict(x=inputs)[0]
-                        scores[model_name] = float(score)
-                        scores[f"{model_name}_version"] = self.ml_models[model_name][
-                            "version"
-                        ]
+                        with timer(model_name):
+                            score = self.ml_models[model_name]["model"].predict(
+                                x=inputs
+                            )[0]
+                            scores[model_name] = float(score)
+                            scores[f"{model_name}_version"] = self.ml_models[
+                                model_name
+                            ]["version"]
+                    except Exception as e:
+                        log(
+                            f"Failed to run ML model {model_name} on alert {alert['objectId']}: {e}"
+                        )
 
             except Exception as e:
-                log(str(e))
+                log(f"Failed to run ML models on alert {alert['objectId']}: {e}")
 
         elif self.instrument == "PGIR":
             # TODO
@@ -1065,7 +1075,7 @@ class AlertWorker:
                                 * (redshift / 0.05),
                                 2,
                             )
-                        elif distmpc > 0.005:
+                        elif distmpc is not None and distmpc > 0.005:
                             distance_kpc = round(
                                 np.deg2rad(
                                     great_circle_distance(ra, dec, alpha1, delta01)
@@ -1081,12 +1091,12 @@ class AlertWorker:
                         match["coordinates"]["distance_kpc"] = distance_kpc
                         matches.append(match)
                 except Exception as e:
-                    log(str(e))
+                    log(f"Could not crossmatch with galaxy {str(galaxy)} : {str(e)}")
 
             return matches
 
         except Exception as e:
-            log(str(e))
+            log(f"Could not crossmatch with ANY galaxies: {str(e)}")
 
         return matches
 
