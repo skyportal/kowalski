@@ -167,7 +167,7 @@ async def init_db(config, verbose=True):
     """
     Initialize db if necessary: create the sole non-admin user
     """
-    if config["database"]["srv"] is True:
+    if config["database"].get("srv", False) is True:
         conn_string = "mongodb+srv://"
     else:
         conn_string = "mongodb://"
@@ -1130,9 +1130,9 @@ class ZTFAlert:
         self.alert["candidate"]["peakmag"] = min(
             [30]
             + [
-                a["candidate"]["magpsf"]
+                a.get("magpsf", 30)
                 for a in alert_history
-                if a["candidate"].get("magpsf", None) is not None
+                if a.get("magpsf", None) is not None
             ]
         )
         # add an age field to the alert (alert["candidate"].jd - alert["candidate"].jdstarthist)
