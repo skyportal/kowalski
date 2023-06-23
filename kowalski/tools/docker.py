@@ -190,7 +190,7 @@ class DockerKowalski:
             exit(1)
 
     @staticmethod
-    def down(cls):
+    def down():
         """
         ✋ Shut down Kowalski
 
