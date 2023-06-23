@@ -27,15 +27,15 @@ def test(use_docker=False):
             "flaky": False,
         },
         {
-            "part": "ZTF alert broker components",
-            "container": "kowalski_ingester_1",
-            "test_script": "test_alert_broker_ztf.py",
-            "flaky": False,
-        },
-        {
             "part": "WINTER alert broker components",
             "container": "kowalski_ingester_1",
             "test_script": "test_alert_broker_wntr.py",
+            "flaky": False,
+        },
+        {
+            "part": "ZTF alert broker components",
+            "container": "kowalski_ingester_1",
+            "test_script": "test_alert_broker_ztf.py",
             "flaky": False,
         },
         {
@@ -51,15 +51,15 @@ def test(use_docker=False):
             "flaky": False,
         },
         {
-            "part": "ZTF alert ingestion",
-            "container": "kowalski_ingester_1",
-            "test_script": "test_ingester_ztf.py",
-            "flaky": False,
-        },
-        {
             "part": "WINTER alert ingestion",
             "container": "kowalski_ingester_1",
             "test_script": "test_ingester_wntr.py",
+            "flaky": False,
+        },
+        {
+            "part": "ZTF alert ingestion",
+            "container": "kowalski_ingester_1",
+            "test_script": "test_ingester_ztf.py",
             "flaky": False,
         },
         {
@@ -69,16 +69,16 @@ def test(use_docker=False):
             "flaky": False,
         },
         {
-            "part": "TNS monitoring",
-            "container": "kowalski_ingester_1",
-            "test_script": "test_tns_watcher.py",
-            "flaky": True,
-        },
-        {
             "part": "Tools",
             "container": "kowalski_ingester_1",
             "test_script": "test_tools.py",
             "flaky": False,
+        },
+        {
+            "part": "TNS monitoring",
+            "container": "kowalski_ingester_1",
+            "test_script": "test_tns_watcher.py",
+            "flaky": True,
         },
     ]
 
