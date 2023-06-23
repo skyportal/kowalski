@@ -28,7 +28,6 @@ class TestIngester:
     """ """
 
     def test_ingester(self):
-        log("Starting the ingester test")
         init_db_sync(config=config, verbose=True)
 
         log("Setting up paths")

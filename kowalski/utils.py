@@ -215,8 +215,6 @@ def init_db_sync(config, verbose=False):
     """
     Initialize db if necessary: create the sole non-admin user
     """
-    if verbose:
-        log("Initializing db...")
     if config["database"].get("srv, False") is True:
         conn_string = "mongodb+srv://"
     else:
@@ -235,16 +233,10 @@ def init_db_sync(config, verbose=False):
     if config["database"]["replica_set"] is not None:
         conn_string += f"/?replicaSet={config['database']['replica_set']}"
 
-    if verbose:
-        log(f"Connecting to {conn_string}")
     client = pymongo.MongoClient(conn_string)
-    if verbose:
-        log("Connected to db")
 
     # to fix: on srv (like atlas) we can't do this
     if config["database"].get("srv", False) is not True:
-        if verbose:
-            log("Initializing db users...")
         user_ids = []
         for _u in client.admin.system.users.find({}, {"_id": 1}):
             user_ids.append(_u["_id"])
@@ -264,11 +256,7 @@ def init_db_sync(config, verbose=False):
             if verbose:
                 log("Successfully initialized db")
 
-        if verbose:
-            log("Closing connection to db...")
         _mongo.client.close()
-        if verbose:
-            log("Connection closed")
 
 
 async def add_admin(_mongo, config):
