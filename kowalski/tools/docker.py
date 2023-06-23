@@ -185,17 +185,19 @@ class DockerKowalski:
 
         # start up Kowalski
         print("Starting up")
-        subprocess.run(command)
+        p = subprocess.run(command)
+        if p.returncode != 0:
+            exit(1)
 
     @staticmethod
-    def down(cls):
+    def down():
         """
         ✋ Shut down Kowalski
 
         :return:
         """
         print("Shutting down Kowalski")
-        docker_config = cls.load_docker_config()
+        docker_config = "docker-compose.yaml"
         command = ["docker-compose", "-f", docker_config, "down"]
 
         subprocess.run(command)
@@ -228,7 +230,9 @@ class DockerKowalski:
         # check MongoDB keyfile
         cls.check_keyfile()
 
-        subprocess.run(command)
+        p = subprocess.run(command)
+        if p.returncode != 0:
+            exit(1)
 
     @staticmethod
     def seed(

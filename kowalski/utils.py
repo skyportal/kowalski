@@ -215,7 +215,7 @@ def init_db_sync(config, verbose=False):
     """
     Initialize db if necessary: create the sole non-admin user
     """
-    if config["database"]["srv"] is True:
+    if config["database"].get("srv, False") is True:
         conn_string = "mongodb+srv://"
     else:
         conn_string = "mongodb://"
@@ -236,7 +236,7 @@ def init_db_sync(config, verbose=False):
     client = pymongo.MongoClient(conn_string)
 
     # to fix: on srv (like atlas) we can't do this
-    if config["database"]["srv"] is not True:
+    if config["database"].get("srv", False) is not True:
         user_ids = []
         for _u in client.admin.system.users.find({}, {"_id": 1}):
             user_ids.append(_u["_id"])
