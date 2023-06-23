@@ -34,3 +34,4 @@ tensorflow-macos==2.12.0
 tensorflow-metal==0.8.0
 tqdm==4.64.1
 uvloop==0.17.0
+bokeh==2.4.3
