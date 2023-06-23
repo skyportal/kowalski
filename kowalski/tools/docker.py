@@ -185,7 +185,9 @@ class DockerKowalski:
 
         # start up Kowalski
         print("Starting up")
-        subprocess.run(command)
+        p = subprocess.run(command)
+        if p.returncode != 0:
+            exit(1)
 
     @staticmethod
     def down(cls):
@@ -228,7 +230,9 @@ class DockerKowalski:
         # check MongoDB keyfile
         cls.check_keyfile()
 
-        subprocess.run(command)
+        p = subprocess.run(command)
+        if p.returncode != 0:
+            exit(1)
 
     @staticmethod
     def seed(
