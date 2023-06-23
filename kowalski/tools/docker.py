@@ -195,7 +195,7 @@ class DockerKowalski:
         :return:
         """
         print("Shutting down Kowalski")
-        docker_config = cls.load_docker_config()
+        docker_config = "docker-compose.yaml"
         command = ["docker-compose", "-f", docker_config, "down"]
 
         subprocess.run(command)
