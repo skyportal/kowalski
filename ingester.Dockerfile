@@ -1,7 +1,7 @@
 FROM python:3.10
 
 ARG scala_version=2.13
-ARG kafka_version=3.5.0
+ARG kafka_version=3.4.1
 ARG braai_version=d6_m9
 ARG acai_h_version=d1_dnn_20201130
 ARG acai_v_version=d1_dnn_20201130
