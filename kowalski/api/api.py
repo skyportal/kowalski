@@ -2850,6 +2850,24 @@ class SkymapHandler(Handler):
         contours_levels = _data.get("contours", [90])
         if isinstance(contours_levels, int) or isinstance(contours_levels, float):
             contours_levels = [contours_levels]
+        elif isinstance(contours_levels, str):
+            if "," in contours_levels:
+                try:
+                    contours_levels = [
+                        int(contours_level)
+                        for contours_level in contours_levels.split(",")
+                    ]
+                except ValueError:
+                    raise ValueError(
+                        "contours must be a comma-separated list of integers"
+                    )
+            else:
+                try:
+                    contours_levels = [int(contours_levels)]
+                except ValueError:
+                    raise ValueError(
+                        "contours must be an integer or a comma-separated list of integers"
+                    )
 
         try:
             SkymapHandlerPut(**_data)
@@ -3095,16 +3113,27 @@ class SkymapHandler(Handler):
                 )
             if request.query.get("contours") is not None:
                 contours = request.query["contours"]
-                if isinstance(contours, str):
-                    try:
-                        contours = [int(contour) for contour in contours.split(",")]
-                    except ValueError:
-                        raise ValueError(
-                            "contours must be a comma-separated list of integers"
-                        )
+                if isinstance(contours, int) or isinstance(contours, float):
+                    contours = [contours]
+                elif isinstance(contours, str):
+                    if "," in contours:
+                        try:
+                            contours = [int(contour) for contour in contours.split(",")]
+                        except ValueError:
+                            raise ValueError(
+                                "contours must be a comma-separated list of integers"
+                            )
+                    else:
+                        try:
+                            contours = [int(contours)]
+                        except ValueError:
+                            raise ValueError(
+                                "contours must be an integer or a comma-separated list of integers"
+                            )
+
                 missing_contours = [
                     level
-                    for level in request.query["contours"]
+                    for level in contours
                     if f"contour{level}" not in skymap["contours"]
                 ]
                 if len(missing_contours) > 0:

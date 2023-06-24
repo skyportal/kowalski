@@ -967,3 +967,101 @@ async def test_mma_triggers_ztf(aiohttp_client):
     result = await resp.json()
     assert result["status"] == "success"
     assert "message" in result
+
+
+@pytest.mark.asyncio
+async def test_skymap(aiohttp_client):
+    """Test saving and querying skymaps"""
+    client = await aiohttp_client(await app_factory())
+
+    credentials = await get_admin_credentials(aiohttp_client)
+    access_token = credentials["token"]
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    voevent = None
+    with open("data/events/voevent.xml", "r") as f:
+        voevent = f.read()
+
+    # get
+    resp = await client.get(
+        "/api/skymap",
+        params={
+            "dateobs": "2023-06-23T15:42:26",
+            "localization_name": "cwb.multiorder.fits,1",
+            "contours": [90],
+        },
+        headers=headers,
+        timeout=5,
+    )
+    if resp.status == 200:
+        # delete
+        resp = await client.delete(
+            "/api/skymap",
+            json={
+                "dateobs": "2023-06-23T15:42:26",
+                "localization_name": "cwb.multiorder.fits,1",
+            },
+            headers=headers,
+            timeout=5,
+        )
+        assert resp.status == 200
+
+    # put
+    resp = await client.put(
+        "/api/skymap",
+        json={"voevent": voevent, "contours": [90]},
+        headers=headers,
+        timeout=5,
+    )
+    assert resp.status == 200
+    result = await resp.json()
+    assert result["status"] == "success"
+
+    # get
+    resp = await client.get(
+        "/api/skymap",
+        params={
+            "dateobs": "2023-06-23T15:42:26",
+            "localization_name": "cwb.multiorder.fits,1",
+            "contours": [90],
+        },
+        headers=headers,
+        timeout=5,
+    )
+    assert resp.status == 200
+    result = await resp.json()
+    assert result["status"] == "success"
+    assert result["data"]["dateobs"] == "2023-06-23T15:42:26"
+
+    # query ztf alerts in the skymap
+    qu = {
+        "query_type": "skymap",
+        "query": {
+            "skymap": {
+                "localization_name": "cwb.multiorder.fits,1",
+                "dateobs": "2023-06-23T15:42:26.000",
+                "contour": 90,
+            },
+            "catalog": "ZTF_alerts",
+            "filter": {},
+            "projection": {"_id": 0, "objectId": 1},
+        },
+    }
+    resp = await client.post("/api/queries", json=qu, headers=headers, timeout=5)
+    assert resp.status == 200
+    result = await resp.json()
+    assert result["status"] == "success"
+    assert len(result["data"]) == 63
+
+    # delete
+    resp = await client.delete(
+        "/api/skymap",
+        json={
+            "dateobs": "2023-06-23T15:42:26",
+            "localization_name": "cwb.multiorder.fits,1",
+        },
+        headers=headers,
+        timeout=5,
+    )
+    assert resp.status == 200
