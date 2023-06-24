@@ -31,6 +31,7 @@ COPY ["kowalski/tools/__init__.py", \
         "kowalski/tools/generate_supervisord_conf.py", \
         "kowalski/tools/pip_install_requirements.py", \
         "kowalski/tools/watch_logs.py", \
+        "kowalski/tools/gcn_utils.py", \
         "kowalski/tools/"]
 
 COPY kowalski/tests/test_api.py kowalski/tests/
