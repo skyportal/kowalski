@@ -67,6 +67,7 @@ kowalski:
       alerts_wntr_aux: "WNTR_alerts_aux"
       alerts_turbo: "TURBO_alerts"
       alerts_turbo_aux: "TURBO_alerts_aux"
+      skymaps: "skymaps"
 
     indexes:
       ZTF_alerts:
@@ -1226,7 +1227,7 @@ kowalski:
   misc:
     # working stand-alone or in conjunction with a SkyPortal instance?
     broker: False
-    supported_penquins_versions: ["2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0", "2.2.1", "2.3.1"]
+    supported_penquins_versions: ["2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0", "2.2.1", "2.3.1", "2.3.2"]
     query_expiration_interval: 5
     max_time_ms: 300000
     max_retries: 100
