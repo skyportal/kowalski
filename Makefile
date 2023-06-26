@@ -120,3 +120,11 @@ log: setup
 stop: ## Stop all services in supervisord.
 stop: setup
 	$(SUPERVISORCTL) stop all
+
+stop_ingester: ## Stop all services in supervisord.
+stop_ingester: setup
+	$(SUPERVISORCTL_INGESTER) stop all
+
+stop_api: ## Stop all services in supervisord.
+stop_api: setup
+	$(SUPERVISORCTL_API) stop all

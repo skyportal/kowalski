@@ -1,7 +1,16 @@
 FROM python:3.10
 #FROM python:3.7-slim
 
-RUN apt-get update
+RUN apt-get update && \
+    apt-get install -y curl && \
+    curl https://sh.rustup.rs -sSf | sh -s -- -y && \
+    apt-get install -y build-essential && \
+    apt-get install -y libssl-dev && \
+    apt-get install -y libffi-dev && \
+    apt-get install -y python3-dev && \
+    apt-get install -y cargo
+
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # place to keep our app and the data:
 RUN mkdir -p /kowalski /kowalski/data /kowalski/logs /_tmp
