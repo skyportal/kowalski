@@ -90,7 +90,7 @@ def test(use_docker=False):
             # any of the ingester related processes to run anymore
             try:
                 subprocess.run(
-                    command=[
+                    [
                         "docker",
                         "exec",
                         "-i",
@@ -99,7 +99,8 @@ def test(use_docker=False):
                         "-c",
                         "make",
                         "stop",
-                    ]
+                    ],
+                    check=True,
                 )
             except subprocess.CalledProcessError:
                 print("Failed to stop the ingester processes")
