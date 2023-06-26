@@ -116,3 +116,7 @@ docker_seed : setup
 log: ## Monitor log files for all services.
 log: setup
 	$(PYTHON) kowalski/tools/watch_logs.py
+
+stop: ## Stop all services in supervisord.
+stop: setup
+	$(SUPERVISORCTL) stop all
