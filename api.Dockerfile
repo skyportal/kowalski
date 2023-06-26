@@ -13,8 +13,7 @@ COPY requirements/ requirements/
 COPY config.defaults.yaml config.defaults.yaml
 COPY docker.yaml config.yaml
 COPY version.txt .
-COPY data/events/ data/events/
-COPY data/schema/ data/schema/
+COPY schema/ schema/
 
 COPY ["kowalski/__init__.py", \
         "kowalski/utils.py", \

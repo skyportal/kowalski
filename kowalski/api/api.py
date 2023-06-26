@@ -59,9 +59,10 @@ from kowalski.utils import (
     init_db,
     radec_str2geojson,
     uid,
+    str_to_numeric,
 )
 
-voevent_schema = xmlschema.XMLSchema("data/schema/VOEvent-v2.0.xsd")
+voevent_schema = xmlschema.XMLSchema("schema/VOEvent-v2.0.xsd")
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]
@@ -2847,15 +2848,15 @@ class SkymapHandler(Handler):
     async def put(self, request: web.Request) -> web.Response:
         """Save a skymap's contours at different levels, or add new contours to an existing skymap"""
         _data = await request.json()
-        contours_levels = _data.get("contours", [90])
-        if isinstance(contours_levels, int) or isinstance(contours_levels, float):
-            contours_levels = [contours_levels]
-        elif isinstance(contours_levels, str):
-            if "," in contours_levels:
+        contour_levels = _data.get("contours", [90, 95])
+        if isinstance(contour_levels, int) or isinstance(contour_levels, float):
+            contour_levels = [contour_levels]
+        elif isinstance(contour_levels, str):
+            if "," in contour_levels:
                 try:
-                    contours_levels = [
-                        int(contours_level)
-                        for contours_level in contours_levels.split(",")
+                    contour_levels = [
+                        str_to_numeric(contours_level)
+                        for contours_level in contour_levels.split(",")
                     ]
                 except ValueError:
                     raise ValueError(
@@ -2863,7 +2864,7 @@ class SkymapHandler(Handler):
                     )
             else:
                 try:
-                    contours_levels = [int(contours_levels)]
+                    contour_levels = [str_to_numeric(contour_levels)]
                 except ValueError:
                     raise ValueError(
                         "contours must be an integer or a comma-separated list of integers"
@@ -2983,25 +2984,38 @@ class SkymapHandler(Handler):
                 "localization_name": skymap["localization_name"],
             }
         )
+
+        existing_contour_levels = []
+        missing_contour_levels = []
         if existing_skymap is not None:
-            existing_contour_levels = existing_skymap.get("contours", {}).keys()
+            existing_contour_levels = [
+                str_to_numeric(level.replace("contour", ""))
+                for level in existing_skymap.get("contours", {}).keys()
+                if "contour" in level
+            ]
             missing_contour_levels = [
                 level
-                for level in contours_levels
-                if f"contour{level}" not in existing_contour_levels
+                for level in contour_levels
+                if level not in existing_contour_levels
             ]
             if len(missing_contour_levels) == 0:
                 return web.json_response(
                     {
-                        "status": "error",
+                        "status": "already_exists",
                         "message": "skymap already exists with the same contours",
-                    }
+                        "data": {
+                            "dateobs": dateobs.isoformat(),
+                            "localization_name": skymap["localization_name"],
+                            "contours": existing_contour_levels,
+                        },
+                    },
+                    status=409,
                 )
             else:
-                contours_levels = missing_contour_levels
+                contour_levels = missing_contour_levels
 
         # CONTOURS
-        contours = get_contours(skymap, contours_levels)
+        contours = get_contours(skymap, contour_levels)
         if contours is None:
             raise ValueError("Could not generate contours from skymap")
 
@@ -3031,7 +3045,13 @@ class SkymapHandler(Handler):
                 return web.json_response(
                     {
                         "status": "success",
-                        "message": f"updated skymap for {dateobs} to add contours {contours_levels}",
+                        "message": f"updated skymap for {dateobs} to add contours {contour_levels}",
+                        "data": {
+                            "dateobs": dateobs.isoformat(),
+                            "localization_name": skymap["localization_name"],
+                            "contours": existing_contour_levels
+                            + missing_contour_levels,
+                        },
                     }
                 )
             except Exception as e:
@@ -3054,7 +3074,12 @@ class SkymapHandler(Handler):
             return web.json_response(
                 {
                     "status": "success",
-                    "message": f"added skymap for {dateobs} with contours {contours_levels}",
+                    "message": f"added skymap for {dateobs} with contours {contour_levels}",
+                    "data": {
+                        "dateobs": dateobs.isoformat(),
+                        "localization_name": skymap["localization_name"],
+                        "contours": contour_levels,
+                    },
                 }
             )
         except Exception as e:
@@ -3118,14 +3143,17 @@ class SkymapHandler(Handler):
                 elif isinstance(contours, str):
                     if "," in contours:
                         try:
-                            contours = [int(contour) for contour in contours.split(",")]
+                            contours = [
+                                str_to_numeric(contour)
+                                for contour in contours.split(",")
+                            ]
                         except ValueError:
                             raise ValueError(
                                 "contours must be a comma-separated list of integers"
                             )
                     else:
                         try:
-                            contours = [int(contours)]
+                            contours = [str_to_numeric(contours)]
                         except ValueError:
                             raise ValueError(
                                 "contours must be an integer or a comma-separated list of integers"
