@@ -97,8 +97,7 @@ def test(use_docker=False):
                         "kowalski_ingester_1",
                         "bash",
                         "-c",
-                        "make",
-                        "stop",
+                        "make stop",
                     ],
                     check=True,
                 )
