@@ -210,6 +210,7 @@ class KafkaStream:
     def __enter__(self):
         self.start()
         self.as_context_manager = True
+        time.sleep(15)  # give it a chance to finish ingesting properly
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

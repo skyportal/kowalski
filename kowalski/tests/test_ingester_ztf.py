@@ -399,7 +399,7 @@ class TestIngester:
             log("Digested and ingested: all done!")
 
         log("Checking the ZTF alert collection states")
-        num_retries = 15
+        num_retries = 20
         # alert processing takes time, which depends on the available resources
         # so allow some additional time for the processing to finish
         for i in range(num_retries):
