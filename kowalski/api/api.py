@@ -9,9 +9,11 @@ from ast import literal_eval
 from typing import Any, List, Mapping, Optional, Sequence, Union
 
 import jwt
+import lxml
 import matplotlib.pyplot as plt
 import numpy as np
 import uvloop
+import xmlschema
 from aiohttp import ClientSession, web
 from aiohttp_swagger3 import ReDocUiSettings, SwaggerDocs
 from astropy.io import fits
@@ -28,17 +30,28 @@ from astropy.visualization import (
 )
 from bson.json_util import dumps, loads
 from matplotlib.colors import LogNorm
+from motor.motor_asyncio import AsyncIOMotorClient
+from multidict import MultiDict
+from odmantic import AIOEngine, EmbeddedModel, Field, Model
+from pydantic import ValidationError, root_validator
+from sshtunnel import SSHTunnelForwarder
+
 from kowalski.api.middlewares import (
     admin_required,
     auth_middleware,
     auth_required,
     error_middleware,
 )
-from motor.motor_asyncio import AsyncIOMotorClient
-from multidict import MultiDict
-from odmantic import AIOEngine, EmbeddedModel, Field, Model
-from pydantic import root_validator
-from sshtunnel import SSHTunnelForwarder
+from kowalski.config import load_config
+from kowalski.log import log
+from kowalski.tools.gcn_utils import (
+    from_dict,
+    from_voevent,
+    get_aliases,
+    get_contours,
+    get_dateobs,
+    get_trigger,
+)
 from kowalski.utils import (
     add_admin,
     check_password_hash,
@@ -46,9 +59,10 @@ from kowalski.utils import (
     init_db,
     radec_str2geojson,
     uid,
+    str_to_numeric,
 )
-from kowalski.config import load_config
-from kowalski.log import log
+
+voevent_schema = xmlschema.XMLSchema("schema/VOEvent-v2.0.xsd")
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]
@@ -685,6 +699,7 @@ QUERY_TYPES = (
     "info",
     "near",
     "drop",
+    "skymap",
 )
 INFO_COMMANDS = (
     "catalog_names",
@@ -1027,6 +1042,69 @@ class Query(Model, ABC):
 
             values["kwargs"] = kwargs
             values["query"] = query_preprocessed
+
+        elif query_type == "skymap":
+            # construct filter
+            values["query"]["filter"] = cls.construct_filter(query)
+            # construct projection
+            values["query"]["projection"] = cls.construct_projection(query)
+
+            kwargs = cls.validate_kwargs(
+                kwargs=kwargs, known_kwargs=("skip", "hint", "limit", "sort")
+            )
+            values["kwargs"] = kwargs
+            # apply filter before positional query?
+            filter_first = kwargs.get("filter_first", False)
+
+            dateobs = query.get("skymap", {}).get("dateobs")
+            trigger_id = query.get("skymap", {}).get("trigger_id")
+            localization_name = query.get("skymap", {}).get("localization_name")
+            aliases = query.get("skymap", {}).get("aliases", [])
+
+            contour = query.get("skymap", {}).get("contour", 90)
+
+            if not localization_name:
+                raise ValueError("name must be specified")
+
+            if not any([dateobs, trigger_id, aliases]):
+                raise ValueError(
+                    "At least one of dateobs, trigger_id, skymap_name, aliases must be specified"
+                )
+
+            # we write the skymap query
+            skymap_query = {
+                "$or": [],
+                "localization_name": localization_name,
+            }
+            if dateobs:
+                if isinstance(dateobs, str):
+                    try:
+                        dateobs = datetime.datetime.strptime(
+                            dateobs, "%Y-%m-%dT%H:%M:%S.%f"
+                        )
+                    except ValueError:
+                        try:
+                            dateobs = datetime.datetime.strptime(
+                                dateobs, "%Y-%m-%dT%H:%M:%S"
+                            )
+                        except ValueError:
+                            raise ValueError(
+                                "dateobs must be in format YYYY-MM-DDTHH:MM:SS[.SSS]"
+                            )
+
+                skymap_query["$or"].append({"dateobs": dateobs})
+            if trigger_id:
+                skymap_query["$or"].append({"trigger_id": trigger_id})
+            if aliases:
+                skymap_query["$or"].append({"aliases": {"$in": aliases}})
+
+            skymap_query = (
+                skymap_query,
+                {"contours": 1},
+            )
+
+            values["query"]["skymap_query"] = skymap_query
+            values["query"]["contour_level"] = contour
 
         return values
 
@@ -1457,6 +1535,65 @@ class QueryHandler(Handler):
                 data = await request.app["mongo"][catalog].index_information()
             elif query.query["command"] == "db_info":
                 data = await request.app["mongo"].command("dbstats")
+
+        if query.query_type == "skymap":
+            catalog = query.query["catalog"]
+            catalog_filter = query.query["filter"]
+            catalog_projection = query.query["projection"]
+
+            skymap_query = query.query["skymap_query"]
+            contour_level = query.query["contour_level"]
+            skymap = await request.app["mongo"][
+                config["database"]["collections"]["skymaps"]
+            ].find_one(
+                skymap_query[0],
+                skymap_query[1],
+                max_time_ms=max_time_ms,
+                **query.kwargs,
+            )
+            if skymap is None:
+                raise ValueError("Skymap not found")
+            if f"contour{contour_level}" not in skymap["contours"]:
+                raise ValueError(f"Contour level {contour_level} not found in skymap")
+
+            catalog_filter = {
+                "$and": [
+                    catalog_filter,
+                    {
+                        "coordinates.radec_geojson": {
+                            "$geoWithin": {
+                                "$geometry": {
+                                    "type": "MultiPolygon",
+                                    "coordinates": skymap["contours"][
+                                        f"contour{contour_level}"
+                                    ]["coordinates"],
+                                }
+                            }
+                        }
+                    },
+                ]
+            }
+
+            # project?
+            if len(catalog_projection) > 0:
+                cursor = request.app["mongo"][catalog].find(
+                    catalog_filter,
+                    catalog_projection,
+                    max_time_ms=max_time_ms,
+                    **query.kwargs,
+                )
+            # return the whole documents by default
+            else:
+                cursor = request.app["mongo"][catalog].find(
+                    catalog_filter,
+                    max_time_ms=max_time_ms,
+                    **query.kwargs,
+                )
+
+            if isinstance(cursor, (int, float, Sequence, Mapping)) or (cursor is None):
+                data = cursor
+            else:
+                data = await cursor.to_list(length=None)
 
         return self.success(message="Successfully executed query", data=data)
 
@@ -2676,6 +2813,430 @@ class ZTFObsHistoryHandler(Handler):
         )
 
 
+class SkymapHandlerPut(Model, ABC):
+    """Data model for Skymap Handler for streamlined validation"""
+
+    dateobs: Optional[Union[str, datetime.datetime]]
+    trigger_id: Optional[int]
+    aliases: Optional[List[str]]
+    voevent: Optional[Union[str, bytes]]
+    skymap: Optional[dict]
+
+    contours: Union[List[int], List[float], int, float]
+
+
+class SkymapHandlerGet(Model, ABC):
+    dateobs: Optional[Union[str, datetime.datetime]]
+    trigger_id: Optional[int]
+    alias: Optional[str]
+    localization_name: Optional[str]
+
+    contours: Optional[Union[List[int], List[float], int, float]]
+
+
+class SkymapHandlerDelete(Model, ABC):
+    dateobs: Optional[Union[str, datetime.datetime]]
+    trigger_id: Optional[int]
+    alias: Optional[str]
+    localization_name: str
+
+
+class SkymapHandler(Handler):
+    """Handler for users to upload skymaps and save their contours"""
+
+    @auth_required
+    async def put(self, request: web.Request) -> web.Response:
+        """Save a skymap's contours at different levels, or add new contours to an existing skymap"""
+        _data = await request.json()
+        contour_levels = _data.get("contours", [90, 95])
+        if isinstance(contour_levels, int) or isinstance(contour_levels, float):
+            contour_levels = [contour_levels]
+        elif isinstance(contour_levels, str):
+            if "," in contour_levels:
+                try:
+                    contour_levels = [
+                        str_to_numeric(contours_level)
+                        for contours_level in contour_levels.split(",")
+                    ]
+                except ValueError:
+                    raise ValueError(
+                        "contours must be a comma-separated list of integers"
+                    )
+            else:
+                try:
+                    contour_levels = [str_to_numeric(contour_levels)]
+                except ValueError:
+                    raise ValueError(
+                        "contours must be an integer or a comma-separated list of integers"
+                    )
+
+        try:
+            SkymapHandlerPut(**_data)
+        except ValidationError as e:
+            return self.error(message=f"Invalid request body: {str(e)}")
+
+        dateobs = _data.get("dateobs", None)
+        if dateobs is None and "voevent" not in _data:
+            raise ValueError("dateobs is required in the request body")
+        if isinstance(dateobs, str):
+            try:
+                dateobs = datetime.datetime.strptime(dateobs, "%Y-%m-%dT%H:%M:%S.%f")
+            except ValueError:
+                try:
+                    dateobs = datetime.datetime.strptime(dateobs, "%Y-%m-%dT%H:%M:%S")
+                except ValueError:
+                    raise ValueError(
+                        "dateobs must be in the format YYYY-MM-DDTHH:MM:SS[.SSSSSS] if it is a string"
+                    )
+        triggerid = _data.get("triggerid", None)
+        aliases = _data.get("aliases", [])
+        if isinstance(aliases, str):
+            aliases = [aliases]
+        if isinstance(aliases, list):
+            try:
+                aliases = [str(alias) for alias in aliases]
+            except ValueError:
+                raise ValueError("aliases must be strings")
+        else:
+            raise ValueError("aliases must be a list of strings")
+
+        skymap = None
+        contours = {}
+
+        if "voevent" in _data:
+            if voevent_schema.is_valid(_data["voevent"]):
+                # check if is string
+                try:
+                    _data["voevent"] = _data["voevent"].encode("ascii")
+                except AttributeError:
+                    pass
+                root = lxml.etree.fromstring(_data["voevent"])
+            else:
+                raise ValueError("xml file is not valid VOEvent")
+
+            # DATEOBS
+            dateobs = (
+                get_dateobs(root)
+                if _data.get("dateobs") is None
+                else _data.get("dateobs")
+            )
+            if dateobs is None:
+                raise ValueError(
+                    "dateobs is required, either in the request body or in the VOEvent file if provided"
+                )
+            if isinstance(dateobs, str):
+                try:
+                    dateobs = datetime.datetime.strptime(
+                        dateobs, "%Y-%m-%dT%H:%M:%S.%f"
+                    )
+                except ValueError:
+                    try:
+                        dateobs = datetime.datetime.strptime(
+                            dateobs, "%Y-%m-%dT%H:%M:%S"
+                        )
+                    except ValueError:
+                        raise ValueError(
+                            "dateobs must be in the format YYYY-MM-DDTHH:MM:SS[.SSSSSS] if it is a string"
+                        )
+
+            # TRIGGERID
+            triggerid = get_trigger(root)
+
+            # ALIASES
+            aliases = _data.get("aliases", [])
+            if isinstance(aliases, str):
+                aliases = [aliases]
+            if isinstance(aliases, list):
+                try:
+                    aliases = [str(alias) for alias in aliases]
+                except ValueError:
+                    raise ValueError("aliases must be strings")
+            else:
+                raise ValueError("aliases must be a list of strings")
+            voevent_aliases = get_aliases(root)
+            if len(voevent_aliases) > 0:
+                aliases.extend(voevent_aliases)
+
+            # SKYMAP (from VOEvent)
+            skymap = from_voevent(root)
+            if skymap is None:
+                raise ValueError("Could not get skymap from VOEvent file")
+
+        elif "skymap" in _data and isinstance(_data["skymap"], dict):
+            skymap_data = _data["skymap"]
+            skymap = from_dict(skymap_data)
+        else:
+            raise ValueError(
+                "either skymap dict or voevent is required in the request body"
+            )
+
+        # check if the skymap already exists
+
+        existing_skymap = await request.app["mongo"][
+            config["database"]["collections"]["skymaps"]
+        ].find_one(
+            {
+                "$or": [
+                    {"dateobs": dateobs},
+                    {"triggerid": triggerid},
+                    {"aliases": {"$all": aliases}},
+                ],
+                "localization_name": skymap["localization_name"],
+            }
+        )
+
+        existing_contour_levels = []
+        missing_contour_levels = []
+        if existing_skymap is not None:
+            existing_contour_levels = [
+                str_to_numeric(level.replace("contour", ""))
+                for level in existing_skymap.get("contours", {}).keys()
+                if "contour" in level
+            ]
+            missing_contour_levels = [
+                level
+                for level in contour_levels
+                if level not in existing_contour_levels
+            ]
+            if len(missing_contour_levels) == 0:
+                return web.json_response(
+                    {
+                        "status": "already_exists",
+                        "message": "skymap already exists with the same contours",
+                        "data": {
+                            "dateobs": dateobs.isoformat(),
+                            "localization_name": skymap["localization_name"],
+                            "contours": existing_contour_levels,
+                        },
+                    },
+                    status=409,
+                )
+            else:
+                contour_levels = missing_contour_levels
+
+        # CONTOURS
+        contours = get_contours(skymap, contour_levels)
+        if contours is None:
+            raise ValueError("Could not generate contours from skymap")
+
+        if existing_skymap is not None:
+            existing_contours = existing_skymap.get("contours", {})
+            existing_contours.update(contours)
+            contours = existing_contours
+            try:
+                # update the document in the database
+                await request.app["mongo"][
+                    config["database"]["collections"]["skymaps"]
+                ].update_one(
+                    {
+                        "$and": [
+                            {
+                                "$or": [
+                                    {"dateobs": dateobs},
+                                    {"triggerid": triggerid},
+                                    {"aliases": {"$all": aliases}},
+                                ]
+                            },
+                            {"localization_name": skymap["localization_name"]},
+                        ]
+                    },
+                    {"$set": {"contours": contours}},
+                )
+                return web.json_response(
+                    {
+                        "status": "success",
+                        "message": f"updated skymap for {dateobs} to add contours {contour_levels}",
+                        "data": {
+                            "dateobs": dateobs.isoformat(),
+                            "localization_name": skymap["localization_name"],
+                            "contours": existing_contour_levels
+                            + missing_contour_levels,
+                        },
+                    }
+                )
+            except Exception as e:
+                return web.json_response({"status": "error", "message": str(e)})
+
+        document = {
+            "dateobs": dateobs,
+            "aliases": aliases,
+            "contours": contours,
+            "localization_name": skymap["localization_name"],
+        }
+        if triggerid is not None:
+            document["triggerid"] = triggerid
+
+        try:
+            # save skymap
+            await request.app["mongo"][
+                config["database"]["collections"]["skymaps"]
+            ].insert_one(document)
+            return web.json_response(
+                {
+                    "status": "success",
+                    "message": f"added skymap for {dateobs} with contours {contour_levels}",
+                    "data": {
+                        "dateobs": dateobs.isoformat(),
+                        "localization_name": skymap["localization_name"],
+                        "contours": contour_levels,
+                    },
+                }
+            )
+        except Exception as e:
+            return web.json_response({"status": "error", "message": str(e)})
+
+    @auth_required
+    async def get(self, request: web.Request) -> web.Response:
+        """Retrieve a skymap using either a dateobs, triggerid, or alias"""
+
+        try:
+            SkymapHandlerGet(**request.query)
+        except ValidationError as e:
+            return web.json_response({"status": "error", "message": str(e)})
+
+        query = {}
+        if request.query.get("dateobs") is not None:
+            dateobs = request.query["dateobs"]
+            if isinstance(dateobs, str):
+                try:
+                    dateobs = datetime.datetime.strptime(
+                        dateobs, "%Y-%m-%dT%H:%M:%S.%f"
+                    )
+                except ValueError:
+                    try:
+                        dateobs = datetime.datetime.strptime(
+                            dateobs, "%Y-%m-%dT%H:%M:%S"
+                        )
+                    except ValueError:
+                        raise ValueError(
+                            "dateobs must be in the format YYYY-MM-DDTHH:MM:SS[.SSSSSS] if it is a string"
+                        )
+            query["dateobs"] = dateobs
+        if request.query.get("triggerid") is not None:
+            query["triggerid"] = request.query["triggerid"]
+        if request.query.get("alias") is not None:
+            query["aliases"] = request.query["alias"]
+
+        if request.query.get("localization_name") is not None:
+            query["localization_name"] = request.query["localization_name"]
+
+        if len(query) == 0:
+            return web.json_response(
+                {
+                    "status": "error",
+                    "message": "must provide dateobs, triggerid, or alias",
+                }
+            )
+
+        try:
+            skymap = await request.app["mongo"][
+                config["database"]["collections"]["skymaps"]
+            ].find_one(query)
+            if skymap is None:
+                return web.json_response(
+                    {"status": "error", "message": "no skymap found"}
+                )
+            if request.query.get("contours") is not None:
+                contours = request.query["contours"]
+                if isinstance(contours, int) or isinstance(contours, float):
+                    contours = [contours]
+                elif isinstance(contours, str):
+                    if "," in contours:
+                        try:
+                            contours = [
+                                str_to_numeric(contour)
+                                for contour in contours.split(",")
+                            ]
+                        except ValueError:
+                            raise ValueError(
+                                "contours must be a comma-separated list of integers"
+                            )
+                    else:
+                        try:
+                            contours = [str_to_numeric(contours)]
+                        except ValueError:
+                            raise ValueError(
+                                "contours must be an integer or a comma-separated list of integers"
+                            )
+
+                missing_contours = [
+                    level
+                    for level in contours
+                    if f"contour{level}" not in skymap["contours"]
+                ]
+                if len(missing_contours) > 0:
+                    return web.json_response(
+                        {
+                            "status": "error",
+                            "message": f"skymap exists but is missing contours {missing_contours}",
+                        }
+                    )
+            del skymap["_id"]
+            skymap["dateobs"] = skymap["dateobs"].isoformat()
+            return web.json_response({"status": "success", "data": skymap})
+        except Exception as e:
+            return web.json_response({"status": "error", "message": str(e)})
+
+    @auth_required
+    async def delete(self, request: web.Request) -> web.Response:
+        """Delete a skymap using either a dateobs, triggerid, or alias"""
+        _data = await request.json()
+        try:
+            SkymapHandlerDelete(**_data)
+        except ValidationError as e:
+            return web.json_response({"status": "error", "message": str(e)})
+
+        query = {}
+        if _data.get("dateobs") is not None:
+            dateobs = _data["dateobs"]
+            if isinstance(dateobs, str):
+                try:
+                    dateobs = datetime.datetime.strptime(
+                        dateobs, "%Y-%m-%dT%H:%M:%S.%f"
+                    )
+                except ValueError:
+                    try:
+                        dateobs = datetime.datetime.strptime(
+                            dateobs, "%Y-%m-%dT%H:%M:%S"
+                        )
+                    except ValueError:
+                        raise ValueError(
+                            "dateobs must be in the format YYYY-MM-DDTHH:MM:SS[.SSSSSS] if it is a string"
+                        )
+            query["dateobs"] = dateobs
+        if _data.get("triggerid") is not None:
+            query["triggerid"] = _data["triggerid"]
+        if _data.get("alias") is not None:
+            query["aliases"] = _data["alias"]
+
+        if len(query) == 0:
+            return web.json_response(
+                {
+                    "status": "error",
+                    "message": "must provide dateobs, triggerid, or alias",
+                }
+            )
+
+        query["localization_name"] = _data["localization_name"]
+
+        try:
+            result = await request.app["mongo"][
+                config["database"]["collections"]["skymaps"]
+            ].delete_one(query)
+            if result.deleted_count == 0:
+                return web.json_response(
+                    {"status": "error", "message": "no skymap found"}
+                )
+            return web.json_response(
+                {
+                    "status": "success",
+                    "message": f"deleted {result.deleted_count} skymap",
+                }
+            )
+        except Exception as e:
+            return web.json_response({"status": "error", "message": str(e)})
+
+
 """ lab """
 
 
@@ -3187,6 +3748,7 @@ async def app_factory():
     ztf_trigger_handler_test = ZTFTriggerHandler(test=True)
     ztf_mma_trigger_handler = ZTFMMATriggerHandler()
     ztf_mma_trigger_handler_test = ZTFMMATriggerHandler(test=True)
+    skymap_handler = SkymapHandler()
 
     # add routes manually
     s.add_routes(
@@ -3222,6 +3784,9 @@ async def app_factory():
             web.delete(
                 "/api/triggers/ztfmma.test", ztf_mma_trigger_handler_test.delete
             ),
+            web.put("/api/skymap", skymap_handler.put),
+            web.get("/api/skymap", skymap_handler.get),
+            web.delete("/api/skymap", skymap_handler.delete),
             # lab:
             web.get(
                 "/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}",

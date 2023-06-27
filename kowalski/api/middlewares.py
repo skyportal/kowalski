@@ -21,7 +21,7 @@ async def error_middleware(request, handler) -> web.Response:
     """
     try:
         response = await handler(request)
-        if response.status in (200, 400):
+        if response.status in (200, 400, 409):
             return response
         error_message = response.reason
         status = response.status

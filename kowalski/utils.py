@@ -26,6 +26,7 @@ __all__ = [
     "radec_str2geojson",
     "radec2lb",
     "sdss_url",
+    "str_to_numeric",
     "time_stamp",
     "timer",
     "TimeoutHTTPAdapter",
@@ -1116,6 +1117,13 @@ def ccd_quad_to_rc(ccd: int, quad: int) -> int:
     b = (ccd - 1) * 4
     rc = b + quad - 1
     return rc
+
+
+def str_to_numeric(s):
+    try:
+        return int(s)
+    except ValueError:
+        return float(s)
 
 
 class ZTFAlert:

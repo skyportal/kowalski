@@ -22,3 +22,10 @@ requests==2.31.0
 sshtunnel==0.4.0
 supervisor==4.2.5
 uvloop==0.17.0
+ligo.skymap==1.0.7
+mocpy==0.12.3
+healpy==1.16.2
+scipy==1.10.1
+pygcn==1.1.2
+xmlschema==2.3.0
+lxml==4.9.2

@@ -85,6 +85,25 @@ def test(use_docker=False):
     failed_tests = []
 
     for setup in test_setups:
+        if setup["part"] == "API" and use_docker:
+            # this is to help github actions, we do not need
+            # any of the ingester related processes to run anymore
+            try:
+                subprocess.run(
+                    [
+                        "docker",
+                        "exec",
+                        "-i",
+                        "kowalski_ingester_1",
+                        "bash",
+                        "-c",
+                        "make stop_ingester",
+                    ],
+                    check=True,
+                )
+            except subprocess.CalledProcessError:
+                print("Failed to stop the ingester processes")
+
         print(f"Testing {setup['part']}")
         command = [
             "python",
