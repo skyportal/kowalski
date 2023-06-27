@@ -134,7 +134,7 @@ def test(use_docker=False):
     if failed_tests:
         print(f"Failed tests: {failed_tests}")
         # for the github action to fail, return non-zero exit code
-        # exit(1)
+        exit(1)
 
 
 if __name__ == "__main__":
