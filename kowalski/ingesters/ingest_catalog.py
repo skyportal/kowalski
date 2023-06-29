@@ -495,9 +495,16 @@ def run(
     ]
     random.shuffle(input_list)
 
+    total_good_documents, total_bad_documents = 0, 0
     with multiprocessing.Pool(processes=num_proc) as pool:
-        for _ in tqdm(pool.imap(process_file, input_list), total=len(files)):
-            pass
+        for result in tqdm(pool.imap(process_file, input_list), total=len(files)):
+            total_good_documents += result[0]
+            total_bad_documents += result[1]
+
+    log(f"Successfully ingested {total_good_documents} documents")
+    log(f"Failed to ingest {total_bad_documents} documents")
+
+    return total_good_documents, total_bad_documents
 
 
 if __name__ == "__main__":
