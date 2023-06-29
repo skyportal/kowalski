@@ -37,9 +37,11 @@ def process_file(argument_list: Sequence):
         id_col,
         batch_size,
         max_docs,
+        rm,
         format,
     ) = argument_list
 
+    log(f"Processing {file}")
     if format not in ("fits", "csv", "parquet"):
         log("Format not supported")
         return
@@ -436,6 +438,12 @@ def process_file(argument_list: Sequence):
         log("No documents ingested")
     if total_bad_documents > 0:
         log(f"Failed to ingest {total_bad_documents} documents")
+
+    if total_bad_documents == 0 and rm is True:
+        try:
+            os.remove(pathlib.Path(file))
+        except Exception as e:
+            log(f"Failed to remove original file: {e}")
     return total_good_documents, total_bad_documents
 
 
@@ -448,6 +456,7 @@ def run(
     num_proc: int = multiprocessing.cpu_count(),
     batch_size: int = 2048,
     max_docs: int = None,
+    rm: bool = False,
     format: str = "fits",
 ):
     """Pre-process and ingest catalog from fits files into Kowalski
@@ -477,8 +486,11 @@ def run(
 
     # grab all the files in the directory and subdirectories:
     files = []
-    for root, dirnames, filenames in os.walk(path):
-        files += [os.path.join(root, f) for f in filenames if f.endswith(format)]
+    if os.path.isfile(path):
+        files.append(path)
+    else:
+        for root, dirnames, filenames in os.walk(path):
+            files += [os.path.join(root, f) for f in filenames if f.endswith(format)]
 
     input_list = [
         (
@@ -489,6 +501,7 @@ def run(
             id_col,
             batch_size,
             max_docs,
+            rm,
             format,
         )
         for file in sorted(files)
@@ -496,6 +509,7 @@ def run(
     random.shuffle(input_list)
 
     total_good_documents, total_bad_documents = 0, 0
+    log(f"Processing {len(files)} files with {num_proc} processes")
     with multiprocessing.Pool(processes=num_proc) as pool:
         for result in tqdm(pool.imap(process_file, input_list), total=len(files)):
             total_good_documents += result[0]
