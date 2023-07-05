@@ -18,6 +18,7 @@ kowalski:
     JWT_EXP_DELTA_SECONDS:
     # fixme: use from cryptography.fernet import Fernet; Fernet.generate_key().decode()
     fernet_key: "irjsxvfJdqSJ2fcnpPacbH972dt-RPMMLE48PQ8J5Hg="
+    client_max_size: 1048576
 
   ztf:
     mountain_ip: null

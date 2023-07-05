@@ -3138,8 +3138,13 @@ async def app_factory():
     # admin to connect to this instance from outside using API
     await add_admin(mongo, config=config)
 
+    # app settings
+    settings = {
+        "client_max_size": config["server"].get("client_max_size", 1024**2),
+    }
+
     # init app with auth and error handling middlewares
-    app = web.Application(middlewares=[auth_middleware, error_middleware])
+    app = web.Application(middlewares=[auth_middleware, error_middleware], **settings)
 
     # store mongo connection
     app["mongo"] = mongo
