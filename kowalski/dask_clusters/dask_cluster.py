@@ -10,9 +10,15 @@ from kowalski.log import log
 
 
 def trim_memory() -> int:
-    if platform.uname()[0] != "Darwin":
-        libc = ctypes.CDLL("libc.so.6")
-        return libc.malloc_trim(0)
+    try:
+        if platform.uname()[0] != "Darwin":
+            libc = ctypes.CDLL("libc.so.6")
+            return libc.malloc_trim(0)
+        else:
+            return 0
+    except Exception as e:
+        log(f"Exception while trimming memory: {e}")
+        return 0
 
 
 """ load config and secrets """
