@@ -75,17 +75,18 @@ DEFAULT_TIMEOUT = 5  # seconds
 # up to max_retries times with a timeout of timeout seconds
 
 
-def retry(func, max_retries=20, timeout=5):
+def retry(func, max_retries=10, timeout=6):
     def wrapper_retry(*args, **kwargs):
         n_retries = 0
+        exception = None
         while n_retries < max_retries:
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                if n_retries == max_retries - 1:
-                    raise e
                 time.sleep(timeout)
                 n_retries += 1
+                exception = e
+        raise exception
 
     return wrapper_retry
 
