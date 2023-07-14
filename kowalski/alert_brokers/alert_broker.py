@@ -869,6 +869,7 @@ class AlertWorker:
             dec_geojson = float(alert["candidate"]["dec"])
 
             """ catalogs """
+            matches = []
             cross_match_config = config["database"]["xmatch"][self.instrument]
             for catalog in cross_match_config:
                 try:
@@ -890,7 +891,9 @@ class AlertWorker:
                     log(f"Failed to cross-match {catalog}: {str(e)}")
                     matches = []
                 xmatches[catalog] = matches
-                del matches
+
+            # clean up after thyself
+            del ra, dec, ra_geojson, dec_geojson, matches, cross_match_config
 
         except Exception as e:
             log(f"Failed catalogs cross-match: {str(e)}")
