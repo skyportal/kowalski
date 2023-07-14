@@ -14,7 +14,7 @@ from typing import Mapping, Sequence
 import dask.distributed
 from kowalski.alert_brokers.alert_broker import AlertConsumer, AlertWorker, EopError
 from bson.json_util import loads as bson_loads
-from kowalski.utils import init_db_sync, timer
+from kowalski.utils import init_db_sync, timer, retry
 from kowalski.config import load_config
 from kowalski.log import log
 
@@ -49,9 +49,9 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
 
         # return if this alert packet has already been processed and ingested into collection_alerts:
         if (
-            alert_worker.mongo.db[alert_worker.collection_alerts].count_documents(
-                {"candid": candid}, limit=1
-            )
+            retry(
+                alert_worker.mongo.db[alert_worker.collection_alerts].count_documents
+            )({"candid": candid}, limit=1)
             == 1
         ):
             return
@@ -67,9 +67,9 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             alert_worker.verbose > 1,
         ):
             # get all prv_candidates for this objectId:
-            existing_aux = alert_worker.mongo.db[
-                alert_worker.collection_alerts_aux
-            ].find_one({"_id": object_id}, {"prv_candidates": 1})
+            existing_aux = retry(
+                alert_worker.mongo.db[alert_worker.collection_alerts_aux].find_one
+            )({"_id": object_id}, {"prv_candidates": 1})
             if (
                 existing_aux is not None
                 and len(existing_aux.get("prv_candidates", [])) > 0
@@ -82,7 +82,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             alert["classifications"] = scores
 
         with timer(f"Ingesting {object_id} {candid}", alert_worker.verbose > 1):
-            alert_worker.mongo.insert_one(
+            retry(alert_worker.mongo.insert_one)(
                 collection=alert_worker.collection_alerts, document=alert
             )
 
@@ -94,9 +94,11 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
 
         # cross-match with external catalogs if objectId not in collection_alerts_aux:
         if (
-            alert_worker.mongo.db[alert_worker.collection_alerts_aux].count_documents(
-                {"_id": object_id}, limit=1
-            )
+            retry(
+                alert_worker.mongo.db[
+                    alert_worker.collection_alerts_aux
+                ].count_documents
+            )({"_id": object_id}, limit=1)
             == 0
         ):
             with timer(
@@ -111,7 +113,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             }
 
             with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
-                alert_worker.mongo.insert_one(
+                retry(alert_worker.mongo.insert_one)(
                     collection=alert_worker.collection_alerts_aux, document=alert_aux
                 )
 
@@ -119,7 +121,9 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             with timer(
                 f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1
             ):
-                alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
+                retry(
+                    alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one
+                )(
                     {"_id": object_id},
                     {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
                     upsert=True,
@@ -202,7 +206,9 @@ class ZTFAlertWorker(AlertWorker, ABC):
         # todo: query SP to make sure the filters still exist there and we're not out of sync;
         #       clean up if necessary
         return list(
-            self.mongo.db[config["database"]["collections"]["filters"]].aggregate(
+            retry(
+                self.mongo.db[config["database"]["collections"]["filters"]].aggregate
+            )(
                 [
                     {
                         "$match": {
