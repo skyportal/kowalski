@@ -427,6 +427,7 @@ def topic_listener(
     :return:
     """
 
+    os.environ["MALLOC_TRIM_THRESHOLD_"] = "65536"
     # Configure dask client
     dask_client = dask.distributed.Client(
         address=f"{config['dask']['host']}:{config['dask']['scheduler_port']}"

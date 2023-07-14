@@ -17,7 +17,7 @@ def trim_memory() -> int:
         else:
             return 0
     except Exception as e:
-        log(f"Exception while trimming memory: {e}")
+        log(f"Exception while trimming memory: {str(e)}")
         return 0
 
 
