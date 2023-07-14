@@ -214,6 +214,19 @@ class AlertConsumer:
         """
         raise NotImplementedError("Must be implemented in subclass")
 
+    def submit_alert(self, record: Mapping, topic: str):
+        with timer(
+            f"Submitting alert {record['objectId']} {record['candid']} for processing",
+            self.verbose > 1,
+        ):
+            future = self.dask_client.submit(
+                self.process_alert, record, self.topic, pure=True
+            )
+            dask.distributed.fire_and_forget(future)
+            future.release()
+            del future
+        return
+
     def poll(self):
         """Polls Kafka broker to consume a topic."""
         msg = self.consumer.poll()
@@ -239,22 +252,20 @@ class AlertConsumer:
                         )
                         == 0
                     ):
-                        with timer(
-                            f"Submitting alert {record['objectId']} {record['candid']} for processing",
-                            self.verbose > 1,
-                        ):
-                            future = self.dask_client.submit(
-                                self.process_alert, record, self.topic, pure=True
-                            )
-                            dask.distributed.fire_and_forget(future)
-                            future.release()
-                            del future
+
+                        self.submit_alert(record, self.topic)
+
+                # clean up after thyself
+                del msg_decoded
 
             except Exception as e:
                 print("Error in poll!")
                 log(e)
                 _err = traceback.format_exc()
                 log(_err)
+
+        # clean up after thyself
+        del msg
 
 
 class AlertWorker:
@@ -785,10 +796,10 @@ class AlertWorker:
         :return:
         """
 
-        scores = dict()
-
         if self.ml_models is None or len(self.ml_models) == 0:
             return dict()
+
+        scores = dict()
 
         if self.instrument == "ZTF":
             try:
@@ -797,6 +808,7 @@ class AlertWorker:
 
                 for model_name in self.ml_models.keys():
                     inputs = {}
+                    features, triplet, score = None, None, None
                     try:
                         with timer(f"Prepping features for {model_name}"):
                             if self.ml_models[model_name]["feature_names"] is not False:
@@ -828,12 +840,18 @@ class AlertWorker:
                             f"Failed to run ML model {model_name} on alert {alert['objectId']}: {e}"
                         )
 
+                    # clean up after thyself
+                    del inputs, features, triplet, score
+
             except Exception as e:
                 log(f"Failed to run ML models on alert {alert['objectId']}: {e}")
 
         elif self.instrument == "PGIR":
             # TODO
             pass
+
+        # clean up after thyself
+        del alert_history
 
         return scores
 
@@ -851,6 +869,7 @@ class AlertWorker:
             dec_geojson = float(alert["candidate"]["dec"])
 
             """ catalogs """
+            matches = []
             cross_match_config = config["database"]["xmatch"][self.instrument]
             for catalog in cross_match_config:
                 try:
@@ -872,6 +891,9 @@ class AlertWorker:
                     log(f"Failed to cross-match {catalog}: {str(e)}")
                     matches = []
                 xmatches[catalog] = matches
+
+            # clean up after thyself
+            del ra, dec, ra_geojson, dec_geojson, matches, cross_match_config
 
         except Exception as e:
             log(f"Failed catalogs cross-match: {str(e)}")

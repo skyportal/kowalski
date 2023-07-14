@@ -175,6 +175,8 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
             xmatches_ztf,
             alert_aux,
             passed_filters,
+            candid,
+            object_id,
         )
 
 
