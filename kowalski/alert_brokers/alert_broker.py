@@ -796,10 +796,10 @@ class AlertWorker:
         :return:
         """
 
-        scores = dict()
-
         if self.ml_models is None or len(self.ml_models) == 0:
             return dict()
+
+        scores = dict()
 
         if self.instrument == "ZTF":
             try:
@@ -808,6 +808,7 @@ class AlertWorker:
 
                 for model_name in self.ml_models.keys():
                     inputs = {}
+                    features, triplet, score = None, None, None
                     try:
                         with timer(f"Prepping features for {model_name}"):
                             if self.ml_models[model_name]["feature_names"] is not False:
@@ -839,12 +840,18 @@ class AlertWorker:
                             f"Failed to run ML model {model_name} on alert {alert['objectId']}: {e}"
                         )
 
+                    # clean up after thyself
+                    del inputs, features, triplet, score
+
             except Exception as e:
                 log(f"Failed to run ML models on alert {alert['objectId']}: {e}")
 
         elif self.instrument == "PGIR":
             # TODO
             pass
+
+        # clean up after thyself
+        del alert_history
 
         return scores
 
@@ -883,6 +890,7 @@ class AlertWorker:
                     log(f"Failed to cross-match {catalog}: {str(e)}")
                     matches = []
                 xmatches[catalog] = matches
+                del matches
 
         except Exception as e:
             log(f"Failed catalogs cross-match: {str(e)}")
