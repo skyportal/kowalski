@@ -2,11 +2,12 @@ aiohttp==3.8.4
 astropy==5.2.1
 bcrypt==4.0.1
 beautifulsoup4==4.11.2
+bokeh==2.4.3
 confluent-kafka==2.1.1
 cryptography==41.0.1
-dask==2023.6.0
+dask==2023.7.0
 deepdiff==6.2.3
-distributed==2023.6.0
+distributed==2023.7.0
 fastavro==1.6.0 #breaking changes in newer versions
 fire==0.5.0
 gsutil==5.20
@@ -34,4 +35,3 @@ tensorflow-macos==2.12.0
 tensorflow-metal==0.8.0
 tqdm==4.64.1
 uvloop==0.17.0
-bokeh==2.4.3
