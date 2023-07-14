@@ -75,6 +75,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 and len(existing_aux.get("prv_candidates", [])) > 0
             ):
                 all_prv_candidates += existing_aux["prv_candidates"]
+            del existing_aux
 
         # ML models:
         with timer(f"MLing of {object_id} {candid}", alert_worker.verbose > 1):
@@ -92,6 +93,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             for prv_candidate in prv_candidates
         ]
 
+        alert_aux, xmatches, passed_filters = None, None, None
         # cross-match with external catalogs if objectId not in collection_alerts_aux:
         if (
             retry(
