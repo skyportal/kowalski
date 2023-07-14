@@ -10,6 +10,8 @@ from kowalski.log import log
 
 
 def trim_memory() -> int:
+    # suggested by: https://www.coiled.io/blog/tackling-unmanaged-memory-with-dask
+    # to try to deal with accumulating unmanaged memory
     try:
         if platform.uname()[0] != "Darwin":
             libc = ctypes.CDLL("libc.so.6")
