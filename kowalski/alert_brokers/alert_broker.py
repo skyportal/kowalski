@@ -214,6 +214,19 @@ class AlertConsumer:
         """
         raise NotImplementedError("Must be implemented in subclass")
 
+    def submit_alert(self, record: Mapping, topic: str):
+        with timer(
+            f"Submitting alert {record['objectId']} {record['candid']} for processing",
+            self.verbose > 1,
+        ):
+            future = self.dask_client.submit(
+                self.process_alert, record, self.topic, pure=True
+            )
+            dask.distributed.fire_and_forget(future)
+            future.release()
+            del future
+        return
+
     def poll(self):
         """Polls Kafka broker to consume a topic."""
         msg = self.consumer.poll()
@@ -239,22 +252,20 @@ class AlertConsumer:
                         )
                         == 0
                     ):
-                        with timer(
-                            f"Submitting alert {record['objectId']} {record['candid']} for processing",
-                            self.verbose > 1,
-                        ):
-                            future = self.dask_client.submit(
-                                self.process_alert, record, self.topic, pure=True
-                            )
-                            dask.distributed.fire_and_forget(future)
-                            future.release()
-                            del future
+
+                        self.submit_alert(record, self.topic)
+
+                # clean up after thyself
+                del msg_decoded
 
             except Exception as e:
                 print("Error in poll!")
                 log(e)
                 _err = traceback.format_exc()
                 log(_err)
+
+        # clean up after thyself
+        del msg
 
 
 class AlertWorker:

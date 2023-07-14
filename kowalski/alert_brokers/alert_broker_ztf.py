@@ -154,6 +154,8 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             xmatches,
             alert_aux,
             passed_filters,
+            candid,
+            object_id,
         )
 
 
