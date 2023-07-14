@@ -32,6 +32,7 @@ __all__ = [
     "TimeoutHTTPAdapter",
     "uid",
     "ZTFAlert",
+    "retry",
 ]
 
 import base64
@@ -69,6 +70,25 @@ pi = 3.141592653589793
 
 
 DEFAULT_TIMEOUT = 5  # seconds
+
+# create a decorator that retries a function call until there is no exception
+# up to max_retries times with a timeout of timeout seconds
+
+
+def retry(func, max_retries=10, timeout=6):
+    def wrapper_retry(*args, **kwargs):
+        n_retries = 0
+        exception = None
+        while n_retries < max_retries:
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                time.sleep(timeout)
+                n_retries += 1
+                exception = e
+        raise exception
+
+    return wrapper_retry
 
 
 @contextmanager

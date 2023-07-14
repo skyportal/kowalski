@@ -42,6 +42,7 @@ from kowalski.utils import (
     radec2lb,
     time_stamp,
     timer,
+    retry,
 )
 
 # Tensorflow is problematic for Mac's currently, so we can add an option to disable it
@@ -233,7 +234,7 @@ class AlertConsumer:
 
                 for record in msg_decoded:
                     if (
-                        self.mongo.db[self.collection_alerts].count_documents(
+                        retry(self.mongo.db[self.collection_alerts].count_documents)(
                             {"candid": record["candid"]}, limit=1
                         )
                         == 0
@@ -920,7 +921,7 @@ class AlertWorker:
                     ]
                 }
             }
-            s = self.mongo.db[catalog].find(
+            s = retry(self.mongo.db[catalog].find)(
                 {**object_position_query, **catalog_filter}, {**catalog_projection}
             )
             matches = list(s)
@@ -980,7 +981,7 @@ class AlertWorker:
                 }
             }
             galaxies = list(
-                self.mongo.db[catalog].find(
+                retry(self.mongo.db[catalog].find)(
                     {**object_position_query, **catalog_filter}, {**catalog_projection}
                 )
             )
@@ -1122,7 +1123,7 @@ class AlertWorker:
                 _filter["pipeline"][0]["$match"]["candid"] = alert["candid"]
 
                 filtered_data = list(
-                    self.mongo.db[self.collection_alerts].aggregate(
+                    retry(self.mongo.db[self.collection_alerts].aggregate)(
                         _filter["pipeline"], allowDiskUse=False, maxTimeMS=max_time_ms
                     )
                 )
@@ -1434,7 +1435,7 @@ class AlertWorker:
                 # post full light curve
                 try:
                     alert["prv_candidates"] = list(
-                        self.mongo.db[self.collection_alerts_aux].find(
+                        retry(self.mongo.db[self.collection_alerts_aux].find)(
                             {"_id": alert["objectId"]}, {"prv_candidates": 1}, limit=1
                         )
                     )[0]["prv_candidates"]
