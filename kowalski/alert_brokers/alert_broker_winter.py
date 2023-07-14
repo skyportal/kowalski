@@ -94,6 +94,8 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
             {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
             for prv_candidate in prv_candidates
         ]
+
+        alert_aux, xmatches, xmatches_ztf, passed_filters = None, None, None, None
         # cross-match with external catalogs if objectId not in collection_alerts_aux:
         if (
             alert_worker.mongo.db[alert_worker.collection_alerts_aux].count_documents(
