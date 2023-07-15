@@ -214,7 +214,7 @@ class AlertConsumer:
         """
         raise NotImplementedError("Must be implemented in subclass")
 
-    def submit_alert(self, record: Mapping, topic: str):
+    def submit_alert(self, record: Mapping):
         with timer(
             f"Submitting alert {record['objectId']} {record['candid']} for processing",
             self.verbose > 1,
@@ -224,7 +224,7 @@ class AlertConsumer:
             )
             dask.distributed.fire_and_forget(future)
             future.release()
-            del future
+            del future, record
         return
 
     def poll(self):
@@ -253,7 +253,7 @@ class AlertConsumer:
                         == 0
                     ):
 
-                        self.submit_alert(record, self.topic)
+                        self.submit_alert(record)
 
                 # clean up after thyself
                 del msg_decoded
@@ -828,9 +828,9 @@ class AlertWorker:
                                 ]
 
                         with timer(model_name):
-                            score = self.ml_models[model_name]["model"].predict(
-                                x=inputs
-                            )[0]
+                            score = self.ml_models[model_name]["model"](
+                                inputs, training=False
+                            ).numpy()[0]
                             scores[model_name] = float(score)
                             scores[f"{model_name}_version"] = self.ml_models[
                                 model_name
@@ -842,6 +842,9 @@ class AlertWorker:
 
                     # clean up after thyself
                     del inputs, features, triplet, score
+
+                # cleanup after thyself
+                del ztf_alert
 
             except Exception as e:
                 log(f"Failed to run ML models on alert {alert['objectId']}: {e}")
