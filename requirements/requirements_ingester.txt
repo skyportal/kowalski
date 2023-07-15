@@ -4,7 +4,7 @@ bcrypt==4.0.1
 beautifulsoup4==4.11.2
 bokeh==2.4.3
 confluent-kafka==2.1.1
-cryptography==41.0.1
+cryptography==41.0.2
 dask==2023.7.0
 deepdiff==6.2.3
 distributed==2023.7.0
