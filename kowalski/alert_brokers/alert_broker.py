@@ -815,12 +815,10 @@ class AlertWorker:
                                 features = ztf_alert.data["features"][model_name]
                                 inputs["features"] = np.expand_dims(
                                     features, axis=[0, -1]
-                                ).astype("float32")
+                                )
                             if self.ml_models[model_name]["triplet"] is not False:
                                 triplet = ztf_alert.data["triplet"]
-                                inputs["triplet"] = np.expand_dims(
-                                    triplet, axis=[0]
-                                ).astype("float32")
+                                inputs["triplet"] = np.expand_dims(triplet, axis=[0])
                             if len(inputs.keys()) == 1:
                                 inputs = inputs[list(inputs.keys())[0]]
                             else:
