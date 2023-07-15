@@ -841,7 +841,6 @@ class AlertWorker:
                         log(
                             f"Failed to run ML model {model_name} on alert {alert['objectId']}: {e}"
                         )
-                        traceback.print_exc()
 
                     # clean up after thyself
                     del inputs, features, triplet, score
