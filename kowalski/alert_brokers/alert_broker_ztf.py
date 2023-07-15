@@ -158,6 +158,8 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             object_id,
         )
 
+        return
+
 
 class ZTFAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
