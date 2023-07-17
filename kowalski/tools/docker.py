@@ -2,6 +2,7 @@
 import bz2
 import datetime
 import pathlib
+import platform
 import re
 import secrets
 import string
@@ -10,6 +11,7 @@ import time
 from typing import Optional, Sequence
 
 import fire
+import yaml
 
 from kowalski.config import load_config
 from kowalski.log import log
@@ -163,6 +165,53 @@ class DockerKowalski:
             )
             config = "docker-compose.defaults.yaml"
         return config
+
+    @classmethod
+    def setup(cls):
+        # load config.yaml config
+        config = load_config(["config.yaml"])["kowalski"]
+        # look for the max_wired_tiger_cache key in config.yaml in the database section
+        max_wired_tiger_cache = config["database"].get("max_wired_tiger_cache", None)
+
+        if max_wired_tiger_cache is not None:
+            if platform.system() == "Darwin":
+                total = subprocess.check_output(["sysctl", "-n", "hw.memsize"]).split()[
+                    0
+                ]  # in bytes
+                total = float(total) / 1024 / 1024 / 1024
+            else:
+                total = subprocess.check_output(["free", "-m"]).split()[7]  # in MB
+                total = float(total) / 1024
+
+            if "%" in max_wired_tiger_cache:
+                # if the value is a percentage, calculate the percentage of the total system memory
+                # use platform.system() to determine the OS
+                max_wired_tiger_cache = int(
+                    float(max_wired_tiger_cache.replace("%", "")) * total / 100
+                )
+            else:
+                # if the value is not a percentage, convert it to an integer
+                max_wired_tiger_cache = int(max_wired_tiger_cache)
+                if max_wired_tiger_cache > int(total):
+                    # if the value is greater than the total system memory, throw an error
+                    raise ValueError(
+                        f"max_wired_tiger_cache ({max_wired_tiger_cache} GB) is greater than the total system memory ({total} GB)"
+                    )
+
+            docker_config_file = cls.load_docker_config()
+            docker_config = yaml.full_load(open(docker_config_file))
+
+            command = docker_config["services"]["mongo"]["command"]
+            try:
+                index = command.index("--wiredTigerCacheSizeGB")
+                command[index + 1] = str(max_wired_tiger_cache)
+            except ValueError:
+                command.append("--wiredTigerCacheSizeGB")
+                command.append(str(max_wired_tiger_cache))
+            docker_config["services"]["mongo"]["command"] = command
+            # write the docker-compose config
+            with open(docker_config_file, "w") as f:
+                yaml.dump(docker_config, f)
 
     @classmethod
     def up(cls, build: bool = False):

@@ -42,6 +42,7 @@ kowalski:
 
   database:
     max_pool_size: 200
+    max_wired_tiger_cache: 20% # in GB or % of available RAM, e.g. 50% or 10GB. If no unit is specified, GB is assumed
     host: "localhost"
     port: 27017 # if not null, must be same as in entrypoint of mongo container
     replica_set: null
