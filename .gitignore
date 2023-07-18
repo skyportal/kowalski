@@ -12,3 +12,4 @@ models/
 logs/
 conf/*
 !conf/*.template
+.DS_Store
