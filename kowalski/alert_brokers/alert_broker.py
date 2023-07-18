@@ -873,7 +873,7 @@ class AlertWorker:
 
             """ catalogs """
             matches = []
-            cross_match_config = config["database"]["xmatch"][self.instrument]
+            cross_match_config = config["database"]["xmatch"].get(self.instrument, {})
             for catalog in cross_match_config:
                 try:
                     # if the catalog has "distance", "ra", "dec" in its config, then it is a catalog with distance
