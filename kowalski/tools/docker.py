@@ -169,7 +169,7 @@ class DockerKowalski:
     @classmethod
     def setup(cls):
         # load config.yaml config
-        config = load_config(["config.yaml"])["kowalski"]
+        config = load_config(["config.yaml", "docker.yaml"])["kowalski"]
         # look for the max_wired_tiger_cache key in config.yaml in the database section
         max_wired_tiger_cache = config["database"].get("max_wired_tiger_cache", None)
 
@@ -264,7 +264,7 @@ class DockerKowalski:
         command = ["docker-compose", "-f", docker_config, "build"]
 
         # load config
-        config = load_config(["config.yaml"])["kowalski"]
+        config = load_config(["config.yaml", "docker.yaml"])["kowalski"]
 
         # get git version:
         git_hash_date = get_git_hash_date()
@@ -298,7 +298,7 @@ class DockerKowalski:
         print("Ingesting catalog dumps into a running Kowalski instance")
 
         # load config
-        config = load_config(["config.yaml"])["kowalski"]
+        config = load_config(["config.yaml", "docker.yaml"])["kowalski"]
 
         command = [
             "docker",
