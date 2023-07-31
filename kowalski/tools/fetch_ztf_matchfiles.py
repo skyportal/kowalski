@@ -104,7 +104,7 @@ def fetch_url(argument_list: Sequence):
                 if path.exists():
                     subprocess.run(["rm", "-f", str(path)])
                 n_retries += 1
-                time.sleep(15)
+                time.sleep(10)
                 continue
 
         if checksum is not None:
@@ -118,6 +118,7 @@ def fetch_url(argument_list: Sequence):
                 log(f"Checksum mismatch for {url}, redownloading")
                 subprocess.run(["rm", "-f", str(path)])
                 n_retries += 1
+                time.sleep(10)
                 continue
         else:
             # if we don't have a checksum, try to open the file with pytables to make sure it's not corrupted
@@ -128,6 +129,7 @@ def fetch_url(argument_list: Sequence):
                 log(f"Exception while opening {path}: {e}, redownloading")
                 subprocess.run(["rm", "-f", str(path)])
                 n_retries += 1
+                time.sleep(10)
                 continue
 
         break
