@@ -10,8 +10,11 @@ import subprocess
 from tqdm import tqdm
 from typing import Sequence
 from urllib.parse import urljoin
+import time
+import tables
 
 from kowalski.config import load_config
+from kowalski.log import log
 
 
 config = load_config(config_files=["config.yaml"])["kowalski"]
@@ -74,24 +77,63 @@ def collect_urls(readout_channel: int) -> list:
 def fetch_url(argument_list: Sequence):
     """Download matchfile from IPAC's depo given its url, save to base_path"""
     # unpack arguments
-    base_path, url = argument_list
+    base_path, url, checksum = argument_list
 
     path = base_path / pathlib.Path(url).name
-    if not path.exists():
-        subprocess.run(
-            [
-                "wget",
-                f"--http-user={config['ztf_depot']['username']}",
-                f"--http-passwd={config['ztf_depot']['password']}",
-                "-q",
-                "--timeout=600",
-                "--waitretry=10",
-                "--tries=5",
-                "-O",
-                str(path),
-                url,
-            ]
-        )
+    n_retries = 0
+    while n_retries < 5:
+        if not path.exists():
+            try:
+                subprocess.run(
+                    [
+                        "wget",
+                        f"--http-user={config['ztf_depot']['username']}",
+                        f"--http-passwd={config['ztf_depot']['password']}",
+                        "-q",
+                        "--timeout=600",
+                        "--waitretry=10",
+                        "--tries=5",
+                        "-O",
+                        str(path),
+                        url,
+                    ]
+                )
+            except Exception as e:
+                log(f"Exception while downloading {url}: {e}, redownloading")
+                # remove the file if it exists
+                if path.exists():
+                    subprocess.run(["rm", "-f", str(path)])
+                n_retries += 1
+                time.sleep(15)
+                continue
+
+        if checksum is not None:
+            # verify checksum
+            md5 = (
+                subprocess.check_output(["md5sum", str(path)])
+                .decode("utf-8")
+                .split()[0]
+            )
+            if md5 != checksum:
+                log(f"Checksum mismatch for {url}, redownloading")
+                subprocess.run(["rm", "-f", str(path)])
+                n_retries += 1
+                continue
+        else:
+            # if we don't have a checksum, try to open the file with pytables to make sure it's not corrupted
+            try:
+                with tables.open_file(str(path), "r+") as f:  # noqa
+                    pass
+            except Exception as e:
+                log(f"Exception while opening {path}: {e}, redownloading")
+                subprocess.run(["rm", "-f", str(path)])
+                n_retries += 1
+                continue
+
+        break
+
+    if n_retries == 5:
+        log(f"Failed to download {url} after 5 retries")
 
 
 def run(
@@ -102,6 +144,7 @@ def run(
     only_download_missing: bool = False,
     upload_to_gcp: bool = False,
     remove_upon_upload_to_gcp: bool = False,
+    checksums_path: str = None,
 ):
     """Collect urls of matchfiles from IPAC's depo, download them, and optionally move to GCS
 
@@ -124,6 +167,12 @@ def run(
     path_urls = pathlib.Path(path_out) / f"ztf_matchfiles_{tag}.csv"
     path_exists = path_urls.exists()
 
+    checksums = {}
+    if checksums_path is not None:
+        # verify that it exists
+        if not pathlib.Path(checksums_path).exists():
+            raise ValueError(f"Checksums file {checksums_path} does not exist")
+
     if not path_exists or refresh_csv:
         # store urls
         urls = []
@@ -142,6 +191,18 @@ def run(
     else:
         df_mf = pd.read_csv(path_urls)
         print(df_mf)
+
+    if checksums_path is not None:
+        with open(checksums_path, "r") as f:
+            for line in f:
+                md5, file_path = line.split()
+                checksums[file_path.split("/")[-1]] = md5
+        # add checksums to df
+        df_mf["checksum"] = df_mf["name"].apply(
+            lambda x: checksums[x] if x in checksums else None
+        )
+    else:
+        df_mf["checksum"] = None
 
     if not csv_only:
         # check what's (already) on GCS:
@@ -174,7 +235,8 @@ def run(
         print(f"Downloading {mask_to_be_fetched.sum()} matchfiles:")
 
         argument_lists = [
-            (path, row.url) for row in df_mf.loc[mask_to_be_fetched].itertuples()
+            (path, row.url, row.checksum)
+            for row in df_mf.loc[mask_to_be_fetched].itertuples()
         ]
 
         total = len(argument_lists)

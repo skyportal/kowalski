@@ -300,10 +300,26 @@ def process_file(argument_list: Sequence):
                             and len(docs_sources) != 0
                         ):
                             if not dry_run:
-                                mongo.insert_many(
-                                    collection=collections["sources"],
-                                    documents=docs_sources,
-                                )
+                                n_retries = 0
+                                while n_retries < 5:
+                                    mongo.insert_many(
+                                        collection=collections["sources"],
+                                        documents=docs_sources,
+                                    )
+                                    ids = [doc["_id"] for doc in docs_sources]
+                                    count = mongo.db[
+                                        collections["sources"]
+                                    ].count_documents({"_id": {"$in": ids}})
+                                    if count == len(docs_sources):
+                                        break
+                                    n_retries += 1
+                                if n_retries == 5:
+                                    log(
+                                        f"Failed to ingest batch {batch_num} fully after {n_retries} retries"
+                                    )
+                                    raise Exception(
+                                        f"Failed to ingest batch {batch_num} fully after {n_retries} retries"
+                                    )
                             # flush:
                             docs_sources = []
                             batch_num += 1
