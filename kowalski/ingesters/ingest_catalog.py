@@ -401,15 +401,33 @@ def process_file(argument_list: Sequence):
 
             # ingest in batches
             try:
-                if (
-                    len(batch) % batch_size == 0
-                    and len(batch) != 0
-                    or len(batch) == max_docs
-                ):
-                    mongo.insert_many(
-                        collection=collection,
-                        documents=batch,
-                    )
+                if (len(batch) % batch_size == 0 and len(batch) != 0) or len(
+                    batch
+                ) == max_docs:
+                    n_retries = 0
+                    while n_retries < 5:
+                        mongo.insert_many(
+                            collection=collection,
+                            documents=batch,
+                        )
+                        if id_col is not None:
+                            ids = [doc["_id"] for doc in batch]
+                            count = mongo.db[collection].count_documents(
+                                {"_id": {"$in": ids}}
+                            )
+                            if count == len(batch):
+                                break
+                            n_retries += 1
+                            time.sleep(15)
+                        else:
+                            break
+
+                    if n_retries == 5:
+                        log(
+                            f"Failed to ingest batch for {file} after {n_retries} retries, skipping"
+                        )
+                        total_bad_documents += len(batch)
+
                     # flush:
                     batch = []
             except Exception as e:
@@ -417,7 +435,27 @@ def process_file(argument_list: Sequence):
 
         while len(batch) > 0:
             try:
-                mongo.insert_many(collection=collection, documents=batch)
+                n_retries = 0
+                while n_retries < 10:
+                    mongo.insert_many(collection=collection, documents=batch)
+                    if id_col is not None:
+                        ids = [doc["_id"] for doc in batch]
+                        count = mongo.db[collection].count_documents(
+                            {"_id": {"$in": ids}}
+                        )
+                        if count == len(batch):
+                            break
+                        n_retries += 1
+                        time.sleep(15)
+                    else:
+                        break
+
+                if n_retries == 10:
+                    log(
+                        f"Failed to ingest batch for {file} after {n_retries} retries, skipping and not deleting file"
+                    )
+                    total_bad_documents += len(batch)
+                    rm = False
                 # flush:
                 batch = []
             except Exception as e:
