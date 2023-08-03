@@ -84,6 +84,30 @@ sources_fields_to_exclude = [
 ]
 
 
+def get_mongo_client() -> Mongo:
+    n_retries = 0
+    while n_retries < 10:
+        try:
+            mongo = Mongo(
+                host=config["database"]["host"],
+                port=config["database"]["port"],
+                replica_set=config["database"]["replica_set"],
+                username=config["database"]["username"],
+                password=config["database"]["password"],
+                db=config["database"]["db"],
+                srv=config["database"]["srv"],
+                verbose=0,
+            )
+        except Exception as e:
+            traceback.print_exc()
+            log(e)
+            log("Failed to connect to the database, waiting 15 seconds before retry")
+            time.sleep(15)
+            continue
+        return mongo
+    raise Exception("Failed to connect to the database after 10 retries")
+
+
 def track_failures(tag, file_name, exception):
     # we want the process file method to be able to save to a csv file
     # the file name and exception that occured if any
@@ -110,16 +134,7 @@ def process_file(argument_list: Sequence):
     file_name, collections, tag, batch_size, rm_file, dry_run = argument_list
     try:
         # connect to MongoDB:
-        mongo = Mongo(
-            host=config["database"]["host"],
-            port=config["database"]["port"],
-            replica_set=config["database"]["replica_set"],
-            username=config["database"]["username"],
-            password=config["database"]["password"],
-            db=config["database"]["db"],
-            srv=config["database"]["srv"],
-            verbose=0,
-        )
+        mongo = get_mongo_client()
 
         with tables.open_file(file_name, "r+") as f:
             group = f.root.matches
@@ -301,15 +316,24 @@ def process_file(argument_list: Sequence):
                         ):
                             if not dry_run:
                                 n_retries = 0
-                                while n_retries < 5:
-                                    mongo.insert_many(
-                                        collection=collections["sources"],
-                                        documents=docs_sources,
-                                    )
-                                    ids = [doc["_id"] for doc in docs_sources]
-                                    count = mongo.db[
-                                        collections["sources"]
-                                    ].count_documents({"_id": {"$in": ids}})
+                                while n_retries < 10:
+                                    try:
+                                        mongo.insert_many(
+                                            collection=collections["sources"],
+                                            documents=docs_sources,
+                                        )
+                                        ids = [doc["_id"] for doc in docs_sources]
+                                        count = mongo.db[
+                                            collections["sources"]
+                                        ].count_documents({"_id": {"$in": ids}})
+                                    except Exception as e:
+                                        traceback.print_exc()
+                                        log(str(e))
+                                        log("Failed, waiting 6 seconds to retry")
+                                        time.sleep(6)
+                                        mongo.close()
+                                        mongo = get_mongo_client()
+                                        continue
                                     if count == len(docs_sources):
                                         break
                                     n_retries += 1
@@ -339,14 +363,24 @@ def process_file(argument_list: Sequence):
                 # keep on trying to insert them until successful
                 if not dry_run:
                     n_retries = 0
-                    while n_retries < 5:
-                        mongo.insert_many(
-                            collection=collections["sources"], documents=docs_sources
-                        )
-                        ids = [doc["_id"] for doc in docs_sources]
-                        count = mongo.db[collections["sources"]].count_documents(
-                            {"_id": {"$in": ids}}
-                        )
+                    while n_retries < 10:
+                        try:
+                            mongo.insert_many(
+                                collection=collections["sources"],
+                                documents=docs_sources,
+                            )
+                            ids = [doc["_id"] for doc in docs_sources]
+                            count = mongo.db[collections["sources"]].count_documents(
+                                {"_id": {"$in": ids}}
+                            )
+                        except Exception as e:
+                            traceback.print_exc()
+                            log(str(e))
+                            log("Failed, waiting 6 seconds to retry")
+                            time.sleep(6)
+                            mongo.close()
+                            mongo = get_mongo_client()
+                            continue
                         if count == len(docs_sources):
                             break
                         n_retries += 1
