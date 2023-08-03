@@ -7,6 +7,7 @@ import os
 import pathlib
 import random
 import time
+import traceback
 from typing import Sequence
 
 import fire
@@ -28,6 +29,30 @@ config = load_config(config_files=["config.yaml"])["kowalski"]
 init_db_sync(config=config)
 
 
+def get_mongo_client() -> Mongo:
+    n_retries = 0
+    while n_retries < 10:
+        try:
+            mongo = Mongo(
+                host=config["database"]["host"],
+                port=config["database"]["port"],
+                replica_set=config["database"]["replica_set"],
+                username=config["database"]["username"],
+                password=config["database"]["password"],
+                db=config["database"]["db"],
+                srv=config["database"]["srv"],
+                verbose=0,
+            )
+        except Exception as e:
+            traceback.print_exc()
+            log(e)
+            log("Failed to connect to the database, waiting 15 seconds before retry")
+            time.sleep(15)
+            continue
+        return mongo
+    raise Exception("Failed to connect to the database after 10 retries")
+
+
 def process_file(argument_list: Sequence):
     (
         file,
@@ -46,22 +71,7 @@ def process_file(argument_list: Sequence):
         log("Format not supported")
         return
 
-    mongo = None
-    while True:
-        try:
-            mongo = Mongo(
-                host=config["database"]["host"],
-                port=config["database"]["port"],
-                replica_set=config["database"]["replica_set"],
-                username=config["database"]["username"],
-                password=config["database"]["password"],
-                db=config["database"]["db"],
-                srv=config["database"]["srv"],
-                verbose=0,
-            )
-            break
-        except Exception as e:
-            log(str(e))
+    mongo = get_mongo_client()
 
     # if the file is not an url
     if not file.startswith("http"):
@@ -405,7 +415,7 @@ def process_file(argument_list: Sequence):
                     batch
                 ) == max_docs:
                     n_retries = 0
-                    while n_retries < 5:
+                    while n_retries < 10:
                         mongo.insert_many(
                             collection=collection,
                             documents=batch,
@@ -418,11 +428,13 @@ def process_file(argument_list: Sequence):
                             if count == len(batch):
                                 break
                             n_retries += 1
-                            time.sleep(15)
+                            time.sleep(6)
+                            mongo.close()
+                            mongo = get_mongo_client()
                         else:
                             break
 
-                    if n_retries == 5:
+                    if n_retries == 10:
                         log(
                             f"Failed to ingest batch for {file} after {n_retries} retries, skipping"
                         )
@@ -446,7 +458,9 @@ def process_file(argument_list: Sequence):
                         if count == len(batch):
                             break
                         n_retries += 1
-                        time.sleep(15)
+                        time.sleep(6)
+                        mongo.close()
+                        mongo = get_mongo_client()
                     else:
                         break
 
@@ -460,8 +474,10 @@ def process_file(argument_list: Sequence):
                 batch = []
             except Exception as e:
                 log(str(e))
-                log("Failed, waiting 5 seconds to retry")
-                time.sleep(5)
+                log("Failed, waiting 6 seconds to retry")
+                time.sleep(6)
+                mongo.close()
+                mongo = get_mongo_client()
 
     else:
         log("Unknown format. Supported formats: fits, csv, parquet")
