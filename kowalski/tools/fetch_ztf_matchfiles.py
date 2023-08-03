@@ -71,6 +71,43 @@ def collect_urls(readout_channel: int) -> list:
                     }
                 )
 
+    # we want to iterate through the links_list
+    # for each the name will be like ztf_000245_zg_c01_q1_match.pytable
+    # we want to extract the unique field, ccd and quad pairs
+    field_ccd_quad = [
+        (
+            int(link["name"].split("_")[1]),
+            link["name"].split("_")[3],
+            link["name"].split("_")[4],
+        )
+        for link in link_list
+    ]
+    # only keep one of each, just like a set
+    field_ccd_quad = list(set(field_ccd_quad))
+    # sort by field
+    field_ccd_quad.sort(key=lambda x: x[0])
+    # now we want to iterate through the field_ccd_quad list, and verify that for each pair we have 3 files
+    # that is one for each filter
+    # if we don't we want to log that information
+    for field, ccd, quad in field_ccd_quad:
+        # get the list of files for this field, ccd, quad
+        files = [
+            link["name"]
+            for link in link_list
+            if int(link["name"].split("_")[1]) == field
+            and link["name"].split("_")[3] == ccd
+            and link["name"].split("_")[4] == quad
+        ]
+        # if we don't have 3 files, log that information
+        if len(files) < 3:
+            log(
+                f"Warning - Missing files for field {field}, ccd {ccd}, quad {quad}, only found: {files}"
+            )
+        elif len(files) > 3:
+            log(
+                f"Warning - Extra files for field {field}, ccd {ccd}, quad {quad}, found: {files}"
+            )
+
     return link_list
 
 

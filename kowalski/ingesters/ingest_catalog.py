@@ -447,6 +447,71 @@ def process_file(argument_list: Sequence):
     return total_good_documents, total_bad_documents
 
 
+def verify_ids(files, id_col, format):
+    ids_per_file = {}
+
+    for file in files:
+        if format == "fits":
+            with fits.open(file, cache=False) as hdulist:
+                nhdu = 1
+                names = hdulist[nhdu].columns.names
+                # first check if the id_col is in the names
+                if id_col not in names:
+                    raise Exception(
+                        f"Provided ID column {id_col} not found in file {file}"
+                    )
+                dataframe = pd.DataFrame(np.asarray(hdulist[nhdu].data), columns=names)
+                ids_per_file[file] = list(dataframe[id_col])
+        elif format == "csv":
+            dataframe = pd.read_csv(file)
+            if id_col not in dataframe.columns:
+                raise Exception(f"Provided ID column {id_col} not found in file {file}")
+            ids_per_file[file] = list(dataframe[id_col])
+        elif format == "parquet":
+            df = pq.read_table(file).to_pandas()
+            for name in list(df.columns):
+                if name.startswith("_"):
+                    df.rename(columns={name: name[1:]}, inplace=True)
+            if id_col not in df.columns:
+                raise Exception(f"Provided ID column {id_col} not found in file {file}")
+            ids_per_file[file] = list(df[id_col])
+        else:
+            raise Exception(f"Unknown format {format}")
+
+    # now we have a list of all the ids in all the files
+    # we want to make sure that all the ids are unique
+    # if they are not, then we want to print out the file names concerned, and the ids concerned
+    # and then exit the program
+
+    ids = []
+    for file in files:
+        ids += ids_per_file[file]
+
+    if len(ids) != len(set(ids)):
+        # we have duplicate ids
+        # we want to print out the file names concerned, and the ids concerned
+        # and then exit the program
+        duplicate_ids = []
+        for id in ids:
+            if ids.count(id) > 1:
+                duplicate_ids.append(id)
+
+        for file in files:
+            file_ids = ids_per_file[file]
+            for id in file_ids:
+                if id in duplicate_ids:
+                    log(f"Duplicate ID {id} found in file {file}")
+        log(
+            f"{len(duplicate_ids)} duplicate IDs found. Please make sure that all the IDs are unique across all files before ingesting"
+        )
+        log(f"in total, we found {len(set(ids))} unique IDs out of {len(ids)} IDs")
+        raise Exception(
+            "Duplicate IDs found. Please make sure that all the IDs are unique across all files before ingesting"
+        )
+
+    return
+
+
 def run(
     catalog_name: str,
     path: str = "./data/catalogs",
@@ -491,6 +556,9 @@ def run(
     else:
         for root, dirnames, filenames in os.walk(path):
             files += [os.path.join(root, f) for f in filenames if f.endswith(format)]
+
+    if id_col is not None:
+        verify_ids(files, id_col, format)
 
     input_list = [
         (
