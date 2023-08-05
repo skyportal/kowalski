@@ -638,7 +638,7 @@ def run(
             files += [os.path.join(root, f) for f in filenames if f.endswith(format)]
 
     if id_col is not None and not skip_verify:
-        verify_ids(files, id_col, format)
+        verify_ids(files, id_col, format, num_proc=num_proc)
 
     if verify_only:
         return
