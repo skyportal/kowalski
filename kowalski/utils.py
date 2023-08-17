@@ -428,6 +428,14 @@ class Mongo:
                 )
                 traceback.print_exc()
 
+    def close(self):
+        try:
+            self.client.close()
+            return True
+        except Exception as e:
+            log(f"Error closing connection: {str(e)}")
+            return False
+
 
 def radec_str2rad(_ra_str, _dec_str):
     """
