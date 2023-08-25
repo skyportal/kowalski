@@ -1168,6 +1168,16 @@ class ZTFAlert:
             "candidate"
         ].get("jdstarthist", self.alert["candidate"]["jd"])
 
+        try:
+            self.alert["candidate"]["first_alert_jd"] = min(
+                self.alert["candidate"]["jdstarthist"],
+                min([a["jd"] for a in alert_history]),
+            )
+        except Exception:
+            self.alert["candidate"]["first_alert_jd"] = self.alert["candidate"][
+                "jdstarthist"
+            ]
+
         triplet_normalize = kwargs.get("triplet_normalize", True)
         to_tpu = kwargs.get("to_tpu", False)
         # dmdt_up_to_candidate_jd = kwargs.get("dmdt_up_to_candidate_jd", True)
