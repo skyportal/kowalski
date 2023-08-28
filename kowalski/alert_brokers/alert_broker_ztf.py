@@ -158,6 +158,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             prv_candidates,
             all_prv_candidates,
             scores,
+            features,
             xmatches,
             alert_aux,
             passed_filters,
