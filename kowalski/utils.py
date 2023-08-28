@@ -1168,6 +1168,52 @@ class ZTFAlert:
             "candidate"
         ].get("jdstarthist", self.alert["candidate"]["jd"])
 
+        # next we compute color evolution features. 2 features can be computed in 2 ways:
+        # 1. if the current alert is in g-band, we look for a previous alert in r-band within 8 hours of the current alert
+        # 2. if the current alert is in r-band, we look for a previous alert in g-band within 8 hours of the current alert
+        # if we find such a previous alert, we compute the color evolution feature as: g-r, r-g
+
+        # then we remove anything that is (in order):
+        # - has no magpsf
+        # - in the same band as the current alert
+        # - older than N hours from the current alert's jd
+        # - that is the current alert itself
+
+        # we keep the color evolution time threshold at 8 hours, unless passed in the kwargs
+        color_evolution_time_threshold = kwargs.get("color_evolution_time_threshold", 8)
+        if not isinstance(color_evolution_time_threshold, float) or not isinstance(
+            color_evolution_time_threshold, int
+        ):
+            raise ValueError("color_evolution_time_threshold must be a float or int")
+        color_evolution_time_threshold /= 24.0
+
+        alert_history_filtered = [
+            a
+            for a in sorted(alert_history, key=lambda x: x["jd"])
+            if a.get("magpsf", None) is not None
+            and a["fid"] != self.alert["candidate"]["fid"]
+            and a["jd"] > self.alert["candidate"]["jd"] - color_evolution_time_threshold
+            and a["jd"] != self.alert["candidate"]["jd"]
+        ]
+
+        if len(alert_history_filtered) > 0:
+            # since it is already sorted by jd, we just take the first one
+            prev_alert = alert_history_filtered[0]
+            if self.alert["candidate"]["fid"] == 1:
+                self.alert["candidate"]["g-r"] = (
+                    self.alert["candidate"]["magpsf"] - prev_alert["magpsf"]
+                )
+                self.alert["candidate"]["r-g"] = (
+                    prev_alert["magpsf"] - self.alert["candidate"]["magpsf"]
+                )
+            elif self.alert["candidate"]["fid"] == 2:
+                self.alert["candidate"]["g-r"] = (
+                    prev_alert["magpsf"] - self.alert["candidate"]["magpsf"]
+                )
+                self.alert["candidate"]["r-g"] = (
+                    self.alert["candidate"]["magpsf"] - prev_alert["magpsf"]
+                )
+
         triplet_normalize = kwargs.get("triplet_normalize", True)
         to_tpu = kwargs.get("to_tpu", False)
         # dmdt_up_to_candidate_jd = kwargs.get("dmdt_up_to_candidate_jd", True)
