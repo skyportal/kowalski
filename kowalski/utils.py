@@ -1186,6 +1186,7 @@ def compute_features(alert, alert_history, **kwargs):
         if len(alert_history_filtered) > 0:
             # since it is already sorted by jd, we just take the first one
             prev_alert = alert_history_filtered[0]
+
             if alert["candidate"]["fid"] == 1:
                 features["g-r"] = alert["candidate"]["magpsf"] - prev_alert["magpsf"]
                 features["r-g"] = prev_alert["magpsf"] - alert["candidate"]["magpsf"]
@@ -1194,6 +1195,10 @@ def compute_features(alert, alert_history, **kwargs):
                     prev_alert["magpsf"] - alert["candidate"]["magpsf"]
                 )
                 features["r-g"] = alert["candidate"]["magpsf"] - prev_alert["magpsf"]
+
+            features["color_evolution_dt"] = alert["candidate"]["jd"] - prev_alert["jd"]
+            features["color_evolution_threshold"] = color_evolution_time_threshold
+
     except Exception as e:
         log(f"Error computing color evolution features: {e}")
 

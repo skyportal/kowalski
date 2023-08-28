@@ -86,7 +86,9 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
         with timer(
             f"Feature engineering of {object_id} {candid}", alert_worker.verbose > 1
         ):
-            features = compute_features(alert, all_prv_candidates)
+            features = compute_features(
+                alert, all_prv_candidates, **config.get("feature_engineering", {})
+            )
             alert["features"] = features
 
         with timer(f"Ingesting {object_id} {candid}", alert_worker.verbose > 1):

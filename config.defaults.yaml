@@ -1246,3 +1246,6 @@ kowalski:
     pgir: True
     wntr: True
     turbo: True
+
+  feature_engineering:
+    color_evolution_threshold: 8.0 # in hours
