@@ -1183,7 +1183,7 @@ class ZTFAlert:
 
         # we define days_to_peak as the time between the first alert and the alert with the lowest magpsf
         # and we define days_since_peak as the time between the alert with the lowest magpsf and the current alert
-        peakmag_jd = min(
+        jd_at_peak_mag = min(
             [
                 a["jd"]
                 for a in alert_history
@@ -1191,10 +1191,10 @@ class ZTFAlert:
             ]
         )
         self.alert["candidate"]["days_to_peak"] = (
-            self.alert["candidate"]["jd_first_alert"] - peakmag_jd
+            jd_at_peak_mag - self.alert["candidate"]["jd_first_alert"]
         )
         self.alert["candidate"]["days_since_peak"] = (
-            self.alert["candidate"]["jd"] - peakmag_jd
+            self.alert["candidate"]["jd"] - jd_at_peak_mag
         )
 
         triplet_normalize = kwargs.get("triplet_normalize", True)
