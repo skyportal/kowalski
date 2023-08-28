@@ -1183,13 +1183,12 @@ class ZTFAlert:
 
         # we define days_to_peak as the time between the first alert and the alert with the lowest magpsf
         # and we define days_since_peak as the time between the alert with the lowest magpsf and the current alert
+        # first we define jd_at_peak_mag as the jd of the alert with the lowest magpsf
         jd_at_peak_mag = min(
-            [
-                a["jd"]
-                for a in alert_history
-                if a["magpsf"] == self.alert["candidate"]["peakmag"]
-            ]
-        )
+            [a for a in alert_history if a.get("magpsf", None) is not None],
+            key=lambda x: x["magpsf"],
+        )["jd"]
+
         self.alert["candidate"]["days_to_peak"] = (
             jd_at_peak_mag - self.alert["candidate"]["jd_first_alert"]
         )
