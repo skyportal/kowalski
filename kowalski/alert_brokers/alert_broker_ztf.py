@@ -14,7 +14,7 @@ from typing import Mapping, Sequence
 import dask.distributed
 from kowalski.alert_brokers.alert_broker import AlertConsumer, AlertWorker, EopError
 from bson.json_util import loads as bson_loads
-from kowalski.utils import init_db_sync, timer, retry
+from kowalski.utils import init_db_sync, timer, retry, compute_features
 from kowalski.config import load_config
 from kowalski.log import log
 
@@ -81,6 +81,13 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
         with timer(f"MLing of {object_id} {candid}", alert_worker.verbose > 1):
             scores = alert_worker.alert_filter__ml(alert, all_prv_candidates)
             alert["classifications"] = scores
+
+        # Additional features
+        with timer(
+            f"Feature engineering of {object_id} {candid}", alert_worker.verbose > 1
+        ):
+            features = compute_features(alert, all_prv_candidates)
+            alert["features"] = features
 
         with timer(f"Ingesting {object_id} {candid}", alert_worker.verbose > 1):
             retry(alert_worker.mongo.insert_one)(
