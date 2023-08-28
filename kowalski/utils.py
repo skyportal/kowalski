@@ -1171,7 +1171,8 @@ class ZTFAlert:
                 self.alert["candidate"]["jdstarthist"],
                 min([a["jd"] for a in alert_history]),
             )
-        except Exception:
+        except Exception as e:
+            log(f"Failed to compute jd_first_alert: {e}")
             self.alert["candidate"]["jd_first_alert"] = self.alert["candidate"][
                 "jdstarthist"
             ]
@@ -1184,10 +1185,14 @@ class ZTFAlert:
         # we define days_to_peak as the time between the first alert and the alert with the lowest magpsf
         # and we define days_since_peak as the time between the alert with the lowest magpsf and the current alert
         # first we define jd_at_peak_mag as the jd of the alert with the lowest magpsf
-        jd_at_peak_mag = min(
-            [a for a in alert_history if a.get("magpsf", None) is not None],
-            key=lambda x: x["magpsf"],
-        )["jd"]
+        try:
+            jd_at_peak_mag = min(
+                [a for a in alert_history if a.get("magpsf", None) is not None],
+                key=lambda x: x["magpsf"],
+            )["jd"]
+        except Exception as e:
+            log(f"Failed to compute jd_at_peak_mag: {e}")
+            jd_at_peak_mag = self.alert["candidate"]["jd"]
 
         self.alert["candidate"]["days_to_peak"] = (
             jd_at_peak_mag - self.alert["candidate"]["jd_first_alert"]
