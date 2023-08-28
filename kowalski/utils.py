@@ -1163,20 +1163,39 @@ class ZTFAlert:
                 if a.get("magpsf", None) is not None
             ]
         )
-        # add an age field to the alert (alert["candidate"].jd - alert["candidate"].jdstarthist)
-        self.alert["candidate"]["age"] = self.alert["candidate"]["jd"] - self.alert[
-            "candidate"
-        ].get("jdstarthist", self.alert["candidate"]["jd"])
 
+        # we noticed inconsistent jdstarthist in some alert packets
+        # so we take the min of jdstarthist and the first jd in the history of alerts we already have for this object
         try:
-            self.alert["candidate"]["first_alert_jd"] = min(
+            self.alert["candidate"]["jd_first_alert"] = min(
                 self.alert["candidate"]["jdstarthist"],
                 min([a["jd"] for a in alert_history]),
             )
         except Exception:
-            self.alert["candidate"]["first_alert_jd"] = self.alert["candidate"][
+            self.alert["candidate"]["jd_first_alert"] = self.alert["candidate"][
                 "jdstarthist"
             ]
+
+        # add an age field to the alert (alert["candidate"].jd - alert["candidate"].jd_first_alert)
+        self.alert["candidate"]["age"] = (
+            self.alert["candidate"]["jd"] - self.alert["candidate"]["jd_first_alert"]
+        )
+
+        # we define days_to_peak as the time between the first alert and the alert with the lowest magpsf
+        # and we define days_since_peak as the time between the alert with the lowest magpsf and the current alert
+        peakmag_jd = min(
+            [
+                a["jd"]
+                for a in alert_history
+                if a["magpsf"] == self.alert["candidate"]["peakmag"]
+            ]
+        )
+        self.alert["candidate"]["days_to_peak"] = (
+            self.alert["candidate"]["jd_first_alert"] - peakmag_jd
+        )
+        self.alert["candidate"]["days_since_peak"] = (
+            self.alert["candidate"]["jd"] - peakmag_jd
+        )
 
         triplet_normalize = kwargs.get("triplet_normalize", True)
         to_tpu = kwargs.get("to_tpu", False)
