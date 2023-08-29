@@ -1199,7 +1199,7 @@ def compute_features(alert, alert_history, **kwargs):
                         recent_alert_by_fid[fid] = alert_in_color[0]
 
             # we now have a dict with an alert in each filter
-            # iterate over the keys and compute the color evolution features
+            # iterate over the pairs g-r, r-i, i-g and compute the features
             for pair in [(1, 2), (2, 3), (3, 1)]:
                 if set(pair).issubset(set(recent_alert_by_fid.keys())):
                     key = f"{mapper[pair[0]]}-{mapper[pair[1]]}"
@@ -1216,6 +1216,7 @@ def compute_features(alert, alert_history, **kwargs):
                         2,
                     )
 
+            # keep track of the threshold used
             features["color_evolution"]["threshold"] = round(
                 color_evolution_time_threshold, 2
             )
