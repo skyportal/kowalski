@@ -1,8 +1,12 @@
+from copy import deepcopy
+
 import fastavro
 import pytest
+
 from kowalski.alert_brokers.alert_broker_ztf import ZTFAlertWorker
 from kowalski.config import load_config
 from kowalski.log import log
+from kowalski.utils import compute_features
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]
@@ -57,7 +61,23 @@ class TestAlertBrokerZTF:
         alert, _ = self.worker.alert_mongify(self.alert)
         scores = self.worker.alert_filter__ml(alert)
         assert len(scores) > 0
-        log(scores)
+
+    def test_alert_compute_features(self):
+        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        all_prv_candidates = deepcopy(prv_candidates) + [deepcopy(alert["candidate"])]
+        # print(f"Current alert - jd: {alert['candidate']['jd']}, fid: {alert['candidate']['fid']}, magpsf: {alert['candidate']['magpsf']}")
+        # for c in all_prv_candidates:
+        #     print(f"jd: {c['jd']}, fid: {c['fid']}, magpsf: {c['magpsf']}")
+        features = compute_features(alert, all_prv_candidates)
+        assert "color_evolution" in features
+        assert "g-r" in features["color_evolution"]
+        assert "g-r_dt" in features["color_evolution"]
+        assert "threshold" in features["color_evolution"]
+        assert features["color_evolution"]["g-r"] == -0.23
+        assert features["color_evolution"]["g-r_dt"] == -0.05
+        assert features["color_evolution"]["threshold"] == round(
+            config["feature_engineering"]["color_evolution_threshold"] / 24.0, 2
+        )
 
     def test_alert_filter__xmatch(self):
         """Test cross matching with external catalog"""

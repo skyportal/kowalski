@@ -1148,7 +1148,7 @@ def str_to_numeric(s):
 
 def compute_features(alert, alert_history, **kwargs):
     """Compute additional features for an alert, given its history of previous alerts for the same object"""
-    features = {}
+    features = {"color_evolution": {}}
 
     try:
         # first, we compute color evolution features. 2 features can be computed in 2 ways:
@@ -1176,7 +1176,9 @@ def compute_features(alert, alert_history, **kwargs):
 
         alert_history_filtered = [
             a
-            for a in sorted(alert_history, key=lambda x: x["jd"])
+            for a in sorted(
+                alert_history, key=lambda x: x["jd"], reverse=True
+            )  # sort by jd, most recent first
             if a.get("magpsf", None) is not None
             and a["fid"] != alert["candidate"]["fid"]
             and a["jd"] > alert["candidate"]["jd"] - color_evolution_time_threshold
@@ -1184,20 +1186,39 @@ def compute_features(alert, alert_history, **kwargs):
         ]
 
         if len(alert_history_filtered) > 0:
-            # since it is already sorted by jd, we just take the first one
-            prev_alert = alert_history_filtered[0]
+            mapper = {1: "g", 2: "r", 3: "i"}
+            recent_alert_by_fid = {alert["candidate"]["fid"]: alert["candidate"]}
+            # for each color in the mapper (different from the current alert's fid), we grab the most recent alert in that color and add it
+            # to the recent_alert_by_fid dict
+            for fid in list(mapper.keys()):
+                if fid != alert["candidate"]["fid"]:
+                    alert_in_color = [
+                        a for a in alert_history_filtered if a["fid"] == fid
+                    ]
+                    if len(alert_in_color) > 0:
+                        recent_alert_by_fid[fid] = alert_in_color[0]
 
-            if alert["candidate"]["fid"] == 1:
-                features["g-r"] = alert["candidate"]["magpsf"] - prev_alert["magpsf"]
-                features["r-g"] = prev_alert["magpsf"] - alert["candidate"]["magpsf"]
-            elif features["fid"] == 2:
-                features["g-r"]["g-r"] = (
-                    prev_alert["magpsf"] - alert["candidate"]["magpsf"]
-                )
-                features["r-g"] = alert["candidate"]["magpsf"] - prev_alert["magpsf"]
+            # we now have a dict with an alert in each filter
+            # iterate over the keys and compute the color evolution features
+            for pair in [(1, 2), (2, 3), (3, 1)]:
+                if set(pair).issubset(set(recent_alert_by_fid.keys())):
+                    key = f"{mapper[pair[0]]}-{mapper[pair[1]]}"
+                    features["color_evolution"][key] = round(
+                        recent_alert_by_fid[pair[0]]["magpsf"]
+                        - recent_alert_by_fid[pair[1]]["magpsf"],
+                        2,
+                    )
 
-            features["color_evolution_dt"] = alert["candidate"]["jd"] - prev_alert["jd"]
-            features["color_evolution_threshold"] = color_evolution_time_threshold
+                    # also calculate a dt
+                    features["color_evolution"][f"{key}_dt"] = round(
+                        recent_alert_by_fid[pair[0]]["jd"]
+                        - recent_alert_by_fid[pair[1]]["jd"],
+                        2,
+                    )
+
+            features["color_evolution"]["threshold"] = round(
+                color_evolution_time_threshold, 2
+            )
 
     except Exception as e:
         log(f"Error computing color evolution features: {e}")
