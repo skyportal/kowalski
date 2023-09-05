@@ -428,6 +428,17 @@ class Mongo:
                 )
                 traceback.print_exc()
 
+    def delete_one(self, collection: str, document: dict, **kwargs):
+        try:
+            self.db[collection].delete_one(document)
+        except Exception as e:
+            if self.verbose:
+                print(
+                    time_stamp(),
+                    f"Error deleting document from collection {collection}: {str(e)}",
+                )
+                traceback.print_exc()
+
 
 def radec_str2rad(_ra_str, _dec_str):
     """

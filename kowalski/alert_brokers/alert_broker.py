@@ -455,7 +455,7 @@ class AlertWorker:
             total=5,
             backoff_factor=2,
             status_forcelist=[405, 429, 500, 502, 503, 504],
-            method_whitelist=["HEAD", "GET", "PUT", "POST", "PATCH"],
+            allowed_methods=["HEAD", "GET", "PUT", "POST", "PATCH"],
         )
         adapter = TimeoutHTTPAdapter(timeout=5, max_retries=retries)
         self.session.mount("https://", adapter)
@@ -1157,19 +1157,99 @@ class AlertWorker:
                     log(
                         f'{alert["objectId"]} {alert["candid"]} passed filter {_filter["fid"]}'
                     )
-                    passed_filters.append(
-                        {
-                            "group_id": _filter["group_id"],
-                            "filter_id": _filter["filter_id"],
-                            "group_name": _filter["group_name"],
-                            "filter_name": _filter["filter_name"],
-                            "fid": _filter["fid"],
-                            "permissions": _filter["permissions"],
-                            "autosave": _filter["autosave"],
-                            "update_annotations": _filter["update_annotations"],
-                            "data": filtered_data[0],
-                        }
-                    )
+                    passed_filter = {
+                        "group_id": _filter["group_id"],
+                        "filter_id": _filter["filter_id"],
+                        "group_name": _filter["group_name"],
+                        "filter_name": _filter["filter_name"],
+                        "fid": _filter["fid"],
+                        "permissions": _filter["permissions"],
+                        "autosave": _filter["autosave"],
+                        "update_annotations": _filter["update_annotations"],
+                        "data": filtered_data[0],
+                    }
+
+                    if _filter.get("auto_followup", {}) != {} and _filter[
+                        "auto_followup"
+                    ].get("active", False):
+                        auto_followup_filter = deepcopy(_filter["auto_followup"])
+                        # verify that it has the keys:
+                        # - pipeline
+                        # - allocation_id
+                        # - payload
+
+                        if auto_followup_filter.get("pipeline", None) is None:
+                            log(
+                                f'Filter {_filter["fid"]} has no auto-followup pipeline, skipping'
+                            )
+                            continue
+                        if auto_followup_filter.get("allocation_id", None) is None:
+                            log(
+                                f'Filter {_filter["fid"]} has no auto-followup allocation_id, skipping'
+                            )
+                            continue
+                        if auto_followup_filter.get("payload", None) is None:
+                            log(
+                                f'Filter {_filter["fid"]} has no auto-followup payload, skipping'
+                            )
+                            continue
+
+                        # there is also a priority key that is optional. If not present or if not a function, it defaults to 5 (lowest priority)
+                        if auto_followup_filter.get(
+                            "priority", None
+                        ) is None or not callable(auto_followup_filter["priority"]):
+                            auto_followup_filter["priority"] = lambda alert, data: 5
+
+                        # match candid
+                        auto_followup_filter["pipeline"][0]["$match"]["candid"] = alert[
+                            "candid"
+                        ]
+
+                        print(auto_followup_filter["pipeline"])
+
+                        auto_followup_filtered_data = list(
+                            retry(self.mongo.db[self.collection_alerts].aggregate)(
+                                auto_followup_filter["pipeline"],
+                                allowDiskUse=False,
+                                maxTimeMS=max_time_ms,
+                            )
+                        )
+
+                        print(len(auto_followup_filtered_data))
+
+                        if len(auto_followup_filtered_data) == 1:
+                            passed_filter["auto_followup"] = {
+                                "allocation_id": _filter["auto_followup"][
+                                    "allocation_id"
+                                ],
+                                "data": {
+                                    "obj_id": alert["objectId"],
+                                    "allocation_id": _filter["auto_followup"][
+                                        "allocation_id"
+                                    ],
+                                    "target_group_ids": [_filter["group_id"]],
+                                    "payload": {
+                                        **_filter["auto_followup"]["payload"],
+                                        "priority": auto_followup_filter["priority"](
+                                            alert, auto_followup_filtered_data[0]
+                                        ),
+                                        "start_date": datetime.datetime.utcnow().strftime(
+                                            "%Y-%m-%dT%H:%M:%S.%f"
+                                        ),
+                                        "end_date": (
+                                            datetime.datetime.utcnow()
+                                            + datetime.timedelta(days=7)
+                                        ).strftime("%Y-%m-%dT%H:%M:%S.%f"),
+                                        # one week validity window
+                                    },
+                                },
+                            }
+                        else:
+                            log(
+                                f'{alert["objectId"]} {alert["candid"]} did not pass auto-followup of filter {_filter["fid"]}'
+                            )
+
+                    passed_filters.append(passed_filter)
 
             except Exception as e:
                 log(
@@ -1533,3 +1613,62 @@ class AlertWorker:
             alert["prv_candidates"] = prv_candidates
 
             self.alert_put_photometry(alert)
+
+        # automatic follow_up filters:
+        passed_filters_followup = [
+            f for f in passed_filters if f.get("auto_followup", {}) != {}
+        ]
+
+        if len(passed_filters_followup) > 0:
+            # first fetch the followup requests on SkyPortal for this alert
+            with timer(
+                f"Getting followup requests for {alert['objectId']} from SkyPortal",
+                self.verbose > 1,
+            ):
+                response = self.api_skyportal(
+                    "GET",
+                    f"/api/followup_request?sourceID={alert['objectId']}&status=submitted",
+                )
+            if response.json()["status"] == "success":
+                existing_requests = response.json()["data"].get("followup_requests", [])
+            else:
+                log(f"Failed to get followup requests for {alert['objectId']}")
+                existing_requests = []
+            for passed_filter in passed_filters_followup:
+                # post a followup request with the payload and allocation_id
+                # if there isn't already a pending request for this alert and this allocation_id
+                if (
+                    len(
+                        [
+                            r
+                            for r in existing_requests
+                            if r["allocation_id"]
+                            == passed_filter["auto_followup"]["allocation_id"]
+                        ]
+                    )
+                    == 0
+                ):
+                    with timer(
+                        f"Posting auto followup request for {alert['objectId']} to SkyPortal",
+                        self.verbose > 1,
+                    ):
+                        try:
+                            response = self.api_skyportal(
+                                "POST",
+                                "/api/followup_request",
+                                passed_filter["auto_followup"]["data"],
+                            )
+                            if response.json()["status"] == "success":
+                                log(
+                                    f"Posted followup request for {alert['objectId']} to SkyPortal"
+                                )
+                            else:
+                                raise ValueError(response.json()["message"])
+                        except Exception as e:
+                            log(
+                                f"Failed to post followup request for {alert['objectId']} to SkyPortal: {e}"
+                            )
+                else:
+                    log(
+                        f"Pending Followup request for {alert['objectId']} and allocation_id {passed_filter['auto_followup']['allocation_id']} already exists on SkyPortal"
+                    )

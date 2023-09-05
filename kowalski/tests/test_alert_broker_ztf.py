@@ -29,6 +29,61 @@ def alert_fixture(request):
     log("Successfully loaded")
 
 
+def filter_template(upstream):
+    # prepend upstream aggregation stages:
+    upstream_pipeline = config["database"]["filters"][upstream]
+    pipeline = upstream_pipeline + [
+        {
+            "$match": {
+                "candidate.drb": {"$gt": 0.5},
+            }
+        },
+        {
+            "$addFields": {
+                "annotations.author": "dd",
+                "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
+            }
+        },
+        {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
+    ]
+    # set permissions
+    pipeline[0]["$match"]["candidate.programid"]["$in"] = [0, 1, 2, 3]
+    pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][
+        1
+    ] = [0, 1, 2, 3]
+
+    template = {
+        "group_id": 1,
+        "filter_id": 1,
+        "group_name": "test_group",
+        "filter_name": "test_filter",
+        "fid": "r4nd0m",
+        "permissions": [0, 1, 2, 3],
+        "autosave": False,
+        "update_annotations": False,
+        "pipeline": pipeline,
+    }
+    return template
+
+
+def post_alert(worker, alert):
+    alert, _ = worker.alert_mongify(alert)
+    # check if it already exists
+    if worker.mongo.db[worker.collection_alerts].count_documents(
+        {"candid": alert["candid"]}
+    ):
+        log(f"Alert {alert['candid']} already exists, skipping")
+        return
+    worker.mongo.insert_one(collection=worker.collection_alerts, document=alert)
+
+
+def delete_alert(worker, alert):
+    worker.mongo.delete_one(
+        collection=worker.collection_alerts,
+        document={"candidate.candid": alert["candid"]},
+    )
+
+
 class TestAlertBrokerZTF:
     """Test individual components/methods of the ZTF alert processor used by the broker"""
 
@@ -73,40 +128,100 @@ class TestAlertBrokerZTF:
 
     def test_alert_filter__user_defined(self):
         """Test pushing an alert through a filter"""
-        # prepend upstream aggregation stages:
-        upstream_pipeline = config["database"]["filters"][self.worker.collection_alerts]
-        pipeline = upstream_pipeline + [
-            {
-                "$match": {
-                    "candidate.drb": {"$gt": 0.5},
-                }
-            },
-            {
-                "$addFields": {
-                    "annotations.author": "dd",
-                    "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
-                }
-            },
-            {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
-        ]
-        # set permissions
-        pipeline[0]["$match"]["candidate.programid"]["$in"] = [0, 1, 2, 3]
-        pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][
-            1
-        ] = [0, 1, 2, 3]
+        post_alert(self.worker, self.alert)
 
-        filter_template = {
-            "group_id": 1,
-            "filter_id": 1,
-            "group_name": "test_group",
-            "filter_name": "test_filter",
-            "fid": "r4nd0m",
-            "permissions": [0, 1, 2, 3],
-            "autosave": False,
-            "update_annotations": False,
-            "pipeline": pipeline,
-        }
-        passed_filters = self.worker.alert_filter__user_defined(
-            [filter_template], self.alert
-        )
+        filter = filter_template(self.worker.collection_alerts)
+        passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
+
+        delete_alert(self.worker, self.alert)
+
         assert passed_filters is not None
+        assert len(passed_filters) == 1
+
+    def test_alert_filter__user_defined_followup(self):
+        """Test pushing an alert through a filter that also has auto follow-up activated"""
+        post_alert(self.worker, self.alert)
+        filter = filter_template(self.worker.collection_alerts)
+        filter["auto_followup"] = {
+            "active": True,
+            "pipeline": [
+                {
+                    "$match": {
+                        "candidate.drb": {"$gt": 0.5},
+                    }
+                }
+            ],
+            "allocation_id": 1,
+            "instrument_id": 1,
+            "payload": {  # example payload for SEDM
+                "observation_type": "IFU",
+            },
+        }
+        passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
+        delete_alert(self.worker, self.alert)
+
+        assert passed_filters is not None
+        assert len(passed_filters) == 1
+        assert "auto_followup" in passed_filters[0]
+        assert (
+            passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "IFU"
+        )
+
+    def test_alert_filter__user_defined_followup_with_broker(self):
+        """Test pushing an alert through a filter that also has auto follow-up activated, and broker mode activated"""
+        if not config["misc"].get("broker", False):
+            pytest.skip("Broker mode not activated, skipping")
+
+        response = self.worker.api_skyportal("GET", "/api/allocation", None)
+        assert response.status_code == 200
+        allocations = response.json()["data"]
+        # get the allocation which instrument['name'] == 'SEDM'
+        allocations = [a for a in allocations if a["instrument"]["name"] == "SEDM"]
+        assert len(allocations) == 1
+        allocation_id = allocations[0]["id"]
+
+        post_alert(self.worker, self.alert)
+
+        filter = filter_template(self.worker.collection_alerts)
+        filter["auto_followup"] = {
+            "active": True,
+            "pipeline": [
+                {
+                    "$match": {
+                        "candidate.drb": {"$gt": 0.5},
+                    }
+                }
+            ],
+            "allocation_id": allocation_id,
+            "payload": {  # example payload for SEDM
+                "observation_type": "IFU",
+            },
+        }
+        passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
+        delete_alert(self.worker, self.alert)
+
+        assert passed_filters is not None
+        assert len(passed_filters) == 1
+        assert "auto_followup" in passed_filters[0]
+        assert (
+            passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "IFU"
+        )
+
+        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+
+        # now fetch the follow-up request from SP
+        response = self.worker.api_skyportal(
+            "GET", f"/api/followup_request?sourceID={alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        followup_requests = response.json()["data"].get("followup_requests", [])
+        followup_requests = [
+            f
+            for f in followup_requests
+            if (f["allocation_id"] == allocation_id and f["status"] == "submitted")
+        ]
+        assert len(followup_requests) == 1
+        assert followup_requests[0]["payload"]["observation_type"] == "IFU"
