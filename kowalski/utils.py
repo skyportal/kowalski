@@ -446,7 +446,6 @@ class Mongo:
             return False
 
 
-
 def radec_str2rad(_ra_str, _dec_str):
     """
     :param _ra_str: 'H:M:S'
