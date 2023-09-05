@@ -432,12 +432,19 @@ class Mongo:
         try:
             self.db[collection].delete_one(document)
         except Exception as e:
-            if self.verbose:
-                print(
-                    time_stamp(),
-                    f"Error deleting document from collection {collection}: {str(e)}",
-                )
-                traceback.print_exc()
+            log(
+                f"Error deleting document from collection {collection}: {str(e)}",
+            )
+            traceback.print_exc()
+
+    def close(self):
+        try:
+            self.client.close()
+            return True
+        except Exception as e:
+            log(f"Error closing connection: {str(e)}")
+            return False
+
 
 
 def radec_str2rad(_ra_str, _dec_str):
