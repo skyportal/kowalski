@@ -1734,10 +1734,16 @@ class AlertWorker:
             ):
                 response = self.api_skyportal(
                     "GET",
-                    f"/api/followup_request?sourceID={alert['objectId']}&status=submitted",
+                    f"/api/followup_request?sourceID={alert['objectId']}",
                 )
             if response.json()["status"] == "success":
                 existing_requests = response.json()["data"].get("followup_requests", [])
+                # only keep the completed and submitted requests
+                existing_requests = [
+                    r
+                    for r in existing_requests
+                    if r["status"] in ["completed", "submitted"]
+                ]
             else:
                 log(f"Failed to get followup requests for {alert['objectId']}")
                 existing_requests = []
