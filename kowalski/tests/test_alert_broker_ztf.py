@@ -53,13 +53,13 @@ def filter_template(upstream):
     ] = [0, 1, 2, 3]
 
     template = {
-        "group_id": 1,
+        "group_id": 2,
         "filter_id": 1,
         "group_name": "test_group",
         "filter_name": "test_filter",
         "fid": "r4nd0m",
         "permissions": [0, 1, 2, 3],
-        "autosave": False,
+        "autosave": True,
         "update_annotations": False,
         "pipeline": pipeline,
     }
@@ -184,6 +184,7 @@ class TestAlertBrokerZTF:
         post_alert(self.worker, self.alert)
 
         filter = filter_template(self.worker.collection_alerts)
+        filter["autosave_comment"] = "Saved to BTS by BTSbot."
         filter["auto_followup"] = {
             "active": True,
             "pipeline": [
@@ -193,6 +194,7 @@ class TestAlertBrokerZTF:
                     }
                 }
             ],
+            "comment": "SEDM triggered by BTSbot",
             "allocation_id": allocation_id,
             "payload": {  # example payload for SEDM
                 "observation_type": "IFU",

@@ -1165,6 +1165,7 @@ class AlertWorker:
                         "fid": _filter["fid"],
                         "permissions": _filter["permissions"],
                         "autosave": _filter["autosave"],
+                        "autosave_comment": _filter.get("autosave_comment", None),
                         "update_annotations": _filter["update_annotations"],
                         "data": filtered_data[0],
                     }
@@ -1218,10 +1219,17 @@ class AlertWorker:
                         print(len(auto_followup_filtered_data))
 
                         if len(auto_followup_filtered_data) == 1:
+                            priority = auto_followup_filter["priority"](
+                                alert, auto_followup_filtered_data[0]
+                            )
+                            comment = auto_followup_filter.get("comment", None)
+                            if comment is not None:
+                                comment += f" (priority: {priority})"
                             passed_filter["auto_followup"] = {
                                 "allocation_id": _filter["auto_followup"][
                                     "allocation_id"
                                 ],
+                                "comment": comment,
                                 "data": {
                                     "obj_id": alert["objectId"],
                                     "allocation_id": _filter["auto_followup"][
@@ -1230,9 +1238,7 @@ class AlertWorker:
                                     "target_group_ids": [_filter["group_id"]],
                                     "payload": {
                                         **_filter["auto_followup"]["payload"],
-                                        "priority": auto_followup_filter["priority"](
-                                            alert, auto_followup_filtered_data[0]
-                                        ),
+                                        "priority": priority,
                                         "start_date": datetime.datetime.utcnow().strftime(
                                             "%Y-%m-%dT%H:%M:%S.%f"
                                         ),
@@ -1563,6 +1569,40 @@ class AlertWorker:
                 if len(autosave_group_ids) > 0:
                     self.alert_post_source(alert, autosave_group_ids)
 
+                    autosave_comments = [
+                        f
+                        for f in passed_filters
+                        if f.get("group_id") in autosave_group_ids
+                        and f.get("autosave_comment", None) is not None
+                    ]
+                    if len(autosave_comments) > 0:
+                        # post comments
+                        for autosave_comment in autosave_comments:
+                            comment = {
+                                "text": autosave_comment["autosave_comment"],
+                                "group_ids": [autosave_comment["group_id"]],
+                            }
+                            with timer(
+                                f"Posting comment {comment['text']} for {alert['objectId']} to SkyPortal",
+                                self.verbose > 1,
+                            ):
+                                try:
+                                    response = self.api_skyportal(
+                                        "POST",
+                                        f"/api/sources/{alert['objectId']}/comments",
+                                        comment,
+                                    )
+                                    if response.json()["status"] == "success":
+                                        log(
+                                            f"Posted comment {comment['text']} for {alert['objectId']} to SkyPortal"
+                                        )
+                                    else:
+                                        raise ValueError(response.json()["message"])
+                                except Exception as e:
+                                    log(
+                                        f"Failed to post comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
+                                    )
+
         # obj exists in SP:
         else:
             if len(passed_filters) > 0:
@@ -1597,6 +1637,40 @@ class AlertWorker:
                     ]
                     if len(autosave_group_ids) > 0:
                         self.alert_post_source(alert, autosave_group_ids)
+                        autosave_comments = [
+                            f
+                            for f in passed_filters
+                            if f.get("group_id") in autosave_group_ids
+                            and f.get("autosave_comment", None) is not None
+                        ]
+                        if len(autosave_comments) > 0:
+                            # post comments
+                            for autosave_comment in autosave_comments:
+                                comment = {
+                                    "text": autosave_comment["autosave_comment"],
+                                    "group_ids": [autosave_comment["group_id"]],
+                                }
+                                with timer(
+                                    f"Posting comment {comment['text']} for {alert['objectId']} to SkyPortal",
+                                    self.verbose > 1,
+                                ):
+                                    try:
+                                        response = self.api_skyportal(
+                                            "POST",
+                                            f"/api/sources/{alert['objectId']}/comments",
+                                            comment,
+                                        )
+                                        if response.json()["status"] == "success":
+                                            log(
+                                                f"Posted comment {comment['text']} for {alert['objectId']} to SkyPortal"
+                                            )
+                                        else:
+                                            raise ValueError(response.json()["message"])
+                                    except Exception as e:
+                                        log(
+                                            f"Failed to post comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
+                                        )
+
                 else:
                     log(f"Failed to get source groups info on {alert['objectId']}")
             else:
@@ -1608,6 +1682,39 @@ class AlertWorker:
                 ]
                 if len(autosave_group_ids) > 0:
                     self.alert_post_source(alert, autosave_group_ids)
+                    autosave_comments = [
+                        f
+                        for f in passed_filters
+                        if f.get("group_id") in autosave_group_ids
+                        and f.get("autosave_comment", None) is not None
+                    ]
+                    if len(autosave_comments) > 0:
+                        # post comments
+                        for autosave_comment in autosave_comments:
+                            comment = {
+                                "text": autosave_comment["autosave_comment"],
+                                "group_ids": [autosave_comment["group_id"]],
+                            }
+                            with timer(
+                                f"Posting comment {comment['text']} for {alert['objectId']} to SkyPortal",
+                                self.verbose > 1,
+                            ):
+                                try:
+                                    response = self.api_skyportal(
+                                        "POST",
+                                        f"/api/sources/{alert['objectId']}/comments",
+                                        comment,
+                                    )
+                                    if response.json()["status"] == "success":
+                                        log(
+                                            f"Posted comment {comment['text']} for {alert['objectId']} to SkyPortal"
+                                        )
+                                    else:
+                                        raise ValueError(response.json()["message"])
+                                except Exception as e:
+                                    log(
+                                        f"Failed to post comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
+                                    )
 
             # post alert photometry in single call to /api/photometry
             alert["prv_candidates"] = prv_candidates
@@ -1662,6 +1769,39 @@ class AlertWorker:
                                 log(
                                     f"Posted followup request for {alert['objectId']} to SkyPortal"
                                 )
+                                if (
+                                    passed_filter["auto_followup"].get("comment", None)
+                                    is not None
+                                ):
+                                    # post a comment to the source
+                                    comment = {
+                                        "text": passed_filter["auto_followup"][
+                                            "comment"
+                                        ],
+                                        "group_ids": [passed_filter["group_id"]],
+                                    }
+                                    with timer(
+                                        f"Posting followup comment {comment['text']} for {alert['objectId']} to SkyPortal",
+                                        self.verbose > 1,
+                                    ):
+                                        try:
+                                            response = self.api_skyportal(
+                                                "POST",
+                                                f"/api/sources/{alert['objectId']}/comments",
+                                                comment,
+                                            )
+                                            if response.json()["status"] == "success":
+                                                log(
+                                                    f"Posted followup comment {comment['text']} for {alert['objectId']} to SkyPortal"
+                                                )
+                                            else:
+                                                raise ValueError(
+                                                    response.json()["message"]
+                                                )
+                                        except Exception as e:
+                                            log(
+                                                f"Failed to post followup comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
+                                            )
                             else:
                                 raise ValueError(response.json()["message"])
                         except Exception as e:
