@@ -263,7 +263,9 @@ async def test_filters(aiohttp_client):
     assert "active_fid" in result["data"]
     assert result["data"]["active_fid"] == fid1
     assert "autosave" in result["data"]
-    assert not result["data"]["autosave"]
+    assert result["data"]["autosave"] is False
+    assert "auto_followup" in result["data"]
+    assert result["data"]["auto_followup"] == {}
 
     # post new version:
     resp = await client.post(
@@ -316,6 +318,65 @@ async def test_filters(aiohttp_client):
     assert "data" in result
     assert "autosave" in result["data"]
     assert result["data"]["autosave"]
+
+    # turn complex autosave on
+    autosave = {
+        "active": True,
+        "comment": "test autosave",
+        "pipeline": [
+            {
+                "$match": {
+                    "candidate.drb": {"$gt": 0.9999},
+                    "cross_matches.CLU_20190625.0": {"$exists": False},
+                }
+            },
+        ],
+    }
+    resp = await client.patch(
+        "/api/filters",
+        json={
+            "filter_id": filter_id,
+            "autosave": autosave,
+        },
+        headers=headers,
+        timeout=5,
+    )
+    assert resp.status == 200
+    result = await resp.json()
+    assert result["status"] == "success"
+    assert "data" in result
+    assert "autosave" in result["data"]
+    assert result["data"]["autosave"] == autosave
+
+    # turn auto_followup on
+    auto_followup = {
+        "active": True,
+        "allocation_id": 1,
+        "comment": "test auto_followup",
+        "payload": {  # example payload for SEDM
+            "observation_type": "IFU",
+        },
+        "pipeline": [
+            {
+                "$match": {
+                    "candidate.drb": {"$gt": 0.9999},
+                    "cross_matches.CLU_20190625.0": {"$exists": False},
+                }
+            },
+        ],
+    }
+    resp = await client.patch(
+        "/api/filters",
+        json={"filter_id": filter_id, "auto_followup": auto_followup},
+        headers=headers,
+        timeout=5,
+    )
+    assert resp.status == 200
+    result = await resp.json()
+    assert result["status"] == "success"
+    assert "data" in result
+    assert "auto_followup" in result["data"]
+    assert result["data"]["auto_followup"] == auto_followup
 
     # turn update_annotations on
     resp = await client.patch(

@@ -237,6 +237,7 @@ class PGIRAlertWorker(AlertWorker, ABC):
                             "filter_id": 1,
                             "permissions": 1,
                             "autosave": 1,
+                            "auto_followup": 1,
                             "update_annotations": 1,
                             "fv": {
                                 "$arrayElemAt": [
@@ -307,8 +308,11 @@ class PGIRAlertWorker(AlertWorker, ABC):
                     "filter_name": filter_name,
                     "fid": active_filter["fv"]["fid"],
                     "permissions": active_filter["permissions"],
-                    "autosave": active_filter["autosave"],
-                    "update_annotations": active_filter["update_annotations"],
+                    "autosave": active_filter.get("autosave", False),
+                    "auto_followup": active_filter.get("auto_followup", {}),
+                    "update_annotations": active_filter.get(
+                        "update_annotations", False
+                    ),
                     "pipeline": deepcopy(pipeline),
                 }
 

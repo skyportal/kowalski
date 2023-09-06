@@ -1639,8 +1639,9 @@ class Filter(Model, ABC):
     group_id: int = Field(ge=1)
     catalog: str
     permissions: List[int] = list()
-    autosave: bool = False
     active: bool = True
+    autosave: Union[bool, dict] = False
+    auto_followup: dict = dict()
     update_annotations: bool = False
     active_fid: Optional[str] = Field(min_length=6, max_length=6)
     fv: List[FilterVersion] = list()
@@ -1706,6 +1707,22 @@ class FilterHandler(Handler):
                     "catalog": "ZTF_alerts",
                     "permissions": [1, 2],
                     "autosave": false,
+                    "auto_followup": {
+                      "active": true,
+                      "comment": "SEDM triggered by BTSbot",
+                      "payload": {
+                        "observation_type": "IFU"
+                      },
+                      "pipeline": [
+                        {
+                          "$match": {
+                            "candidate.drb": {
+                              "$gt": 0.9999
+                            }
+                          }
+                        }
+                      ]
+                    },
                     "update_annotations": false,
                     "active": true,
                     "active_fid": "nnsun9",
@@ -1794,8 +1811,11 @@ class FilterHandler(Handler):
                     minItems: 1
                   autosave:
                     type: boolean
-                    description: "automatically save passing alerts to group <group_id>"
+                    description: "automatically save passing alerts to group <group_id>. Optionally, specify an additional filtering layer"
                     default: false
+                  auto_followup:
+                    type: object
+                    description: "automatically trigger follow-up observations for passing alerts, with an additional filtering layer"
                   update_annotations:
                     type: boolean
                     description: "update existing annotations for newly passing alerts"
@@ -1856,6 +1876,74 @@ class FilterHandler(Handler):
                         "cross_matches.CLU_20190625.0": {
                           "$exists": True
                         }
+                      }
+                    },
+                    {
+                      "$addFields": {
+                        "annotations.author": "dd",
+                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                      }
+                    },
+                    {
+                      "$project": {
+                        "_id": 0,
+                        "candid": 1,
+                        "objectId": 1,
+                        "annotations": 1
+                      }
+                    }
+                    ]
+                filter_3:
+                  value:
+                    "group_id": 2
+                    "filter_id": 1
+                    "catalog": ZTF_alerts
+                    "permissions": [1, 2, 3]
+                    "autosave": {
+                      "active": true,
+                      "pipeline": [
+                        {
+                          "$match": {
+                            "candidate.drb": {
+                              "$gt": 0.9999
+                            },
+                            "cross_matches.CLU_20190625.0": {
+                              "$exists": True
+                            }
+                          }
+                        }
+                      ]
+                    }
+                    "auto_followup": {
+                      "allocation_id": 1,
+                      "comment": "SEDM triggered by BTSbot",
+                      "payload": {
+                        "observation_type": "IFU",
+                      },
+                      "active": true,
+                      "pipeline": [
+                        {
+                          "$match": {
+                            "candidate.drb": {
+                              "$gt": 0.9999
+                            },
+                            "cross_matches.CLU_20190625.0": {
+                              "$exists": True
+                            },
+                            "classifications.acai_n": {
+                                "$gt": 0.8
+                            }
+                          }
+                        }
+                      ],
+                    }
+                    "update_annotations": false
+                    "pipeline": [
+                    {
+                      "$match": {
+                        "candidate.drb": {
+                          "$gt": 0.9999
+                        },
                       }
                     },
                     {
@@ -2037,7 +2125,7 @@ class FilterHandler(Handler):
         :return:
 
         ---
-        summary: "Modify existing filters: activate/deactivate, set active_fid, autosave, or update_annotations"
+        summary: "Modify existing filters: activate/deactivate, set active_fid, autosave, auto_followup, or update_annotations"
         tags:
           - filters
 
@@ -2064,7 +2152,10 @@ class FilterHandler(Handler):
                     maxLength: 6
                   autosave:
                     type: boolean
-                    description: "autosave candidates that pass filter to corresponding group?"
+                    description: "autosave candidates that pass filter to corresponding group, which an optional additional filtering layer"
+                  auto_followup:
+                    type: object
+                    description: "automatically trigger follow-up observations for passing alerts, with an additional filtering layer"
                   update_annotations:
                     type: boolean
                     description: "update annotations for new candidates that previously passed filter?"
@@ -2082,7 +2173,43 @@ class FilterHandler(Handler):
                   value:
                     "filter_id": 1
                     "autosave": true
+                filter_3:
+                  value:
+                    "filter_id": 1
+                    "autosave": {
+                      "active": true,
+                      "comment": "Saved automatically by Kowalski bot",
+                      "pipeline": [
+                        {
+                          "$match": {
+                            "candidate.drb": {
+                              "$gt": 0.9999
+                            }
+                          }
+                        }
+                      ]
+                    }
                 filter_4:
+                  value:
+                    "filter_id": 1
+                    "auto_followup": {
+                      "active": true,
+                      "allocation_id": 1,
+                      "comment": "SEDM triggered by BTSbot",
+                      "payload": {
+                        "observation_type": "IFU"
+                      },
+                      "pipeline": [
+                        {
+                          "$match": {
+                            "candidate.drb": {
+                              "$gt": 0.9999
+                            }
+                          }
+                        }
+                      ]
+                    }
+                filter_5:
                   value:
                     "filter_id": 1
                     "update_annotations": true
@@ -2152,6 +2279,7 @@ class FilterHandler(Handler):
             "active",
             "active_fid",
             "autosave",
+            "auto_followup",
             "update_annotations",
         ):
             value = filter_spec.get(modifiable_field)

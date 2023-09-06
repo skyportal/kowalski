@@ -1164,22 +1164,52 @@ class AlertWorker:
                         "filter_name": _filter["filter_name"],
                         "fid": _filter["fid"],
                         "permissions": _filter["permissions"],
-                        "autosave": _filter["autosave"],
-                        "autosave_comment": _filter.get("autosave_comment", None),
-                        "update_annotations": _filter["update_annotations"],
+                        "update_annotations": _filter.get("update_annotations", False),
                         "data": filtered_data[0],
                     }
 
-                    if _filter.get("auto_followup", {}) != {} and _filter[
-                        "auto_followup"
+                    # AUTOSAVE
+                    if isinstance(_filter.get("autosave", False), bool):
+                        passed_filter["autosave"] = _filter.get("autosave", False)
+                    elif isinstance(_filter.get("autosave", False), dict) and _filter[
+                        "autosave"
                     ].get("active", False):
-                        auto_followup_filter = deepcopy(_filter["auto_followup"])
-                        # verify that it has the keys:
-                        # - pipeline
-                        # - allocation_id
-                        # - payload
+                        autosave_filter = deepcopy(_filter["autosave"])
+                        if autosave_filter.get("pipeline", None) is not None:
+                            # match candid
+                            autosave_filter["pipeline"][0]["$match"]["candid"] = alert[
+                                "candid"
+                            ]
 
-                        if auto_followup_filter.get("pipeline", None) is None:
+                            autosave_filtered_data = list(
+                                retry(self.mongo.db[self.collection_alerts].aggregate)(
+                                    autosave_filter["pipeline"],
+                                    allowDiskUse=False,
+                                    maxTimeMS=max_time_ms,
+                                )
+                            )
+
+                            if len(autosave_filtered_data) == 1:
+                                passed_filter["autosave"] = {
+                                    "comment": autosave_filter.get("comment", None),
+                                }
+                        else:
+                            # pipeline optional for autosave. If not specified, autosave directly
+                            passed_filter["autosave"] = {
+                                "comment": autosave_filter.get("comment", None),
+                            }
+                    else:
+                        passed_filter["autosave"] = False
+
+                    # AUTO FOLLOWUP
+                    if _filter.get("auto_followup", {}).get("active", False):
+                        auto_followup_filter = deepcopy(_filter["auto_followup"])
+
+                        # validate non-optional keys
+                        if (
+                            auto_followup_filter.get("pipeline", None) is None
+                            or len(auto_followup_filter.get("pipeline", [])) == 0
+                        ):
                             log(
                                 f'Filter {_filter["fid"]} has no auto-followup pipeline, skipping'
                             )
@@ -1206,8 +1236,6 @@ class AlertWorker:
                             "candid"
                         ]
 
-                        print(auto_followup_filter["pipeline"])
-
                         auto_followup_filtered_data = list(
                             retry(self.mongo.db[self.collection_alerts].aggregate)(
                                 auto_followup_filter["pipeline"],
@@ -1215,8 +1243,6 @@ class AlertWorker:
                                 maxTimeMS=max_time_ms,
                             )
                         )
-
-                        print(len(auto_followup_filtered_data))
 
                         if len(auto_followup_filtered_data) == 1:
                             priority = auto_followup_filter["priority"](
@@ -1250,10 +1276,6 @@ class AlertWorker:
                                     },
                                 },
                             }
-                        else:
-                            log(
-                                f'{alert["objectId"]} {alert["candid"]} did not pass auto-followup of filter {_filter["fid"]}'
-                            )
 
                     passed_filters.append(passed_filter)
 
@@ -1261,6 +1283,7 @@ class AlertWorker:
                 log(
                     f'Filter {filter_template["fid"]} execution failed on alert {alert["candid"]}: {e}'
                 )
+                traceback.print_exc()
                 continue
 
         return passed_filters
@@ -1532,6 +1555,8 @@ class AlertWorker:
                 f"{alert['objectId']} {'is' if is_source else 'is not'} Source in SkyPortal"
             )
 
+        autosave_group_ids = []
+
         # obj does not exit in SP:
         if (not is_candidate) and (not is_source):
             # passed at least one filter?
@@ -1560,48 +1585,14 @@ class AlertWorker:
                 # post thumbnails
                 self.alert_post_thumbnails(alert)
 
-                # post source if autosave=True
+                # post source if autosave=True or if autosave is a dict
                 autosave_group_ids = [
                     f.get("group_id")
                     for f in passed_filters
-                    if f.get("autosave", False)
+                    if not f.get("autosave", False) is False
                 ]
                 if len(autosave_group_ids) > 0:
                     self.alert_post_source(alert, autosave_group_ids)
-
-                    autosave_comments = [
-                        f
-                        for f in passed_filters
-                        if f.get("group_id") in autosave_group_ids
-                        and f.get("autosave_comment", None) is not None
-                    ]
-                    if len(autosave_comments) > 0:
-                        # post comments
-                        for autosave_comment in autosave_comments:
-                            comment = {
-                                "text": autosave_comment["autosave_comment"],
-                                "group_ids": [autosave_comment["group_id"]],
-                            }
-                            with timer(
-                                f"Posting comment {comment['text']} for {alert['objectId']} to SkyPortal",
-                                self.verbose > 1,
-                            ):
-                                try:
-                                    response = self.api_skyportal(
-                                        "POST",
-                                        f"/api/sources/{alert['objectId']}/comments",
-                                        comment,
-                                    )
-                                    if response.json()["status"] == "success":
-                                        log(
-                                            f"Posted comment {comment['text']} for {alert['objectId']} to SkyPortal"
-                                        )
-                                    else:
-                                        raise ValueError(response.json()["message"])
-                                except Exception as e:
-                                    log(
-                                        f"Failed to post comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
-                                    )
 
         # obj exists in SP:
         else:
@@ -1628,98 +1619,64 @@ class AlertWorker:
                     existing_groups = response.json()["data"]
                     existing_group_ids = [g["id"] for g in existing_groups]
 
-                    # post source if autosave=True and not already saved
+                    # post source if autosave is not False and not already saved
                     autosave_group_ids = [
                         f.get("group_id")
                         for f in passed_filters
-                        if f.get("autosave", False)
+                        if not f.get("autosave", False) is False
                         and (f.get("group_id") not in existing_group_ids)
                     ]
                     if len(autosave_group_ids) > 0:
                         self.alert_post_source(alert, autosave_group_ids)
-                        autosave_comments = [
-                            f
-                            for f in passed_filters
-                            if f.get("group_id") in autosave_group_ids
-                            and f.get("autosave_comment", None) is not None
-                        ]
-                        if len(autosave_comments) > 0:
-                            # post comments
-                            for autosave_comment in autosave_comments:
-                                comment = {
-                                    "text": autosave_comment["autosave_comment"],
-                                    "group_ids": [autosave_comment["group_id"]],
-                                }
-                                with timer(
-                                    f"Posting comment {comment['text']} for {alert['objectId']} to SkyPortal",
-                                    self.verbose > 1,
-                                ):
-                                    try:
-                                        response = self.api_skyportal(
-                                            "POST",
-                                            f"/api/sources/{alert['objectId']}/comments",
-                                            comment,
-                                        )
-                                        if response.json()["status"] == "success":
-                                            log(
-                                                f"Posted comment {comment['text']} for {alert['objectId']} to SkyPortal"
-                                            )
-                                        else:
-                                            raise ValueError(response.json()["message"])
-                                    except Exception as e:
-                                        log(
-                                            f"Failed to post comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
-                                        )
 
                 else:
                     log(f"Failed to get source groups info on {alert['objectId']}")
             else:
-                # post source if autosave=True and not is_source
+                # post source if autosave is not False and not is_source
                 autosave_group_ids = [
                     f.get("group_id")
                     for f in passed_filters
-                    if f.get("autosave", False)
+                    if not f.get("autosave", False) is False
                 ]
                 if len(autosave_group_ids) > 0:
                     self.alert_post_source(alert, autosave_group_ids)
-                    autosave_comments = [
-                        f
-                        for f in passed_filters
-                        if f.get("group_id") in autosave_group_ids
-                        and f.get("autosave_comment", None) is not None
-                    ]
-                    if len(autosave_comments) > 0:
-                        # post comments
-                        for autosave_comment in autosave_comments:
-                            comment = {
-                                "text": autosave_comment["autosave_comment"],
-                                "group_ids": [autosave_comment["group_id"]],
-                            }
-                            with timer(
-                                f"Posting comment {comment['text']} for {alert['objectId']} to SkyPortal",
-                                self.verbose > 1,
-                            ):
-                                try:
-                                    response = self.api_skyportal(
-                                        "POST",
-                                        f"/api/sources/{alert['objectId']}/comments",
-                                        comment,
-                                    )
-                                    if response.json()["status"] == "success":
-                                        log(
-                                            f"Posted comment {comment['text']} for {alert['objectId']} to SkyPortal"
-                                        )
-                                    else:
-                                        raise ValueError(response.json()["message"])
-                                except Exception as e:
-                                    log(
-                                        f"Failed to post comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
-                                    )
 
             # post alert photometry in single call to /api/photometry
             alert["prv_candidates"] = prv_candidates
 
             self.alert_put_photometry(alert)
+
+        if len(autosave_group_ids):
+            autosave_comments = [
+                f
+                for f in passed_filters
+                if f.get("group_id") in autosave_group_ids
+                and isinstance(f.get("autosave", False), dict)
+                and f["autosave"].get("comment", None) is not None
+            ]
+            if len(autosave_comments) > 0:
+                # post comments
+                for autosave_comment in autosave_comments:
+                    comment = {
+                        "text": autosave_comment["autosave"]["comment"],
+                        "group_ids": [autosave_comment["group_id"]],
+                    }
+                    with timer(
+                        f"Posting comment {comment['text']} for {alert['objectId']} to SkyPortal",
+                        self.verbose > 1,
+                    ):
+                        try:
+                            response = self.api_skyportal(
+                                "POST",
+                                f"/api/sources/{alert['objectId']}/comments",
+                                comment,
+                            )
+                            if response.json()["status"] != "success":
+                                raise ValueError(response.json()["message"])
+                        except Exception as e:
+                            log(
+                                f"Failed to post comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
+                            )
 
         # automatic follow_up filters:
         passed_filters_followup = [

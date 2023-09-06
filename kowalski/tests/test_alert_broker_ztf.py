@@ -59,7 +59,7 @@ def filter_template(upstream):
         "filter_name": "test_filter",
         "fid": "r4nd0m",
         "permissions": [0, 1, 2, 3],
-        "autosave": True,
+        "autosave": False,
         "update_annotations": False,
         "pipeline": pipeline,
     }
@@ -137,6 +137,64 @@ class TestAlertBrokerZTF:
 
         assert passed_filters is not None
         assert len(passed_filters) == 1
+        assert "autosave" in passed_filters[0]
+
+    def test_alert_filter__user_defined_autosave(self):
+        """Test pushing an alert through a filter with and without autosave"""
+        post_alert(self.worker, self.alert)
+
+        # try with the autosave set to False (default)
+        filter = filter_template(self.worker.collection_alerts)
+        passed_filters_no_autosave = self.worker.alert_filter__user_defined(
+            [filter], self.alert
+        )
+
+        # try with the autosave set to True
+        filter["autosave"] = True
+        passed_filters_autosave = self.worker.alert_filter__user_defined(
+            [filter], self.alert
+        )
+
+        # try with a complex autosave key (with comment)
+        filter["autosave"] = {
+            "active": True,
+            "comment": "Saved to BTS by BTSbot.",
+        }
+        passed_filters_complex_autosave = self.worker.alert_filter__user_defined(
+            [filter], self.alert
+        )
+
+        # try without specifying an autosave key
+        filter.pop("autosave")
+        passed_filters_no_autosave_key = self.worker.alert_filter__user_defined(
+            [filter], self.alert
+        )
+
+        delete_alert(self.worker, self.alert)
+
+        assert passed_filters_no_autosave is not None
+        assert len(passed_filters_no_autosave) == 1
+        assert "autosave" in passed_filters_no_autosave[0]
+        assert passed_filters_no_autosave[0]["autosave"] is False
+
+        assert passed_filters_autosave is not None
+        assert len(passed_filters_autosave) == 1
+        assert "autosave" in passed_filters_autosave[0]
+        assert passed_filters_autosave[0]["autosave"] is True
+
+        assert passed_filters_no_autosave_key is not None
+        assert len(passed_filters_no_autosave_key) == 1
+        assert "autosave" in passed_filters_no_autosave_key[0]
+        assert passed_filters_no_autosave_key[0]["autosave"] is False
+
+        assert passed_filters_complex_autosave is not None
+        assert len(passed_filters_complex_autosave) == 1
+        assert "autosave" in passed_filters_complex_autosave[0]
+        assert "comment" in passed_filters_complex_autosave[0]["autosave"]
+        assert (
+            passed_filters_complex_autosave[0]["autosave"]["comment"]
+            == "Saved to BTS by BTSbot."
+        )
 
     def test_alert_filter__user_defined_followup(self):
         """Test pushing an alert through a filter that also has auto follow-up activated"""
@@ -184,7 +242,17 @@ class TestAlertBrokerZTF:
         post_alert(self.worker, self.alert)
 
         filter = filter_template(self.worker.collection_alerts)
-        filter["autosave_comment"] = "Saved to BTS by BTSbot."
+        filter["autosave"] = {
+            "active": True,
+            "comment": "Saved to BTS by BTSbot.",
+            "pipeline": [
+                {
+                    "$match": {
+                        "candidate.drb": {"$gt": 0.5},
+                    }
+                }
+            ],
+        }
         filter["auto_followup"] = {
             "active": True,
             "pipeline": [
