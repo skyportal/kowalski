@@ -3,6 +3,7 @@ __all__ = ["AlertConsumer", "AlertWorker", "EopError"]
 import base64
 import datetime
 import gzip
+import inspect
 import io
 import os
 import pathlib
@@ -40,9 +41,9 @@ from kowalski.utils import (
     in_ellipse,
     memoize,
     radec2lb,
+    retry,
     time_stamp,
     timer,
-    retry,
 )
 
 # Tensorflow is problematic for Mac's currently, so we can add an option to disable it
@@ -1130,6 +1131,7 @@ class AlertWorker:
         self,
         filter_templates: Sequence,
         alert: Mapping,
+        alert_history: list = [],
         max_time_ms: int = 1000,
     ) -> list:
         """Evaluate user-defined filters
@@ -1226,10 +1228,45 @@ class AlertWorker:
                             continue
 
                         # there is also a priority key that is optional. If not present or if not a function, it defaults to 5 (lowest priority)
-                        if auto_followup_filter.get(
-                            "priority", None
-                        ) is None or not callable(auto_followup_filter["priority"]):
-                            auto_followup_filter["priority"] = lambda alert, data: 5
+                        if auto_followup_filter.get("priority", None) is not None:
+                            if isinstance(auto_followup_filter["priority"], str):
+                                try:
+                                    auto_followup_filter["priority"] = eval(
+                                        auto_followup_filter["priority"]
+                                    )
+                                except Exception:
+                                    log(
+                                        f'Filter {_filter["fid"]} has an invalid auto-followup priority (could not eval str), using default of 5'
+                                    )
+                                    continue
+                            if isinstance(
+                                auto_followup_filter["priority"], int
+                            ) or isinstance(auto_followup_filter["priority"], float):
+                                auto_followup_filter[
+                                    "priority"
+                                ] = lambda alert, alert_history, data: auto_followup_filter[
+                                    "priority"
+                                ]
+                            elif callable(auto_followup_filter["priority"]):
+                                # verify that the function takes 3 arguments: alert, alert_history, data
+                                if (
+                                    len(
+                                        inspect.signature(
+                                            auto_followup_filter["priority"]
+                                        ).parameters
+                                    )
+                                    != 3
+                                ):
+                                    log(
+                                        f'Filter {_filter["fid"]} has an invalid auto-followup priority (needs 3 arguments), using default of 5'
+                                    )
+                                    auto_followup_filter[
+                                        "priority"
+                                    ] = lambda alert, alert_history, data: 5
+                        else:
+                            auto_followup_filter[
+                                "priority"
+                            ] = lambda alert, alert_history, data: 5
 
                         # match candid
                         auto_followup_filter["pipeline"][0]["$match"]["candid"] = alert[
