@@ -1283,11 +1283,11 @@ class AlertWorker:
 
                         if len(auto_followup_filtered_data) == 1:
                             priority = auto_followup_filter["priority"](
-                                alert, auto_followup_filtered_data[0]
+                                alert, alert_history, auto_followup_filtered_data[0]
                             )
                             comment = auto_followup_filter.get("comment", None)
                             if comment is not None:
-                                comment += f" (priority: {priority})"
+                                comment += f" (priority: {str(priority)})"
                             passed_filter["auto_followup"] = {
                                 "allocation_id": _filter["auto_followup"][
                                     "allocation_id"
