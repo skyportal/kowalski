@@ -73,7 +73,6 @@ source env/bin/activate
 
 to create your virtual environment. If you are told that pip is not found, try using pip3 instead. For the following steps however (in the virtualenv), pip should work.
 
-*We do not suggest using conda, as we experienced trouble installing arm64 specific packages like tensorflow-macos and tensor flow-metal.*
 
 The python dependencies will be install automatically when you start the app. The same will happen for Kafka and the ML models.
 
@@ -127,8 +126,6 @@ source env/bin/activate
 
 to create your virtual environment. If you are told that pip is not found, try using pip3 instead. For the following steps however (in the virtualenv), pip should work.
 
-*We do not suggest using conda, as we experienced trouble installing arm64 specific packages like tensorflow-macos and tensor flow-metal.*
-
 The python dependencies will be install automatically when you start the app. The same will happen for Kafka and the ML models.
 
 ## Spin up your own `kowalski` **without Docker**
@@ -169,7 +166,7 @@ exit
 
 If you are using a mongodb atlas cluster, kowalski won't be able to create admin users, so you will need to do so manually on the cluster's web interface. You will need to create 2 users: admin user and user, based on what usernames and passwords you've set in the config file in the `database` section. *Don't forget to also allow access from your IP address, or simply allow access from anywhere.*
 
-### Start and test the app **on Linux amd64**
+### Start and test the app
 
 #### Starting the app
 
@@ -187,32 +184,6 @@ To run the tests, run:
 
 ```bash
 make test
-```
-
-If you want to run a specific test, you can do so by running:
-
-```bash
-PYTHONPATH=. pytest -s kowalski/tests/<test_file.py>
-```
-
-### Start and test the app **on MacOS arm64 (M1 or M2)**
-
-#### Starting the app
-
-To start the app, run:
-
-```bash
-make run_macos
-```
-
-This will start the API, the dask clusters and alert brokers.
-
-#### Run the tests
-
-To run the tests, run:
-
-```bash
-make test_macos
 ```
 
 If you want to run a specific test, you can do so by running:
