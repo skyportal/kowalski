@@ -307,6 +307,43 @@ class ZTFAlertWorker(AlertWorker, ABC):
                     "$in"
                 ][1] = active_filter["permissions"]
 
+                # if autosave is a dict with a pipeline key, also add the upstream pipeline to it:
+                if (
+                    isinstance(active_filter.get("autosave", None), dict)
+                    and active_filter.get("autosave", {}).get("pipeline", None)
+                    is not None
+                ):
+                    active_filter["autosave"]["pipeline"] = deepcopy(
+                        self.filter_pipeline_upstream
+                    ) + bson_loads(active_filter["autosave"]["pipeline"])
+                    # set permissions
+                    active_filter["autosave"]["pipeline"][0]["$match"][
+                        "candidate.programid"
+                    ]["$in"] = active_filter["permissions"]
+                    active_filter["autosave"]["pipeline"][3]["$project"][
+                        "prv_candidates"
+                    ]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter[
+                        "permissions"
+                    ]
+                # same for the auto_followup pipeline:
+                if (
+                    isinstance(active_filter.get("auto_followup", None), dict)
+                    and active_filter.get("auto_followup", {}).get("pipeline", None)
+                    is not None
+                ):
+                    active_filter["auto_followup"]["pipeline"] = deepcopy(
+                        self.filter_pipeline_upstream
+                    ) + bson_loads(active_filter["auto_followup"]["pipeline"])
+                    # set permissions
+                    active_filter["auto_followup"]["pipeline"][0]["$match"][
+                        "candidate.programid"
+                    ]["$in"] = active_filter["permissions"]
+                    active_filter["auto_followup"]["pipeline"][3]["$project"][
+                        "prv_candidates"
+                    ]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter[
+                        "permissions"
+                    ]
+
                 filter_template = {
                     "group_id": active_filter["group_id"],
                     "filter_id": active_filter["filter_id"],

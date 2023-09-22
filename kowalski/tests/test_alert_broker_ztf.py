@@ -231,6 +231,17 @@ class TestAlertBrokerZTF:
         if not config["misc"].get("broker", False):
             pytest.skip("Broker mode not activated, skipping")
 
+        # first get the groups
+        response = self.worker.api_skyportal("GET", "/api/groups", None)
+        # find the group called 'Program A'
+        groups = response.json()["data"]["user_accessible_groups"]
+        saved_group_id = [g for g in groups if g["name"] == "Program A"][0]["id"]
+        ignore_if_saved_group_id = [g for g in groups if g["name"] == "Program B"][0][
+            "id"
+        ]
+        assert saved_group_id is not None
+        assert ignore_if_saved_group_id is not None
+
         response = self.worker.api_skyportal("GET", "/api/allocation", None)
         assert response.status_code == 200
         allocations = response.json()["data"]
@@ -239,9 +250,25 @@ class TestAlertBrokerZTF:
         assert len(allocations) == 1
         allocation_id = allocations[0]["id"]
 
+        # first fetch the existing follow-up request from SP
+        response = self.worker.api_skyportal(
+            "GET", "/api/followup_request?sourceID=ZTF20aajcbhr", None
+        )
+        assert response.status_code == 200
+        followup_requests = response.json()["data"].get("followup_requests", [])
+        # get their ids
+        followup_request_ids = [f["id"] for f in followup_requests]
+        # delete them
+        for followup_request_id in followup_request_ids:
+            response = self.worker.api_skyportal(
+                "DELETE", f"/api/followup_request/{followup_request_id}", None
+            )
+            assert response.status_code == 200
+
         post_alert(self.worker, self.alert)
 
         filter = filter_template(self.worker.collection_alerts)
+        filter["group_id"] = saved_group_id
         filter["autosave"] = {
             "active": True,
             "comment": "Saved to BTS by BTSbot.",
@@ -269,7 +296,6 @@ class TestAlertBrokerZTF:
             },
         }
         passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
-        delete_alert(self.worker, self.alert)
 
         assert passed_filters is not None
         assert len(passed_filters) == 1
@@ -295,3 +321,54 @@ class TestAlertBrokerZTF:
         ]
         assert len(followup_requests) == 1
         assert followup_requests[0]["payload"]["observation_type"] == "IFU"
+
+        # delete the follow-up request
+        response = self.worker.api_skyportal(
+            "DELETE", f"/api/followup_request/{followup_requests[0]['id']}", None
+        )
+        assert response.status_code == 200
+
+        # now we'll try to push the same alert through the same filter, but with a different group_id
+        # and using the ignore_if_saved_group_id, to verify that it doesn't get saved, and doesnt trigger a follow-up request
+        filter["group_id"] = ignore_if_saved_group_id
+        filter["autosave"] = {
+            **filter["autosave"],
+            "ignore_group_ids": [saved_group_id],
+        }
+
+        passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
+        delete_alert(self.worker, self.alert)
+        assert passed_filters is not None
+        assert len(passed_filters) == 1
+        assert "auto_followup" in passed_filters[0]
+        assert (
+            passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "IFU"
+        )
+
+        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+
+        # now fetch the source from SP
+        response = self.worker.api_skyportal(
+            "GET", f"/api/sources/{alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        source = response.json()["data"]
+        assert source["id"] == "ZTF20aajcbhr"
+        assert len(source["groups"]) == 1
+        # should only be saved to the group of the first filter
+        assert source["groups"][0]["id"] == saved_group_id
+
+        # verify that there isn't a follow-up request
+        response = self.worker.api_skyportal(
+            "GET", f"/api/followup_request?sourceID={alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        followup_requests = response.json()["data"].get("followup_requests", [])
+        followup_requests = [
+            f
+            for f in followup_requests
+            if (f["allocation_id"] == allocation_id and f["status"] == "submitted")
+        ]
+        assert len(followup_requests) == 0

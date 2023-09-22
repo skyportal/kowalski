@@ -323,14 +323,9 @@ async def test_filters(aiohttp_client):
     autosave = {
         "active": True,
         "comment": "test autosave",
-        "pipeline": [
-            {
-                "$match": {
-                    "candidate.drb": {"$gt": 0.9999},
-                    "cross_matches.CLU_20190625.0": {"$exists": False},
-                }
-            },
-        ],
+        # we also use this to test how well a string pipeline is handled
+        "pipeline": '[{"$match": {"candidate.drb": {"$gt": 0.9999}, "cross_matches.CLU_20190625.0": {"$exists": false}}}]',
+        "ignore_group_ids": [1, 2, 3],
     }
     resp = await client.patch(
         "/api/filters",
@@ -376,6 +371,10 @@ async def test_filters(aiohttp_client):
     assert result["status"] == "success"
     assert "data" in result
     assert "auto_followup" in result["data"]
+    # pipeline has been saved as a string, so we need to do the same before comparing
+    auto_followup[
+        "pipeline"
+    ] = '[{"$match": {"candidate.drb": {"$gt": 0.9999}, "cross_matches.CLU_20190625.0": {"$exists": false}}}]'
     assert result["data"]["auto_followup"] == auto_followup
 
     # turn update_annotations on
@@ -429,6 +428,18 @@ async def test_filters(aiohttp_client):
     result = await resp.json()
     assert result["status"] == "success"
     assert result["message"] == f"Removed filter id {filter_id}"
+
+    # try adding a brand new filter, but already with autosave and auto_followup
+    # (this is how the frontend will do it)
+    user_filter = make_filter(filter_id=filter_id)
+    user_filter["autosave"] = autosave
+    user_filter["auto_followup"] = auto_followup
+    resp = await client.post(
+        "/api/filters", json=user_filter, headers=headers, timeout=5
+    )
+    assert resp.status == 200
+    result = await resp.json()
+    assert result["status"] == "success"
 
 
 # test raising errors

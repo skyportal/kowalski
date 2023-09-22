@@ -1194,11 +1194,17 @@ class AlertWorker:
                             if len(autosave_filtered_data) == 1:
                                 passed_filter["autosave"] = {
                                     "comment": autosave_filter.get("comment", None),
+                                    "ignore_group_ids": autosave_filter.get(
+                                        "ignore_group_ids", []
+                                    ),
                                 }
                         else:
                             # pipeline optional for autosave. If not specified, autosave directly
                             passed_filter["autosave"] = {
                                 "comment": autosave_filter.get("comment", None),
+                                "ignore_group_ids": autosave_filter.get(
+                                    "ignore_group_ids", []
+                                ),
                             }
                     else:
                         passed_filter["autosave"] = False
@@ -1311,6 +1317,7 @@ class AlertWorker:
                                         ).strftime("%Y-%m-%dT%H:%M:%S.%f"),
                                         # one week validity window
                                     },
+                                    "source_group_ids": [_filter["group_id"]],
                                 },
                             }
 
@@ -1359,7 +1366,9 @@ class AlertWorker:
             )
             log(response.json())
 
-    def alert_post_source(self, alert: Mapping, group_ids: Sequence):
+    def alert_post_source(
+        self, alert: Mapping, group_ids: Sequence, ignore_group_ids: Mapping
+    ):
         """Save an alert as a source to groups on SkyPortal
 
         :param alert:
@@ -1372,9 +1381,16 @@ class AlertWorker:
             "group_ids": group_ids,
             "origin": "Kowalski",
         }
+        if ignore_group_ids not in [None, {}]:
+            alert_thin["ignore_if_in_group_ids"] = ignore_group_ids
         if self.verbose > 1:
             log(alert_thin)
 
+        not_saved_group_ids = (
+            []
+        )  # those are the groups to which the source ended up not being saved
+        # because the filter's autosave specified to cancel the autosave if the source is already
+        # save to certain groups
         with timer(
             f"Saving {alert['objectId']} {alert['candid']} as a Source on SkyPortal",
             self.verbose > 1,
@@ -1385,12 +1401,27 @@ class AlertWorker:
                     log(
                         f"Saved {alert['objectId']} {alert['candid']} as a Source on SkyPortal"
                     )
+                    saved_to_groups = response.json()["data"].get("saved_to_groups", [])
+                    if saved_to_groups is None or len(saved_to_groups) == 0:
+                        not_saved_group_ids = (
+                            []
+                        )  # all groups failed to save, or not specified
+                    else:
+                        not_saved_group_ids = list(
+                            set(group_ids) - set(saved_to_groups)
+                        )
+                    if len(not_saved_group_ids) > 0:
+                        log(
+                            f"Source {alert['objectId']} {alert['candid']} was not saved to groups {response.json()['data']['not_saved_group_ids']}"
+                        )
                 else:
                     raise ValueError(response.json()["message"])
             except Exception as e:
                 log(
                     f"Failed to save {alert['objectId']} {alert['candid']} as a Source on SkyPortal: {e}"
                 )
+
+        return not_saved_group_ids
 
     def alert_post_annotations(self, alert: Mapping, passed_filters: Sequence):
         """Post annotations to SkyPortal for an alert that passed user-defined filters
@@ -1593,7 +1624,8 @@ class AlertWorker:
             )
 
         autosave_group_ids = []
-
+        autosave_ignore_group_ids = {}
+        not_saved_group_ids = []
         # obj does not exit in SP:
         if (not is_candidate) and (not is_source):
             # passed at least one filter?
@@ -1623,13 +1655,21 @@ class AlertWorker:
                 self.alert_post_thumbnails(alert)
 
                 # post source if autosave=True or if autosave is a dict
-                autosave_group_ids = [
-                    f.get("group_id")
-                    for f in passed_filters
-                    if not f.get("autosave", False) is False
-                ]
+                autosave_group_ids, autosave_ignore_group_ids = [], {}
+                for f in passed_filters:
+                    if not f.get("autosave", False) is False:
+                        autosave_group_ids.append(f.get("group_id"))
+                        if (
+                            isinstance(f.get("autosave", False), dict)
+                            and len(f.get("ignore_group_ids", [])) > 0
+                        ):
+                            autosave_ignore_group_ids[f.get("group_id")] = f[
+                                "autosave"
+                            ].get("ignore_group_ids", [])
                 if len(autosave_group_ids) > 0:
-                    self.alert_post_source(alert, autosave_group_ids)
+                    not_saved_group_ids = self.alert_post_source(
+                        alert, autosave_group_ids, autosave_ignore_group_ids
+                    )
 
         # obj exists in SP:
         else:
@@ -1657,27 +1697,43 @@ class AlertWorker:
                     existing_group_ids = [g["id"] for g in existing_groups]
 
                     # post source if autosave is not False and not already saved
-                    autosave_group_ids = [
-                        f.get("group_id")
-                        for f in passed_filters
-                        if not f.get("autosave", False) is False
-                        and (f.get("group_id") not in existing_group_ids)
-                    ]
+                    autosave_group_ids, autosave_ignore_group_ids = [], {}
+                    for f in passed_filters:
+                        if not f.get("autosave", False) is False and (
+                            f.get("group_id") not in existing_group_ids
+                        ):
+                            autosave_group_ids.append(f.get("group_id"))
+                            if (
+                                isinstance(f.get("autosave", False), dict)
+                                and len(f["autosave"].get("ignore_group_ids", [])) > 0
+                            ):
+                                autosave_ignore_group_ids[f.get("group_id")] = f[
+                                    "autosave"
+                                ].get("ignore_group_ids", [])
                     if len(autosave_group_ids) > 0:
-                        self.alert_post_source(alert, autosave_group_ids)
+                        not_saved_group_ids = self.alert_post_source(
+                            alert, autosave_group_ids, autosave_ignore_group_ids
+                        )
 
                 else:
                     log(f"Failed to get source groups info on {alert['objectId']}")
             else:
                 # post source if autosave is not False and not is_source
-                autosave_group_ids = [
-                    f.get("group_id")
-                    for f in passed_filters
-                    if not f.get("autosave", False) is False
-                ]
+                autosave_group_ids, autosave_ignore_group_ids = [], {}
+                for f in passed_filters:
+                    if not f.get("autosave", False) is False:
+                        autosave_group_ids.append(f.get("group_id"))
+                        if (
+                            isinstance(f.get("autosave", False), dict)
+                            and len(f["autosave"].get("ignore_group_ids", [])) > 0
+                        ):
+                            autosave_ignore_group_ids[f.get("group_id")] = f[
+                                "autosave"
+                            ].get("ignore_group_ids", [])
                 if len(autosave_group_ids) > 0:
-                    self.alert_post_source(alert, autosave_group_ids)
-
+                    not_saved_group_ids = self.alert_post_source(
+                        alert, autosave_group_ids, autosave_ignore_group_ids
+                    )
             # post alert photometry in single call to /api/photometry
             alert["prv_candidates"] = prv_candidates
 
@@ -1688,6 +1744,7 @@ class AlertWorker:
                 f
                 for f in passed_filters
                 if f.get("group_id") in autosave_group_ids
+                and f.get("group_id") not in not_saved_group_ids
                 and isinstance(f.get("autosave", False), dict)
                 and f["autosave"].get("comment", None) is not None
             ]
@@ -1763,9 +1820,17 @@ class AlertWorker:
                             response = self.api_skyportal(
                                 "POST",
                                 "/api/followup_request",
-                                passed_filter["auto_followup"]["data"],
+                                passed_filter["auto_followup"][
+                                    "data"
+                                ],  # already contains the optional ignore_group_ids
                             )
-                            if response.json()["status"] == "success":
+                            if (
+                                response.json()["status"] == "success"
+                                and response.json()
+                                .get("data", {})
+                                .get("ignored", False)
+                                is False
+                            ):
                                 log(
                                     f"Posted followup request for {alert['objectId']} to SkyPortal"
                                 )
@@ -1790,11 +1855,7 @@ class AlertWorker:
                                                 f"/api/sources/{alert['objectId']}/comments",
                                                 comment,
                                             )
-                                            if response.json()["status"] == "success":
-                                                log(
-                                                    f"Posted followup comment {comment['text']} for {alert['objectId']} to SkyPortal"
-                                                )
-                                            else:
+                                            if response.json()["status"] != "success":
                                                 raise ValueError(
                                                     response.json()["message"]
                                                 )
