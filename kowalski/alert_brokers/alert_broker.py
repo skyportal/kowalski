@@ -1269,6 +1269,19 @@ class AlertWorker:
                                     auto_followup_filter[
                                         "priority"
                                     ] = lambda alert, alert_history, data: 5
+                        elif (
+                            auto_followup_filter.get("payload", {}).get(
+                                "priority", None
+                            )
+                            is not None
+                        ):
+                            auto_followup_filter[
+                                "priority"
+                            ] = lambda alert, alert_history, data: auto_followup_filter[
+                                "payload"
+                            ][
+                                "priority"
+                            ]
                         else:
                             auto_followup_filter[
                                 "priority"
@@ -1306,7 +1319,7 @@ class AlertWorker:
                                     ],
                                     "target_group_ids": [_filter["group_id"]],
                                     "payload": {
-                                        **_filter["auto_followup"]["payload"],
+                                        **_filter["auto_followup"].get("payload", {}),
                                         "priority": priority,
                                         "start_date": datetime.datetime.utcnow().strftime(
                                             "%Y-%m-%dT%H:%M:%S.%f"
@@ -1548,7 +1561,11 @@ class AlertWorker:
                 f"Making {istrument_type} thumbnail for {alert['objectId']} {alert['candid']}",
                 self.verbose > 1,
             ):
-                thumb = self.make_thumbnail(alert, ttype, istrument_type)
+                try:
+                    thumb = self.make_thumbnail(alert, ttype, istrument_type)
+                except Exception:
+                    thumb = None
+                    continue
 
             with timer(
                 f"Posting {istrument_type} thumbnail for {alert['objectId']} {alert['candid']} to SkyPortal",
