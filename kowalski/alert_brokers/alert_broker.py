@@ -1563,7 +1563,10 @@ class AlertWorker:
             ):
                 try:
                     thumb = self.make_thumbnail(alert, ttype, istrument_type)
-                except Exception:
+                except Exception as e:
+                    log(
+                        f"Failed to make {istrument_type} thumbnail for {alert['objectId']} {alert['candid']}: {e}"
+                    )
                     thumb = None
                     continue
 
