@@ -1386,11 +1386,10 @@ class AlertWorker:
         if self.verbose > 1:
             log(alert_thin)
 
-        not_saved_group_ids = (
-            []
-        )  # those are the groups to which the source ended up not being saved
+        # those are the groups to which the source ended up not being saved
         # because the filter's autosave specified to cancel the autosave if the source is already
         # save to certain groups
+        not_saved_group_ids = []
         with timer(
             f"Saving {alert['objectId']} {alert['candid']} as a Source on SkyPortal",
             self.verbose > 1,
@@ -1401,8 +1400,11 @@ class AlertWorker:
                     log(
                         f"Saved {alert['objectId']} {alert['candid']} as a Source on SkyPortal"
                     )
-                    saved_to_groups = response.json()["data"].get("saved_to_groups", [])
-                    if saved_to_groups is None or len(saved_to_groups) == 0:
+                    print(response.json())
+                    saved_to_groups = response.json()["data"].get(
+                        "saved_to_groups", None
+                    )
+                    if saved_to_groups is None:
                         not_saved_group_ids = (
                             []
                         )  # all groups failed to save, or not specified

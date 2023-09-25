@@ -334,6 +334,11 @@ class TestAlertBrokerZTF:
         filter["autosave"] = {
             **filter["autosave"],
             "ignore_group_ids": [saved_group_id],
+            "comment": "Saved to BTS2 by BTSbot.",
+        }
+        filter["auto_followup"] = {
+            **filter["auto_followup"],
+            "comment": "SEDM triggered by BTSbot2",
         }
 
         passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)

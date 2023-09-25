@@ -2430,20 +2430,16 @@ class FilterHandler(Handler):
 
                     if modifiable_field == "autosave" and isinstance(value, bool):
                         pass
-                    elif (
-                        modifiable_field == "autosave"
-                        and isinstance(value, dict)
-                        and "pipeline" not in value
-                    ):
+                    elif isinstance(value, dict) and "pipeline" not in value:
                         pass
-                    elif (
-                        modifiable_field == "auto_followup"
-                        and isinstance(value, dict)
-                        and "pipeline" not in value
-                    ):
-                        return self.error(
-                            message=f"Cannot update filter id {filter_id}: {modifiable_field} must contain a pipeline"
-                        )
+                    # elif (
+                    #     modifiable_field == "auto_followup"
+                    #     and isinstance(value, dict)
+                    #     and "pipeline" not in value
+                    # ):
+                    #     return self.error(
+                    #         message=f"Cannot update filter id {filter_id}: {modifiable_field} must contain a pipeline"
+                    #     )
                     else:
                         pipeline = value.get("pipeline")
                         if not isinstance(pipeline, str):
