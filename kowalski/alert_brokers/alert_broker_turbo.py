@@ -213,6 +213,7 @@ class TURBOAlertWorker(AlertWorker, ABC):
                             "filter_id": 1,
                             "permissions": 1,
                             "autosave": 1,
+                            "auto_followup": 1,
                             "update_annotations": 1,
                             "fv": {
                                 "$arrayElemAt": [
@@ -276,6 +277,25 @@ class TURBOAlertWorker(AlertWorker, ABC):
                     active_filter["fv"]["pipeline"]
                 )
 
+                # if autosave is a dict with a pipeline key, also add the upstream pipeline to it:
+                if (
+                    isinstance(active_filter.get("autosave", None), dict)
+                    and active_filter.get("autosave", {}).get("pipeline", None)
+                    is not None
+                ):
+                    active_filter["autosave"]["pipeline"] = deepcopy(
+                        self.filter_pipeline_upstream
+                    ) + bson_loads(active_filter["autosave"]["pipeline"])
+                # same for the auto_followup pipeline:
+                if (
+                    isinstance(active_filter.get("auto_followup", None), dict)
+                    and active_filter.get("auto_followup", {}).get("pipeline", None)
+                    is not None
+                ):
+                    active_filter["auto_followup"]["pipeline"] = deepcopy(
+                        self.filter_pipeline_upstream
+                    ) + bson_loads(active_filter["auto_followup"]["pipeline"])
+
                 filter_template = {
                     "group_id": active_filter["group_id"],
                     "filter_id": active_filter["filter_id"],
@@ -283,8 +303,11 @@ class TURBOAlertWorker(AlertWorker, ABC):
                     "filter_name": filter_name,
                     "fid": active_filter["fv"]["fid"],
                     "permissions": active_filter["permissions"],
-                    "autosave": active_filter["autosave"],
-                    "update_annotations": active_filter["update_annotations"],
+                    "autosave": active_filter.get("autosave", False),
+                    "auto_followup": active_filter.get("auto_followup", {}),
+                    "update_annotations": active_filter.get(
+                        "update_annotations", False
+                    ),
                     "pipeline": deepcopy(pipeline),
                 }
 

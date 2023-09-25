@@ -59,7 +59,7 @@ import pymongo
 from astropy.io import fits
 from motor.motor_asyncio import AsyncIOMotorClient
 from numba import jit
-from pymongo.errors import BulkWriteError
+from pymongo.errors import BulkWriteError, OperationFailure
 from requests.adapters import HTTPAdapter
 
 from kowalski.log import time_stamp, log
@@ -83,6 +83,11 @@ def retry(func, max_retries=10, timeout=6):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
+                # this kind of error is not retryable
+                if type(
+                    e
+                ) == OperationFailure and "Unrecognized pipeline stage name" in str(e):
+                    raise e
                 time.sleep(timeout)
                 n_retries += 1
                 exception = e
@@ -427,6 +432,15 @@ class Mongo:
                     f"Error inserting document into collection {collection}: {str(e)}",
                 )
                 traceback.print_exc()
+
+    def delete_one(self, collection: str, document: dict, **kwargs):
+        try:
+            self.db[collection].delete_one(document)
+        except Exception as e:
+            log(
+                f"Error deleting document from collection {collection}: {str(e)}",
+            )
+            traceback.print_exc()
 
     def close(self):
         try:

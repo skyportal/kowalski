@@ -3,6 +3,7 @@ __all__ = ["AlertConsumer", "AlertWorker", "EopError"]
 import base64
 import datetime
 import gzip
+import inspect
 import io
 import os
 import pathlib
@@ -40,9 +41,9 @@ from kowalski.utils import (
     in_ellipse,
     memoize,
     radec2lb,
+    retry,
     time_stamp,
     timer,
-    retry,
 )
 
 # Tensorflow is problematic for Mac's currently, so we can add an option to disable it
@@ -455,7 +456,7 @@ class AlertWorker:
             total=5,
             backoff_factor=2,
             status_forcelist=[405, 429, 500, 502, 503, 504],
-            method_whitelist=["HEAD", "GET", "PUT", "POST", "PATCH"],
+            allowed_methods=["HEAD", "GET", "PUT", "POST", "PATCH"],
         )
         adapter = TimeoutHTTPAdapter(timeout=5, max_retries=retries)
         self.session.mount("https://", adapter)
@@ -1130,6 +1131,7 @@ class AlertWorker:
         self,
         filter_templates: Sequence,
         alert: Mapping,
+        alert_history: list = [],
         max_time_ms: int = 1000,
     ) -> list:
         """Evaluate user-defined filters
@@ -1157,24 +1159,194 @@ class AlertWorker:
                     log(
                         f'{alert["objectId"]} {alert["candid"]} passed filter {_filter["fid"]}'
                     )
-                    passed_filters.append(
-                        {
-                            "group_id": _filter["group_id"],
-                            "filter_id": _filter["filter_id"],
-                            "group_name": _filter["group_name"],
-                            "filter_name": _filter["filter_name"],
-                            "fid": _filter["fid"],
-                            "permissions": _filter["permissions"],
-                            "autosave": _filter["autosave"],
-                            "update_annotations": _filter["update_annotations"],
-                            "data": filtered_data[0],
-                        }
-                    )
+                    passed_filter = {
+                        "group_id": _filter["group_id"],
+                        "filter_id": _filter["filter_id"],
+                        "group_name": _filter["group_name"],
+                        "filter_name": _filter["filter_name"],
+                        "fid": _filter["fid"],
+                        "permissions": _filter["permissions"],
+                        "update_annotations": _filter.get("update_annotations", False),
+                        "data": filtered_data[0],
+                    }
+
+                    autosaved = False
+                    # AUTOSAVE
+                    if isinstance(_filter.get("autosave", False), bool):
+                        passed_filter["autosave"] = _filter.get("autosave", False)
+                    elif isinstance(_filter.get("autosave", False), dict) and _filter[
+                        "autosave"
+                    ].get("active", False):
+                        autosave_filter = deepcopy(_filter["autosave"])
+                        if autosave_filter.get("pipeline", None) is not None:
+                            # match candid
+                            autosave_filter["pipeline"][0]["$match"]["candid"] = alert[
+                                "candid"
+                            ]
+
+                            autosave_filtered_data = list(
+                                retry(self.mongo.db[self.collection_alerts].aggregate)(
+                                    autosave_filter["pipeline"],
+                                    allowDiskUse=False,
+                                    maxTimeMS=max_time_ms,
+                                )
+                            )
+
+                            if len(autosave_filtered_data) == 1:
+                                passed_filter["autosave"] = {
+                                    "comment": autosave_filter.get("comment", None),
+                                    "ignore_group_ids": autosave_filter.get(
+                                        "ignore_group_ids", []
+                                    ),
+                                }
+                        else:
+                            # pipeline optional for autosave. If not specified, autosave directly
+                            passed_filter["autosave"] = {
+                                "comment": autosave_filter.get("comment", None),
+                                "ignore_group_ids": autosave_filter.get(
+                                    "ignore_group_ids", []
+                                ),
+                            }
+                    else:
+                        passed_filter["autosave"] = False
+
+                    if passed_filter.get("autosave", None) not in [False, None]:
+                        autosaved = True
+
+                    # AUTO FOLLOWUP
+                    if autosaved is True and _filter.get("auto_followup", {}).get(
+                        "active", False
+                    ):
+                        auto_followup_filter = deepcopy(_filter["auto_followup"])
+
+                        # validate non-optional keys
+                        if (
+                            auto_followup_filter.get("pipeline", None) is None
+                            or len(auto_followup_filter.get("pipeline", [])) == 0
+                        ):
+                            log(
+                                f'Filter {_filter["fid"]} has no auto-followup pipeline, skipping'
+                            )
+                            continue
+                        if auto_followup_filter.get("allocation_id", None) is None:
+                            log(
+                                f'Filter {_filter["fid"]} has no auto-followup allocation_id, skipping'
+                            )
+                            continue
+                        if auto_followup_filter.get("payload", None) is None:
+                            log(
+                                f'Filter {_filter["fid"]} has no auto-followup payload, skipping'
+                            )
+                            continue
+
+                        # there is also a priority key that is optional. If not present or if not a function, it defaults to 5 (lowest priority)
+                        if auto_followup_filter.get("priority", None) is not None:
+                            if isinstance(auto_followup_filter["priority"], str):
+                                try:
+                                    auto_followup_filter["priority"] = eval(
+                                        auto_followup_filter["priority"]
+                                    )
+                                except Exception:
+                                    log(
+                                        f'Filter {_filter["fid"]} has an invalid auto-followup priority (could not eval str), using default of 5'
+                                    )
+                                    continue
+                            if isinstance(
+                                auto_followup_filter["priority"], int
+                            ) or isinstance(auto_followup_filter["priority"], float):
+                                auto_followup_filter[
+                                    "priority"
+                                ] = lambda alert, alert_history, data: auto_followup_filter[
+                                    "priority"
+                                ]
+                            elif callable(auto_followup_filter["priority"]):
+                                # verify that the function takes 3 arguments: alert, alert_history, data
+                                if (
+                                    len(
+                                        inspect.signature(
+                                            auto_followup_filter["priority"]
+                                        ).parameters
+                                    )
+                                    != 3
+                                ):
+                                    log(
+                                        f'Filter {_filter["fid"]} has an invalid auto-followup priority (needs 3 arguments), using default of 5'
+                                    )
+                                    auto_followup_filter[
+                                        "priority"
+                                    ] = lambda alert, alert_history, data: 5
+                        elif (
+                            auto_followup_filter.get("payload", {}).get(
+                                "priority", None
+                            )
+                            is not None
+                        ):
+                            auto_followup_filter[
+                                "priority"
+                            ] = lambda alert, alert_history, data: auto_followup_filter[
+                                "payload"
+                            ][
+                                "priority"
+                            ]
+                        else:
+                            auto_followup_filter[
+                                "priority"
+                            ] = lambda alert, alert_history, data: 5
+
+                        # match candid
+                        auto_followup_filter["pipeline"][0]["$match"]["candid"] = alert[
+                            "candid"
+                        ]
+
+                        auto_followup_filtered_data = list(
+                            retry(self.mongo.db[self.collection_alerts].aggregate)(
+                                auto_followup_filter["pipeline"],
+                                allowDiskUse=False,
+                                maxTimeMS=max_time_ms,
+                            )
+                        )
+
+                        if len(auto_followup_filtered_data) == 1:
+                            priority = auto_followup_filter["priority"](
+                                alert, alert_history, auto_followup_filtered_data[0]
+                            )
+                            comment = auto_followup_filter.get("comment", None)
+                            if comment is not None:
+                                comment += f" (priority: {str(priority)})"
+                            passed_filter["auto_followup"] = {
+                                "allocation_id": _filter["auto_followup"][
+                                    "allocation_id"
+                                ],
+                                "comment": comment,
+                                "data": {
+                                    "obj_id": alert["objectId"],
+                                    "allocation_id": _filter["auto_followup"][
+                                        "allocation_id"
+                                    ],
+                                    "target_group_ids": [_filter["group_id"]],
+                                    "payload": {
+                                        **_filter["auto_followup"].get("payload", {}),
+                                        "priority": priority,
+                                        "start_date": datetime.datetime.utcnow().strftime(
+                                            "%Y-%m-%dT%H:%M:%S.%f"
+                                        ),
+                                        "end_date": (
+                                            datetime.datetime.utcnow()
+                                            + datetime.timedelta(days=7)
+                                        ).strftime("%Y-%m-%dT%H:%M:%S.%f"),
+                                        # one week validity window
+                                    },
+                                    "source_group_ids": [_filter["group_id"]],
+                                },
+                            }
+
+                    passed_filters.append(passed_filter)
 
             except Exception as e:
                 log(
                     f'Filter {filter_template["fid"]} execution failed on alert {alert["candid"]}: {e}'
                 )
+                traceback.print_exc()
                 continue
 
         return passed_filters
@@ -1213,7 +1385,9 @@ class AlertWorker:
             )
             log(response.json())
 
-    def alert_post_source(self, alert: Mapping, group_ids: Sequence):
+    def alert_post_source(
+        self, alert: Mapping, group_ids: Sequence, ignore_group_ids: Mapping
+    ):
         """Save an alert as a source to groups on SkyPortal
 
         :param alert:
@@ -1226,9 +1400,15 @@ class AlertWorker:
             "group_ids": group_ids,
             "origin": "Kowalski",
         }
+        if ignore_group_ids not in [None, {}]:
+            alert_thin["ignore_if_in_group_ids"] = ignore_group_ids
         if self.verbose > 1:
             log(alert_thin)
 
+        # those are the groups to which the source ended up not being saved
+        # because the filter's autosave specified to cancel the autosave if the source is already
+        # save to certain groups
+        not_saved_group_ids = []
         with timer(
             f"Saving {alert['objectId']} {alert['candid']} as a Source on SkyPortal",
             self.verbose > 1,
@@ -1239,12 +1419,30 @@ class AlertWorker:
                     log(
                         f"Saved {alert['objectId']} {alert['candid']} as a Source on SkyPortal"
                     )
+                    print(response.json())
+                    saved_to_groups = response.json()["data"].get(
+                        "saved_to_groups", None
+                    )
+                    if saved_to_groups is None:
+                        not_saved_group_ids = (
+                            []
+                        )  # all groups failed to save, or not specified
+                    else:
+                        not_saved_group_ids = list(
+                            set(group_ids) - set(saved_to_groups)
+                        )
+                    if len(not_saved_group_ids) > 0:
+                        log(
+                            f"Source {alert['objectId']} {alert['candid']} was not saved to groups {response.json()['data']['not_saved_group_ids']}"
+                        )
                 else:
                     raise ValueError(response.json()["message"])
             except Exception as e:
                 log(
                     f"Failed to save {alert['objectId']} {alert['candid']} as a Source on SkyPortal: {e}"
                 )
+
+        return not_saved_group_ids
 
     def alert_post_annotations(self, alert: Mapping, passed_filters: Sequence):
         """Post annotations to SkyPortal for an alert that passed user-defined filters
@@ -1369,7 +1567,14 @@ class AlertWorker:
                 f"Making {istrument_type} thumbnail for {alert['objectId']} {alert['candid']}",
                 self.verbose > 1,
             ):
-                thumb = self.make_thumbnail(alert, ttype, istrument_type)
+                try:
+                    thumb = self.make_thumbnail(alert, ttype, istrument_type)
+                except Exception as e:
+                    log(
+                        f"Failed to make {istrument_type} thumbnail for {alert['objectId']} {alert['candid']}: {e}"
+                    )
+                    thumb = None
+                    continue
 
             with timer(
                 f"Posting {istrument_type} thumbnail for {alert['objectId']} {alert['candid']} to SkyPortal",
@@ -1446,6 +1651,9 @@ class AlertWorker:
                 f"{alert['objectId']} {'is' if is_source else 'is not'} Source in SkyPortal"
             )
 
+        autosave_group_ids = []
+        autosave_ignore_group_ids = {}
+        not_saved_group_ids = []
         # obj does not exit in SP:
         if (not is_candidate) and (not is_source):
             # passed at least one filter?
@@ -1474,14 +1682,22 @@ class AlertWorker:
                 # post thumbnails
                 self.alert_post_thumbnails(alert)
 
-                # post source if autosave=True
-                autosave_group_ids = [
-                    f.get("group_id")
-                    for f in passed_filters
-                    if f.get("autosave", False)
-                ]
+                # post source if autosave=True or if autosave is a dict
+                autosave_group_ids, autosave_ignore_group_ids = [], {}
+                for f in passed_filters:
+                    if not f.get("autosave", False) is False:
+                        autosave_group_ids.append(f.get("group_id"))
+                        if (
+                            isinstance(f.get("autosave", False), dict)
+                            and len(f.get("ignore_group_ids", [])) > 0
+                        ):
+                            autosave_ignore_group_ids[f.get("group_id")] = f[
+                                "autosave"
+                            ].get("ignore_group_ids", [])
                 if len(autosave_group_ids) > 0:
-                    self.alert_post_source(alert, autosave_group_ids)
+                    not_saved_group_ids = self.alert_post_source(
+                        alert, autosave_group_ids, autosave_ignore_group_ids
+                    )
 
         # obj exists in SP:
         else:
@@ -1508,28 +1724,180 @@ class AlertWorker:
                     existing_groups = response.json()["data"]
                     existing_group_ids = [g["id"] for g in existing_groups]
 
-                    # post source if autosave=True and not already saved
-                    autosave_group_ids = [
-                        f.get("group_id")
-                        for f in passed_filters
-                        if f.get("autosave", False)
-                        and (f.get("group_id") not in existing_group_ids)
-                    ]
+                    # post source if autosave is not False and not already saved
+                    autosave_group_ids, autosave_ignore_group_ids = [], {}
+                    for f in passed_filters:
+                        if not f.get("autosave", False) is False and (
+                            f.get("group_id") not in existing_group_ids
+                        ):
+                            autosave_group_ids.append(f.get("group_id"))
+                            if (
+                                isinstance(f.get("autosave", False), dict)
+                                and len(f["autosave"].get("ignore_group_ids", [])) > 0
+                            ):
+                                autosave_ignore_group_ids[f.get("group_id")] = f[
+                                    "autosave"
+                                ].get("ignore_group_ids", [])
                     if len(autosave_group_ids) > 0:
-                        self.alert_post_source(alert, autosave_group_ids)
+                        not_saved_group_ids = self.alert_post_source(
+                            alert, autosave_group_ids, autosave_ignore_group_ids
+                        )
+
                 else:
                     log(f"Failed to get source groups info on {alert['objectId']}")
             else:
-                # post source if autosave=True and not is_source
-                autosave_group_ids = [
-                    f.get("group_id")
-                    for f in passed_filters
-                    if f.get("autosave", False)
-                ]
+                # post source if autosave is not False and not is_source
+                autosave_group_ids, autosave_ignore_group_ids = [], {}
+                for f in passed_filters:
+                    if not f.get("autosave", False) is False:
+                        autosave_group_ids.append(f.get("group_id"))
+                        if (
+                            isinstance(f.get("autosave", False), dict)
+                            and len(f["autosave"].get("ignore_group_ids", [])) > 0
+                        ):
+                            autosave_ignore_group_ids[f.get("group_id")] = f[
+                                "autosave"
+                            ].get("ignore_group_ids", [])
                 if len(autosave_group_ids) > 0:
-                    self.alert_post_source(alert, autosave_group_ids)
-
+                    not_saved_group_ids = self.alert_post_source(
+                        alert, autosave_group_ids, autosave_ignore_group_ids
+                    )
             # post alert photometry in single call to /api/photometry
             alert["prv_candidates"] = prv_candidates
 
             self.alert_put_photometry(alert)
+
+        if len(autosave_group_ids):
+            autosave_comments = [
+                f
+                for f in passed_filters
+                if f.get("group_id") in autosave_group_ids
+                and f.get("group_id") not in not_saved_group_ids
+                and isinstance(f.get("autosave", False), dict)
+                and f["autosave"].get("comment", None) is not None
+            ]
+            if len(autosave_comments) > 0:
+                # post comments
+                for autosave_comment in autosave_comments:
+                    comment = {
+                        "text": autosave_comment["autosave"]["comment"],
+                        "group_ids": [autosave_comment["group_id"]],
+                    }
+                    with timer(
+                        f"Posting comment {comment['text']} for {alert['objectId']} to SkyPortal",
+                        self.verbose > 1,
+                    ):
+                        try:
+                            response = self.api_skyportal(
+                                "POST",
+                                f"/api/sources/{alert['objectId']}/comments",
+                                comment,
+                            )
+                            if response.json()["status"] != "success":
+                                raise ValueError(response.json()["message"])
+                        except Exception as e:
+                            log(
+                                f"Failed to post comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
+                            )
+
+        # automatic follow_up filters:
+        passed_filters_followup = [
+            f for f in passed_filters if f.get("auto_followup", {}) != {}
+        ]
+
+        if len(passed_filters_followup) > 0:
+            # first fetch the followup requests on SkyPortal for this alert
+            with timer(
+                f"Getting followup requests for {alert['objectId']} from SkyPortal",
+                self.verbose > 1,
+            ):
+                response = self.api_skyportal(
+                    "GET",
+                    f"/api/followup_request?sourceID={alert['objectId']}",
+                )
+            if response.json()["status"] == "success":
+                existing_requests = response.json()["data"].get("followup_requests", [])
+                # only keep the completed and submitted requests
+                existing_requests = [
+                    r
+                    for r in existing_requests
+                    if r["status"] in ["completed", "submitted"]
+                ]
+            else:
+                log(f"Failed to get followup requests for {alert['objectId']}")
+                existing_requests = []
+            for passed_filter in passed_filters_followup:
+                # post a followup request with the payload and allocation_id
+                # if there isn't already a pending request for this alert and this allocation_id
+                if (
+                    len(
+                        [
+                            r
+                            for r in existing_requests
+                            if r["allocation_id"]
+                            == passed_filter["auto_followup"]["allocation_id"]
+                        ]
+                    )
+                    == 0
+                ):
+                    with timer(
+                        f"Posting auto followup request for {alert['objectId']} to SkyPortal",
+                        self.verbose > 1,
+                    ):
+                        try:
+                            response = self.api_skyportal(
+                                "POST",
+                                "/api/followup_request",
+                                passed_filter["auto_followup"][
+                                    "data"
+                                ],  # already contains the optional ignore_group_ids
+                            )
+                            if (
+                                response.json()["status"] == "success"
+                                and response.json()
+                                .get("data", {})
+                                .get("ignored", False)
+                                is False
+                            ):
+                                log(
+                                    f"Posted followup request for {alert['objectId']} to SkyPortal"
+                                )
+                                if (
+                                    passed_filter["auto_followup"].get("comment", None)
+                                    is not None
+                                ):
+                                    # post a comment to the source
+                                    comment = {
+                                        "text": passed_filter["auto_followup"][
+                                            "comment"
+                                        ],
+                                        "group_ids": [passed_filter["group_id"]],
+                                    }
+                                    with timer(
+                                        f"Posting followup comment {comment['text']} for {alert['objectId']} to SkyPortal",
+                                        self.verbose > 1,
+                                    ):
+                                        try:
+                                            response = self.api_skyportal(
+                                                "POST",
+                                                f"/api/sources/{alert['objectId']}/comments",
+                                                comment,
+                                            )
+                                            if response.json()["status"] != "success":
+                                                raise ValueError(
+                                                    response.json()["message"]
+                                                )
+                                        except Exception as e:
+                                            log(
+                                                f"Failed to post followup comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
+                                            )
+                            else:
+                                raise ValueError(response.json()["message"])
+                        except Exception as e:
+                            log(
+                                f"Failed to post followup request for {alert['objectId']} to SkyPortal: {e}"
+                            )
+                else:
+                    log(
+                        f"Pending Followup request for {alert['objectId']} and allocation_id {passed_filter['auto_followup']['allocation_id']} already exists on SkyPortal"
+                    )

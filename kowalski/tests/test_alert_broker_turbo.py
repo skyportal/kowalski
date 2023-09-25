@@ -14,7 +14,7 @@ def worker_fixture(request):
     request.cls.worker = TURBOAlertWorker()
     log("Successfully initialized")
     # do not attempt monitoring filters
-    request.cls.run_forever = False
+    request.cls.worker.run_forever = False
 
 
 @pytest.fixture(autouse=True, scope="class")

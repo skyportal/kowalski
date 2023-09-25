@@ -67,6 +67,23 @@ voevent_schema = xmlschema.XMLSchema("schema/VOEvent-v2.0.xsd")
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]
 
+# dict with the keys allowed in an filter's autosave section, and their data types
+AUTOSAVE_KEYS = {
+    "active": bool,
+    "comment": str,
+    "ignore_group_ids": list,
+    "pipeline": list,
+}
+
+# dict with the keys allowed in an filter's auto_followup section, and their data types
+AUTO_FOLLOWUP_KEYS = {
+    "active": bool,
+    "comment": str,
+    "pipeline": list,
+    "allocation_id": str,
+    "payload": dict,
+}
+
 
 class Handler:
     @staticmethod
@@ -1639,8 +1656,9 @@ class Filter(Model, ABC):
     group_id: int = Field(ge=1)
     catalog: str
     permissions: List[int] = list()
-    autosave: bool = False
     active: bool = True
+    autosave: Union[bool, dict] = False
+    auto_followup: dict = dict()
     update_annotations: bool = False
     active_fid: Optional[str] = Field(min_length=6, max_length=6)
     fv: List[FilterVersion] = list()
@@ -1706,6 +1724,22 @@ class FilterHandler(Handler):
                     "catalog": "ZTF_alerts",
                     "permissions": [1, 2],
                     "autosave": false,
+                    "auto_followup": {
+                      "active": true,
+                      "comment": "SEDM triggered by BTSbot",
+                      "payload": {
+                        "observation_type": "IFU"
+                      },
+                      "pipeline": [
+                        {
+                          "$match": {
+                            "candidate.drb": {
+                              "$gt": 0.9999
+                            }
+                          }
+                        }
+                      ]
+                    },
                     "update_annotations": false,
                     "active": true,
                     "active_fid": "nnsun9",
@@ -1794,8 +1828,11 @@ class FilterHandler(Handler):
                     minItems: 1
                   autosave:
                     type: boolean
-                    description: "automatically save passing alerts to group <group_id>"
+                    description: "automatically save passing alerts to group <group_id>. Optionally, specify an additional filtering layer"
                     default: false
+                  auto_followup:
+                    type: object
+                    description: "automatically trigger follow-up observations for passing alerts, with an additional filtering layer"
                   update_annotations:
                     type: boolean
                     description: "update existing annotations for newly passing alerts"
@@ -1856,6 +1893,74 @@ class FilterHandler(Handler):
                         "cross_matches.CLU_20190625.0": {
                           "$exists": True
                         }
+                      }
+                    },
+                    {
+                      "$addFields": {
+                        "annotations.author": "dd",
+                        "annotations.mean_rb": {"$avg": "$prv_candidates.rb"}
+                      }
+                    },
+                    {
+                      "$project": {
+                        "_id": 0,
+                        "candid": 1,
+                        "objectId": 1,
+                        "annotations": 1
+                      }
+                    }
+                    ]
+                filter_3:
+                  value:
+                    "group_id": 2
+                    "filter_id": 1
+                    "catalog": ZTF_alerts
+                    "permissions": [1, 2, 3]
+                    "autosave": {
+                      "active": true,
+                      "pipeline": [
+                        {
+                          "$match": {
+                            "candidate.drb": {
+                              "$gt": 0.9999
+                            },
+                            "cross_matches.CLU_20190625.0": {
+                              "$exists": True
+                            }
+                          }
+                        }
+                      ]
+                    }
+                    "auto_followup": {
+                      "allocation_id": 1,
+                      "comment": "SEDM triggered by BTSbot",
+                      "payload": {
+                        "observation_type": "IFU",
+                      },
+                      "active": true,
+                      "pipeline": [
+                        {
+                          "$match": {
+                            "candidate.drb": {
+                              "$gt": 0.9999
+                            },
+                            "cross_matches.CLU_20190625.0": {
+                              "$exists": True
+                            },
+                            "classifications.acai_n": {
+                                "$gt": 0.8
+                            }
+                          }
+                        }
+                      ],
+                    }
+                    "update_annotations": false
+                    "pipeline": [
+                    {
+                      "$match": {
+                        "candidate.drb": {
+                          "$gt": 0.9999
+                        },
                       }
                     },
                     {
@@ -1938,6 +2043,19 @@ class FilterHandler(Handler):
             filter_spec = await request.post()
 
         filter_new = Filter(**filter_spec)
+
+        # a user is not allowed to setup auto_followup if autosave is not set
+        if filter_new.auto_followup and (
+            filter_new.autosave is False
+            or (
+                isinstance(filter_new.autosave, dict)
+                and filter_new.autosave["active"] is False
+            )
+        ):
+            return self.error(
+                message="Cannot setup auto_followup without autosave enabled"
+            )
+
         # check if a filter for these (group_id, filter_id) already exists:
         filter_existing = await request.app["mongo_odm"].find_one(
             Filter,
@@ -2002,12 +2120,100 @@ class FilterHandler(Handler):
                     f"cannot properly test pipeline for filter id {filter_new.filter_id}",
                 )
                 log(test_message)
-
         except Exception as e:
             log(e)
             test_successful, test_message = False, str(e)
         if not test_successful:
             return self.error(message=test_message)
+
+        for attribute in ["autosave", "auto_followup"]:
+            if not isinstance(getattr(filter_new, attribute), dict):
+                continue
+            if attribute == "autosave":
+                # verify that the keys are a subset of the allowed keys
+                if not set(getattr(filter_new, attribute).keys()).issubset(
+                    set(AUTOSAVE_KEYS)
+                ):
+                    return self.error(
+                        message=f"Cannot test {attribute} pipeline: invalid keys"
+                    )
+            if attribute == "auto_followup":
+                # verify that the keys are a subset of the allowed keys
+                if not set(getattr(filter_new, attribute).keys()).issubset(
+                    set(AUTO_FOLLOWUP_KEYS)
+                ):
+                    return self.error(
+                        message=f"Cannot test {attribute} pipeline: invalid keys"
+                    )
+            if attribute == "autosave" and "pipeline" not in getattr(
+                filter_new, attribute
+            ):
+                continue
+            elif attribute == "auto_followup" and getattr(filter_new, attribute) == {}:
+                continue
+            elif attribute == "auto_followup" and "pipeline" not in getattr(
+                filter_new, attribute
+            ):
+                return self.error(
+                    message=f"Cannot test {attribute} pipeline: no pipeline specified"
+                )
+            pipeline = getattr(filter_new, attribute).get("pipeline")
+            if not isinstance(pipeline, str):
+                pipeline = dumps(pipeline)
+            catalog = (
+                filter_existing.catalog
+                if filter_existing is not None
+                else filter_new.catalog
+            )
+            permissions = (
+                filter_existing.permissions
+                if filter_existing is not None
+                else filter_new.permissions
+            )
+            n_docs = await request.app["mongo"][catalog].estimated_document_count()
+            if n_docs > 0:
+                # get latest candid:
+                select = (
+                    request.app["mongo"][catalog]
+                    .find({}, {"_id": 0, "candid": 1})
+                    .sort([("$natural", -1)])
+                    .limit(1)
+                )
+                alert = await select.to_list(length=1)
+                alert = alert[0]
+
+                # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
+                # including archival photometry and cross-matches:
+                filter_pipeline_upstream = config["database"]["filters"][catalog]
+                filter_template = filter_pipeline_upstream + loads(pipeline)
+                # match candid
+                filter_template[0]["$match"]["candid"] = alert["candid"]
+                # match permissions for ZTF
+                if catalog.startswith("ZTF"):
+                    filter_template[0]["$match"]["candidate.programid"][
+                        "$in"
+                    ] = permissions
+                    filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"][
+                        "$and"
+                    ][0]["$in"][1] = permissions
+                try:
+                    cursor = request.app["mongo"][catalog].aggregate(
+                        filter_template, allowDiskUse=False, maxTimeMS=3000
+                    )
+                    await cursor.to_list(length=None)
+                    setattr(
+                        filter_new,
+                        attribute,
+                        {**getattr(filter_new, attribute), "pipeline": pipeline},
+                    )
+                except Exception as e:
+                    return self.error(
+                        message=f"Cannot test {attribute} pipeline: {str(e)}"
+                    )
+            else:
+                return self.error(
+                    message=f"Cannot test {attribute} pipeline: no documents in {catalog} collection"
+                )
 
         # if a filter does not exist for (filter_id, group_id), create one:
         if filter_existing is None:
@@ -2037,7 +2243,7 @@ class FilterHandler(Handler):
         :return:
 
         ---
-        summary: "Modify existing filters: activate/deactivate, set active_fid, autosave, or update_annotations"
+        summary: "Modify existing filters: activate/deactivate, set active_fid, autosave, auto_followup, or update_annotations"
         tags:
           - filters
 
@@ -2064,7 +2270,10 @@ class FilterHandler(Handler):
                     maxLength: 6
                   autosave:
                     type: boolean
-                    description: "autosave candidates that pass filter to corresponding group?"
+                    description: "autosave candidates that pass filter to corresponding group, which an optional additional filtering layer"
+                  auto_followup:
+                    type: object
+                    description: "automatically trigger follow-up observations for passing alerts, with an additional filtering layer"
                   update_annotations:
                     type: boolean
                     description: "update annotations for new candidates that previously passed filter?"
@@ -2082,7 +2291,43 @@ class FilterHandler(Handler):
                   value:
                     "filter_id": 1
                     "autosave": true
+                filter_3:
+                  value:
+                    "filter_id": 1
+                    "autosave": {
+                      "active": true,
+                      "comment": "Saved automatically by Kowalski bot",
+                      "pipeline": [
+                        {
+                          "$match": {
+                            "candidate.drb": {
+                              "$gt": 0.9999
+                            }
+                          }
+                        }
+                      ]
+                    }
                 filter_4:
+                  value:
+                    "filter_id": 1
+                    "auto_followup": {
+                      "active": true,
+                      "allocation_id": 1,
+                      "comment": "SEDM triggered by BTSbot",
+                      "payload": {
+                        "observation_type": "IFU"
+                      },
+                      "pipeline": [
+                        {
+                          "$match": {
+                            "candidate.drb": {
+                              "$gt": 0.9999
+                            }
+                          }
+                        }
+                      ]
+                    }
+                filter_5:
                   value:
                     "filter_id": 1
                     "update_annotations": true
@@ -2152,6 +2397,7 @@ class FilterHandler(Handler):
             "active",
             "active_fid",
             "autosave",
+            "auto_followup",
             "update_annotations",
         ):
             value = filter_spec.get(modifiable_field)
@@ -2162,6 +2408,90 @@ class FilterHandler(Handler):
                     raise ValueError(
                         f"Cannot set active_fid to {value}: filter version fid not in filter.fv"
                     )
+                elif modifiable_field in ["autosave", "auto_followup"]:
+                    # verify that the keys of autosave are in the AUTOSAVE_KEYS set
+                    if (
+                        modifiable_field == "autosave"
+                        and isinstance(value, dict)
+                        and not set(value.keys()).issubset(set(AUTOSAVE_KEYS))
+                    ):
+                        return self.error(
+                            message=f"Cannot update filter id {filter_id}: {modifiable_field} contains invalid keys"
+                        )
+                    # verify that the keys of auto_followup are in the AUTO_FOLLOWUP_KEYS set
+                    elif (
+                        modifiable_field == "auto_followup"
+                        and isinstance(value, dict)
+                        and not set(value.keys()).issubset(set(AUTO_FOLLOWUP_KEYS))
+                    ):
+                        return self.error(
+                            message=f"Cannot update filter id {filter_id}: {modifiable_field} contains invalid keys"
+                        )
+
+                    if modifiable_field == "autosave" and isinstance(value, bool):
+                        pass
+                    elif isinstance(value, dict) and "pipeline" not in value:
+                        pass
+                    # elif (
+                    #     modifiable_field == "auto_followup"
+                    #     and isinstance(value, dict)
+                    #     and "pipeline" not in value
+                    # ):
+                    #     return self.error(
+                    #         message=f"Cannot update filter id {filter_id}: {modifiable_field} must contain a pipeline"
+                    #     )
+                    else:
+                        pipeline = value.get("pipeline")
+                        if not isinstance(pipeline, str):
+                            pipeline = dumps(pipeline)
+                        n_docs = await request.app["mongo"][
+                            filter_existing.catalog
+                        ].estimated_document_count()
+                        if n_docs > 0:
+                            # get latest candid:
+                            select = (
+                                request.app["mongo"][filter_existing.catalog]
+                                .find({}, {"_id": 0, "candid": 1})
+                                .sort([("$natural", -1)])
+                                .limit(1)
+                            )
+                            alert = await select.to_list(length=1)
+                            alert = alert[0]
+
+                            # filter pipeline upstream: select current alert, ditch cutouts, and merge with aux data
+                            # including archival photometry and cross-matches:
+                            filter_pipeline_upstream = config["database"]["filters"][
+                                filter_existing.catalog
+                            ]
+                            filter_template = filter_pipeline_upstream + loads(pipeline)
+                            # match candid
+                            filter_template[0]["$match"]["candid"] = alert["candid"]
+                            # match permissions for ZTF
+                            if filter_existing.catalog.startswith("ZTF"):
+                                filter_template[0]["$match"]["candidate.programid"][
+                                    "$in"
+                                ] = filter_existing.permissions
+                                filter_template[3]["$project"]["prv_candidates"][
+                                    "$filter"
+                                ]["cond"]["$and"][0]["$in"][
+                                    1
+                                ] = filter_existing.permissions
+                            try:
+                                cursor = request.app["mongo"][
+                                    filter_existing.catalog
+                                ].aggregate(
+                                    filter_template, allowDiskUse=False, maxTimeMS=3000
+                                )
+                                await cursor.to_list(length=None)
+                                value["pipeline"] = pipeline
+                            except Exception as e:
+                                return self.error(
+                                    message=f"Cannot update filter id {filter_id}: {modifiable_field} pipeline is invalid: {str(e)}"
+                                )
+                        else:
+                            return self.error(
+                                message=f"Cannot test {modifiable_field} pipeline: no documents in {filter_existing.catalog} collection"
+                            )
                 filter_doc[modifiable_field] = value
         filter_existing = Filter.parse_doc(filter_doc)
 
