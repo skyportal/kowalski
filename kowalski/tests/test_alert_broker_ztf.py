@@ -200,6 +200,7 @@ class TestAlertBrokerZTF:
         """Test pushing an alert through a filter that also has auto follow-up activated"""
         post_alert(self.worker, self.alert)
         filter = filter_template(self.worker.collection_alerts)
+        filter["autosave"] = True
         filter["auto_followup"] = {
             "active": True,
             "pipeline": [
@@ -213,6 +214,7 @@ class TestAlertBrokerZTF:
             "instrument_id": 1,
             "payload": {  # example payload for SEDM
                 "observation_type": "IFU",
+                "priority": 3,
             },
         }
         passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
@@ -225,6 +227,7 @@ class TestAlertBrokerZTF:
             passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
             == "IFU"
         )
+        assert passed_filters[0]["auto_followup"]["data"]["payload"]["priority"] == 3
 
     def test_alert_filter__user_defined_followup_with_broker(self):
         """Test pushing an alert through a filter that also has auto follow-up activated, and broker mode activated"""
@@ -293,6 +296,7 @@ class TestAlertBrokerZTF:
             "allocation_id": allocation_id,
             "payload": {  # example payload for SEDM
                 "observation_type": "IFU",
+                "priority": 3,
             },
         }
         passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
@@ -304,6 +308,7 @@ class TestAlertBrokerZTF:
             passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
             == "IFU"
         )
+        assert passed_filters[0]["auto_followup"]["data"]["payload"]["priority"] == 3
 
         alert, prv_candidates = self.worker.alert_mongify(self.alert)
         self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
@@ -321,6 +326,7 @@ class TestAlertBrokerZTF:
         ]
         assert len(followup_requests) == 1
         assert followup_requests[0]["payload"]["observation_type"] == "IFU"
+        assert followup_requests[0]["payload"]["priority"] == 3
 
         # delete the follow-up request
         response = self.worker.api_skyportal(
