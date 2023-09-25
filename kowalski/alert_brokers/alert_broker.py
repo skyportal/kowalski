@@ -1170,6 +1170,7 @@ class AlertWorker:
                         "data": filtered_data[0],
                     }
 
+                    autosaved = False
                     # AUTOSAVE
                     if isinstance(_filter.get("autosave", False), bool):
                         passed_filter["autosave"] = _filter.get("autosave", False)
@@ -1209,8 +1210,13 @@ class AlertWorker:
                     else:
                         passed_filter["autosave"] = False
 
+                    if passed_filter.get("autosave", None) not in [False, None]:
+                        autosaved = True
+
                     # AUTO FOLLOWUP
-                    if _filter.get("auto_followup", {}).get("active", False):
+                    if autosaved is True and _filter.get("auto_followup", {}).get(
+                        "active", False
+                    ):
                         auto_followup_filter = deepcopy(_filter["auto_followup"])
 
                         # validate non-optional keys
