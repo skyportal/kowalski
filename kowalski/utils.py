@@ -1176,19 +1176,48 @@ class ZTFAlert:
 
         self.alert = deepcopy(alert)
 
-        # add a peakmag field to the alert (min of all magpsf)
-        self.alert["candidate"]["peakmag"] = min(
-            [30]
-            + [
-                a.get("magpsf", 30)
-                for a in alert_history
-                if a.get("magpsf", None) is not None
-            ]
+        # ADD EXTRA FEATURES
+        peakmag_jd = alert["candidate"]["jd"]
+        peakmag = 30
+        maxmag = 0
+        # find the mjd of the peak magnitude
+        for a in alert_history:
+            if a.get("magpsf", None) is not None:
+                if a["magpsf"] < peakmag:
+                    peakmag = a["magpsf"]
+                    peakmag_jd = a["jd"]
+                if a["magpsf"] > maxmag:
+                    maxmag = a["magpsf"]
+
+        first_alert_jd = min(
+            alert["candidate"].get("jdstarthist", None),
+            min(
+                [alert["candidate"]["jd"]]
+                + [a["jd"] for a in alert_history if a["magpsf"] is not None]
+            ),
         )
-        # add an age field to the alert (alert["candidate"].jd - alert["candidate"].jdstarthist)
-        self.alert["candidate"]["age"] = self.alert["candidate"]["jd"] - self.alert[
-            "candidate"
-        ].get("jdstarthist", self.alert["candidate"]["jd"])
+
+        # add a peakmag_so_far field to the alert (min of all magpsf)
+        self.alert["candidate"]["peakmag_so_far"] = peakmag
+
+        # add a maxmag_so_far field to the alert (max of all magpsf)
+        self.alert["candidate"]["maxmag_so_far"] = maxmag
+
+        # add a days_since_peak field to the alert (jd - peakmag_jd)
+        self.alert["candidate"]["days_since_peak"] = (
+            self.alert["candidate"]["jd"] - peakmag_jd
+        )
+
+        # add a days_to_peak field to the alert (peakmag_jd - first_alert_jd)
+        self.alert["candidate"]["days_to_peak"] = peakmag_jd - first_alert_jd
+
+        # add an age field to the alert: (jd - first_alert_jd)
+        self.alert["candidate"]["age"] = self.alert["candidate"]["jd"] - first_alert_jd
+
+        # number of non-detections: ncovhist - ndethist
+        self.alert["candidate"]["nnondet"] = alert["candidate"].get(
+            "ncovhist", 0
+        ) - alert["candidate"].get("ndethist", 0)
 
         triplet_normalize = kwargs.get("triplet_normalize", True)
         to_tpu = kwargs.get("to_tpu", False)
@@ -1203,6 +1232,8 @@ class ZTFAlert:
             "features": features
             # "dmdt": dmdt
         }
+
+        del peakmag_jd, peakmag, maxmag, first_alert_jd
 
     def make_triplet(self, normalize: bool = True, to_tpu: bool = False):
         """
