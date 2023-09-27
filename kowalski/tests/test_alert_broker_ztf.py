@@ -348,7 +348,6 @@ class TestAlertBrokerZTF:
         }
 
         passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
-        delete_alert(self.worker, self.alert)
         assert passed_filters is not None
         assert len(passed_filters) == 1
         assert "auto_followup" in passed_filters[0]
@@ -383,3 +382,81 @@ class TestAlertBrokerZTF:
             if (f["allocation_id"] == allocation_id and f["status"] == "submitted")
         ]
         assert len(followup_requests) == 0
+
+        # rerun the first filter, but with the ignore_if_saved_group_id
+        # this time we are testing that it does not trigger a follow-up request
+        # if the source is already classified
+
+        # first post a classification
+        response = self.worker.api_skyportal(
+            "POST",
+            "/api/classification",
+            {
+                "obj_id": alert["objectId"],
+                "classification": "Ia",
+                "probability": 0.8,
+                "taxonomy_id": 1,
+                "group_ids": [saved_group_id],
+            },
+        )
+        assert response.status_code == 200
+        classification_id = response.json()["data"]["classification_id"]
+        assert classification_id is not None
+
+        # now rerun the filter
+        filter["group_id"] = saved_group_id
+        del filter["autosave"]["ignore_group_ids"]
+
+        passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
+        assert passed_filters is not None
+        assert len(passed_filters) == 1
+        assert "auto_followup" in passed_filters[0]
+        assert (
+            passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "IFU"
+        )
+
+        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+
+        # now fetch the source from SP
+        response = self.worker.api_skyportal(
+            "GET", f"/api/sources/{alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        source = response.json()["data"]
+        assert source["id"] == "ZTF20aajcbhr"
+        assert len(source["groups"]) == 1
+        # should only be saved to the group of the first filter
+        assert source["groups"][0]["id"] == saved_group_id
+
+        # verify that there is a follow-up request
+        response = self.worker.api_skyportal(
+            "GET", f"/api/followup_request?sourceID={alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        followup_requests = response.json()["data"].get("followup_requests", [])
+        followup_requests = [
+            f
+            for f in followup_requests
+            if (f["allocation_id"] == allocation_id and f["status"] == "submitted")
+        ]
+        assert len(followup_requests) == 0
+
+        # delete the classification
+        response = self.worker.api_skyportal(
+            "DELETE", f"/api/classification/{classification_id}", None
+        )
+
+        # unsave the source from the group
+        response = self.worker.api_skyportal(
+            "POST",
+            "/api/source_groups",
+            {
+                "objId": alert["objectId"],
+                "unsaveGroupIds": [saved_group_id],
+            },
+        )
+        assert response.status_code == 200
+
+        delete_alert(self.worker, self.alert)
