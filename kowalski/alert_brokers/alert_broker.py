@@ -1336,7 +1336,10 @@ class AlertWorker:
                                         ).strftime("%Y-%m-%dT%H:%M:%S.%f"),
                                         # one week validity window
                                     },
+                                    # constraints
                                     "source_group_ids": [_filter["group_id"]],
+                                    "not_if_classified": True,
+                                    "not_if_spectra_exists": True,
                                 },
                             }
 
