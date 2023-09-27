@@ -69,6 +69,7 @@ COPY ["kowalski/dask_clusters/__init__.py", \
         "kowalski/dask_clusters/dask_cluster_pgir.py", \
         "kowalski/dask_clusters/dask_cluster_winter.py", \
         "kowalski/dask_clusters/dask_cluster_turbo.py", \
+        "kowalski/dask_clusters/dask_cluster_retrieval.py", \
         "kowalski/dask_clusters/"]
 
 COPY ["kowalski/alert_brokers/__init__.py", \
@@ -77,6 +78,7 @@ COPY ["kowalski/alert_brokers/__init__.py", \
         "kowalski/alert_brokers/alert_broker_pgir.py", \
         "kowalski/alert_brokers/alert_broker_winter.py", \
         "kowalski/alert_brokers/alert_broker_turbo.py", \
+        "kowalski/alert_brokers/alert_broker_retrieval.py", \
         "kowalski/alert_brokers/"]
 
 
