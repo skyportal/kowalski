@@ -3,6 +3,7 @@ import pytest
 from kowalski.alert_brokers.alert_broker_ztf import ZTFAlertWorker
 from kowalski.config import load_config
 from kowalski.log import log
+from copy import deepcopy
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]
@@ -109,10 +110,11 @@ class TestAlertBrokerZTF:
 
     def test_alert_filter__ml(self):
         """Test executing ML models on the alert"""
-        alert, _ = self.worker.alert_mongify(self.alert)
-        scores = self.worker.alert_filter__ml(alert)
+        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        all_prv_candidates = deepcopy(prv_candidates) + [deepcopy(alert["candidate"])]
+        scores = self.worker.alert_filter__ml(alert, all_prv_candidates)
         assert len(scores) > 0
-        log(scores)
+        # print(scores)
 
     def test_alert_filter__xmatch(self):
         """Test cross matching with external catalog"""
