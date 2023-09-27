@@ -141,7 +141,6 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
         # clean up after thyself
         del msg
 
-
 class ZTFRetrievalAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
         super().__init__(instrument="ZTF", **kwargs)
