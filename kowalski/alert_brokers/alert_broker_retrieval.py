@@ -108,6 +108,38 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
 
         return
 
+    def poll(self):
+        """Polls Kafka broker to consume a topic."""
+        msg = self.consumer.poll()
+
+        if msg is None:
+            log("Caught error: msg is None")
+
+        if msg.error():
+            # reached end of topic
+            log(f"Caught error: {msg.error()}")
+            raise EopError(msg)
+
+        elif msg is not None:
+            try:
+                # decode avro packet
+                with timer("Decoding alert", self.verbose > 1):
+                    msg_decoded = self.decode_message(msg)
+
+                for record in msg_decoded:
+                    self.submit_alert(record)
+
+                # clean up after thyself
+                del msg_decoded
+
+            except Exception as e:
+                print("Error in poll!")
+                log(e)
+                _err = traceback.format_exc()
+                log(_err)
+
+        # clean up after thyself
+        del msg
 
 class ZTFRetrievalAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
