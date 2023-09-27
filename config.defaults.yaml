@@ -1226,6 +1226,16 @@ kowalski:
     lifetime_stagger: 1 hours
     lifetime_restart: true
 
+  dask_retrieval:
+    host: 127.0.0.1
+    scheduler_port: 8792
+    dashboard_address: :8793
+    n_workers: 30
+    threads_per_worker: 1
+    lifetime: 24 hours
+    lifetime_stagger: 1 hours
+    lifetime_restart: true
+
   misc:
     # working stand-alone or in conjunction with a SkyPortal instance?
     broker: False
@@ -1246,3 +1256,4 @@ kowalski:
     pgir: True
     wntr: True
     turbo: True
+    retrieval: True
