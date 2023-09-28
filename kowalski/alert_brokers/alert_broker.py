@@ -45,6 +45,9 @@ from kowalski.utils import (
     time_stamp,
     timer,
 )
+from warnings import simplefilter
+
+simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 # Tensorflow is problematic for Mac's currently, so we can add an option to disable it
 USE_TENSORFLOW = os.environ.get("USE_TENSORFLOW", True) in [
@@ -1680,6 +1683,37 @@ class AlertWorker:
                     log(e)
                     alert["prv_candidates"] = prv_candidates
 
+                # also get all the alerts for this object, to make sure to have all the detections
+                try:
+                    all_alerts = list(
+                        retry(self.mongo.db[self.collection_alerts].find)(
+                            {
+                                "objectId": alert["objectId"],
+                                "candid": {"$ne": alert["candid"]},
+                            },
+                            {
+                                "candidate": 1,
+                            },
+                        )
+                    )
+                    all_alerts = [
+                        {**a["candidate"]} for a in all_alerts if "candidate" in a
+                    ]
+                    # add to prv_candidates the detections that are not already in there
+                    # use the jd and the fid to match
+                    for a in all_alerts:
+                        if not any(
+                            [
+                                (a["jd"] == p["jd"]) and (a["fid"] == p["fid"])
+                                for p in alert["prv_candidates"]
+                            ]
+                        ):
+                            alert["prv_candidates"].append(a)
+                    del all_alerts
+                except Exception as e:
+                    # this should never happen, but just in case
+                    log(f"Failed to get all alerts for {alert['objectId']}: {e}")
+
                 self.alert_put_photometry(alert)
 
                 # post thumbnails
@@ -1767,6 +1801,37 @@ class AlertWorker:
                     )
             # post alert photometry in single call to /api/photometry
             alert["prv_candidates"] = prv_candidates
+
+            # also get all the alerts for this object, to make sure to have all the detections
+            try:
+                all_alerts = list(
+                    retry(self.mongo.db[self.collection_alerts].find)(
+                        {
+                            "objectId": alert["objectId"],
+                            "candid": {"$ne": alert["candid"]},
+                        },
+                        {
+                            "candidate": 1,
+                        },
+                    )
+                )
+                all_alerts = [
+                    {**a["candidate"]} for a in all_alerts if "candidate" in a
+                ]
+                # add to prv_candidates the detections that are not already in there
+                # use the jd and the fid to match
+                for a in all_alerts:
+                    if not any(
+                        [
+                            (a["jd"] == p["jd"]) and (a["fid"] == p["fid"])
+                            for p in alert["prv_candidates"]
+                        ]
+                    ):
+                        alert["prv_candidates"].append(a)
+                del all_alerts
+            except Exception as e:
+                # this should never happen, but just in case
+                log(f"Failed to get all alerts for {alert['objectId']}: {e}")
 
             self.alert_put_photometry(alert)
 
@@ -1888,14 +1953,22 @@ class AlertWorker:
                                             )
                                             if response.json()["status"] != "success":
                                                 raise ValueError(
-                                                    response.json()["message"]
+                                                    response.json().get(
+                                                        "message",
+                                                        "unknow error posting comment",
+                                                    )
                                                 )
                                         except Exception as e:
                                             log(
                                                 f"Failed to post followup comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
                                             )
                             else:
-                                raise ValueError(response.json()["message"])
+                                raise ValueError(
+                                    response.json().get(
+                                        "message",
+                                        "unknow error posting followup request",
+                                    )
+                                )
                         except Exception as e:
                             log(
                                 f"Failed to post followup request for {alert['objectId']} to SkyPortal: {e}"
