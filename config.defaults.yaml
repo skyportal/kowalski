@@ -1118,7 +1118,7 @@ kowalski:
   ml:
     ZTF:
       # instruments need to have a list of allowed features (as tuple), and a list of models
-      allowed_features: ('drb', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf', 'fwhm', 'sky', 'chinr', 'sharpnr', 'sgscore1', 'distpsnr1', 'sgscore2', 'distpsnr2', 'sgscore3', 'distpsnr3', 'ndethist', 'ncovhist', 'scorr', 'nmtchps', 'clrcoeff', 'clrcounc', 'neargaia', 'neargaiabright', 'classtar', 'peakmag', 'age')
+      allowed_features: ('drb', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf', 'fwhm', 'sky', 'chinr', 'sharpnr', 'sgscore1', 'distpsnr1', 'sgscore2', 'distpsnr2', 'sgscore3', 'distpsnr3', 'ndethist', 'ncovhist', 'scorr', 'nmtchps', 'clrcoeff', 'clrcounc', 'neargaia', 'neargaiabright', 'classtar', 'peakmag_so_far', 'maxmag_so_far', 'days_since_peak', 'days_to_peak', 'nnondet', 'age')
       models:
       # models need: a version (string, e.g. "v1"), a triplet (bool), and feature_names (bool, or list of feature names as tuple)
       # if feature_names is True, all features from allowed_features are used
@@ -1152,13 +1152,13 @@ kowalski:
           feature_names: ('drb', 'diffmaglim', 'ra', 'dec', 'magpsf', 'sigmapsf', 'chipsf', 'fwhm', 'sky', 'chinr', 'sharpnr', 'sgscore1', 'distpsnr1', 'sgscore2', 'distpsnr2', 'sgscore3', 'distpsnr3', 'ndethist', 'ncovhist', 'scorr', 'nmtchps', 'clrcoeff', 'clrcounc', 'neargaia', 'neargaiabright')
           version: "d1_dnn_20201130"
           url: "https://github.com/dmitryduev/acai/raw/master/models/acai_b.d1_dnn_20201130.h5"
-        # bts:
-        #   triplet: True
-        #   feature_names: ('sgscore1','distpsnr1','sgscore2','distpsnr2','fwhm','magpsf','sigmapsf','ra','dec','diffmaglim','ndethist','nmtchps','age','peakmag')
-        #   version: "v03"
-        #   format: "pb"
-        #   order: ["triplet", "features"]
-        #   url: "https://raw.githubusercontent.com/nabeelre/BNB-models/main/v03.tar.gz"
+        bts:
+          triplet: True
+          feature_names: ('sgscore1', 'distpsnr1', 'sgscore2', 'distpsnr2', 'fwhm', 'magpsf', 'sigmapsf', 'chipsf', 'ra', 'dec', 'diffmaglim', 'ndethist', 'nmtchps', 'age', 'days_since_peak', 'days_to_peak', 'peakmag_so_far', 'drb', 'ncovhist', 'nnondet', 'chinr', 'sharpnr', 'scorr', 'sky', 'maxmag_so_far')
+          version: "v1"
+          format: "pb"
+          order: ["triplet", "features"]
+          url: "https://raw.githubusercontent.com/nabeelre/BTSbot/main/production_models/v1.tar.gz"
 
 
   skyportal:
