@@ -1193,7 +1193,7 @@ class ZTFAlert:
             alert["candidate"].get("jdstarthist", None),
             min(
                 [alert["candidate"]["jd"]]
-                + [a["jd"] for a in alert_history if a["magpsf"] is not None]
+                + [a["jd"] for a in alert_history if a.get("magpsf", None) is not None]
             ),
         )
 
