@@ -44,6 +44,7 @@ from kowalski.utils import (
     retry,
     time_stamp,
     timer,
+    compare_dicts,
 )
 from warnings import simplefilter
 
@@ -1843,7 +1844,14 @@ class AlertWorker:
         ]
 
         if len(passed_filters_followup) > 0:
-            # first fetch the followup requests on SkyPortal for this alert
+            # first sort all the filters by priority (highest first)
+            passed_filters_followup = sorted(
+                passed_filters_followup,
+                key=lambda f: f["auto_followup"]["data"]["payload"]["priority"],
+                reverse=True,
+            )
+
+            # then, fetch the existing followup requests on SkyPortal for this alert
             with timer(
                 f"Getting followup requests for {alert['objectId']} from SkyPortal",
                 self.verbose > 1,
@@ -1860,23 +1868,35 @@ class AlertWorker:
                     for r in existing_requests
                     if r["status"] in ["completed", "submitted"]
                 ]
+                # sort by priority (highest first)
+                existing_requests = sorted(
+                    existing_requests,
+                    key=lambda r: r["payload"]["priority"],
+                    reverse=True,
+                )
             else:
                 log(f"Failed to get followup requests for {alert['objectId']}")
                 existing_requests = []
+
             for passed_filter in passed_filters_followup:
-                # post a followup request with the payload and allocation_id
-                # if there isn't already a pending request for this alert and this allocation_id
-                if (
-                    len(
-                        [
-                            r
-                            for r in existing_requests
-                            if r["allocation_id"]
-                            == passed_filter["auto_followup"]["allocation_id"]
-                        ]
+                # look for existing requests with the same allocation, group, and payload
+                existing_requests_filtered = [
+                    (i, r)
+                    for (i, r) in enumerate(existing_requests)
+                    if r["allocation_id"]
+                    == passed_filter["auto_followup"]["allocation_id"]
+                    and set([passed_filter["group_id"]]).issubset(
+                        [g["id"] for g in r["target_groups"]]
                     )
-                    == 0
-                ):
+                    and compare_dicts(
+                        passed_filter["auto_followup"]["data"]["payload"],
+                        r["payload"],
+                        ignore_keys=["priority", "start_date", "end_date"],
+                    )
+                    is True
+                ]
+                if len(existing_requests_filtered) == 0:
+                    # if no existing request, post a new one
                     with timer(
                         f"Posting auto followup request for {alert['objectId']} to SkyPortal",
                         self.verbose > 1,
@@ -1899,6 +1919,24 @@ class AlertWorker:
                                 log(
                                     f"Posted followup request for {alert['objectId']} to SkyPortal"
                                 )
+                                # add it to the existing requests
+                                existing_requests.append(
+                                    {
+                                        "allocation_id": passed_filter["auto_followup"][
+                                            "allocation_id"
+                                        ],
+                                        "payload": passed_filter["auto_followup"][
+                                            "data"
+                                        ]["payload"],
+                                        "target_groups": [
+                                            {
+                                                "id": passed_filter["group_id"],
+                                            }
+                                        ],
+                                        "status": "submitted",
+                                    }
+                                )
+
                                 if (
                                     passed_filter["auto_followup"].get("comment", None)
                                     is not None
@@ -1943,6 +1981,72 @@ class AlertWorker:
                                 f"Failed to post followup request for {alert['objectId']} to SkyPortal: {e}"
                             )
                 else:
-                    log(
-                        f"Pending Followup request for {alert['objectId']} and allocation_id {passed_filter['auto_followup']['allocation_id']} already exists on SkyPortal"
-                    )
+                    # if there is an existing request, but the priority is lower than the one we want to post,
+                    # update the existing request with the new priority
+                    request_to_update = existing_requests_filtered[0][1]
+                    if (
+                        passed_filter["auto_followup"]["data"]["payload"]["priority"]
+                        > request_to_update["payload"]["priority"]
+                    ):
+                        with timer(
+                            f"Updating priority of auto followup request for {alert['objectId']} to SkyPortal",
+                            self.verbose > 1,
+                        ):
+                            # to update, the api needs to get the request id, target group id, and payload
+                            # so we'll basically get that from the existing request, and simply update the priority
+                            try:
+                                data = {
+                                    "target_group_id": [
+                                        g["id"]
+                                        for g in request_to_update["target_groups"]
+                                    ],
+                                    "payload": {
+                                        **request_to_update["payload"],
+                                        "priority": passed_filter["auto_followup"][
+                                            "data"
+                                        ]["payload"]["priority"],
+                                    },
+                                    "obj_id": alert["objectId"],
+                                    "status": request_to_update["status"],
+                                    "allocation_id": request_to_update["allocation_id"],
+                                }
+                                response = self.api_skyportal(
+                                    "PUT",
+                                    f"/api/followup_request/{request_to_update['id']}",
+                                    data,
+                                )
+                                if (
+                                    response.json()["status"] == "success"
+                                    and response.json()
+                                    .get("data", {})
+                                    .get("ignored", False)
+                                    is False
+                                ):
+                                    log(
+                                        f"Updated priority of followup request for {alert['objectId']} to SkyPortal"
+                                    )
+                                    # update the existing_requests list
+                                    existing_requests[existing_requests_filtered[0][0]][
+                                        "priority"
+                                    ] = passed_filter["auto_followup"]["data"][
+                                        "payload"
+                                    ][
+                                        "priority"
+                                    ]
+
+                                    # TODO: post a comment to the source to mention the update
+                                else:
+                                    raise ValueError(
+                                        response.json().get(
+                                            "message",
+                                            "unknow error updating followup request",
+                                        )
+                                    )
+                            except Exception as e:
+                                log(
+                                    f"Failed to update priority of followup request for {alert['objectId']} to SkyPortal: {e}"
+                                )
+                    else:
+                        log(
+                            f"Pending Followup request for {alert['objectId']} and allocation_id {passed_filter['auto_followup']['allocation_id']} already exists on SkyPortal, no need for update"
+                        )
