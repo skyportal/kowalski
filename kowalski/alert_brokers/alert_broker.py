@@ -1996,10 +1996,6 @@ class AlertWorker:
                             # so we'll basically get that from the existing request, and simply update the priority
                             try:
                                 data = {
-                                    "target_group_id": [
-                                        g["id"]
-                                        for g in request_to_update["target_groups"]
-                                    ],
                                     "payload": {
                                         **request_to_update["payload"],
                                         "priority": passed_filter["auto_followup"][
@@ -2007,7 +2003,6 @@ class AlertWorker:
                                         ]["payload"]["priority"],
                                     },
                                     "obj_id": alert["objectId"],
-                                    "status": request_to_update["status"],
                                     "allocation_id": request_to_update["allocation_id"],
                                 }
                                 response = self.api_skyportal(
