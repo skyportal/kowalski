@@ -75,7 +75,18 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 and len(existing_aux.get("prv_candidates", [])) > 0
             ):
                 all_prv_candidates += existing_aux["prv_candidates"]
-            del existing_aux
+
+            # get all alerts for this objectId:
+            existing_alerts = list(
+                alert_worker.mongo.db[alert_worker.collection_alerts].find(
+                    {"objectId": object_id}, {"candidate": 1}
+                )
+            )
+            if len(existing_alerts) > 0:
+                all_prv_candidates += [
+                    existing_alert["candidate"] for existing_alert in existing_alerts
+                ]
+            del existing_aux, existing_alerts
 
         # ML models:
         with timer(f"MLing of {object_id} {candid}", alert_worker.verbose > 1):

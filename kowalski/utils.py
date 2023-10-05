@@ -1168,6 +1168,26 @@ def str_to_numeric(s):
         return float(s)
 
 
+def compare_dicts(a: dict, b: dict, ignore_keys=[], same_keys=False):
+    """Compare two followup payloads, making sure that a is the same as b or a subset of b, ignoring certain keys"""
+    if same_keys and len(a) != len(b):
+        return False
+    for k, v in a.items():
+        if k in ignore_keys:
+            continue
+        if k not in b:
+            return False
+        if isinstance(v, dict):
+            if not compare_dicts(v, b[k]):
+                return False
+        elif isinstance(v, list):
+            if not all([i in b[k] for i in v]):
+                return False
+        elif b[k] != v:
+            return False
+    return True
+
+
 class ZTFAlert:
     def __init__(self, alert, alert_history, models, label=None, **kwargs):
         self.kwargs = kwargs
@@ -1193,7 +1213,7 @@ class ZTFAlert:
             alert["candidate"].get("jdstarthist", None),
             min(
                 [alert["candidate"]["jd"]]
-                + [a["jd"] for a in alert_history if a["magpsf"] is not None]
+                + [a["jd"] for a in alert_history if a.get("magpsf", None) is not None]
             ),
         )
 
