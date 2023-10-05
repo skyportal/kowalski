@@ -1891,7 +1891,7 @@ class AlertWorker:
                     and compare_dicts(
                         passed_filter["auto_followup"]["data"]["payload"],
                         r["payload"],
-                        ignore_keys=["priority", "start_date", "end_date"],
+                        ignore_keys=["priority", "start_date", "end_date", "advanced"],
                     )
                     is True
                 ]
