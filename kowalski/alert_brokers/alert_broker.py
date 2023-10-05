@@ -1327,7 +1327,14 @@ class AlertWorker:
                                     "allocation_id": _filter["auto_followup"][
                                         "allocation_id"
                                     ],
-                                    "target_group_ids": [_filter["group_id"]],
+                                    "target_group_ids": list(
+                                        set(
+                                            [_filter["group_id"]]
+                                            + _filter["auto_followup"].get(
+                                                "target_group_ids", []
+                                            )
+                                        )
+                                    ),
                                     "payload": {
                                         **_filter["auto_followup"].get("payload", {}),
                                         "priority": priority,
@@ -1440,7 +1447,7 @@ class AlertWorker:
                         )
                     if len(not_saved_group_ids) > 0:
                         log(
-                            f"Source {alert['objectId']} {alert['candid']} was not saved to groups {response.json()['data']['not_saved_group_ids']}"
+                            f"Source {alert['objectId']} {alert['candid']} was not saved to groups {not_saved_group_ids}"
                         )
                 else:
                     raise ValueError(response.json()["message"])
@@ -1866,7 +1873,7 @@ class AlertWorker:
                 existing_requests = [
                     r
                     for r in existing_requests
-                    if r["status"] in ["completed", "submitted"]
+                    if r["status"] in ["completed", "submitted", "deleted"]
                 ]
                 # sort by priority (highest first)
                 existing_requests = sorted(
@@ -1879,19 +1886,19 @@ class AlertWorker:
                 existing_requests = []
 
             for passed_filter in passed_filters_followup:
-                # look for existing requests with the same allocation, group, and payload
+                # look for existing requests with the same allocation, target groups, and payload
                 existing_requests_filtered = [
                     (i, r)
                     for (i, r) in enumerate(existing_requests)
                     if r["allocation_id"]
-                    == passed_filter["auto_followup"]["allocation_id"]
-                    and set([passed_filter["group_id"]]).issubset(
-                        [g["id"] for g in r["target_groups"]]
-                    )
+                    == passed_filter["auto_followup"]["data"]["allocation_id"]
+                    and not set(
+                        passed_filter["auto_followup"]["data"]["target_group_ids"]
+                    ).isdisjoint(set([g["id"] for g in r["target_groups"]]))
                     and compare_dicts(
                         passed_filter["auto_followup"]["data"]["payload"],
                         r["payload"],
-                        ignore_keys=["priority", "start_date", "end_date"],
+                        ignore_keys=["priority", "start_date", "end_date", "advanced"],
                     )
                     is True
                 ]
@@ -1930,8 +1937,11 @@ class AlertWorker:
                                         ]["payload"],
                                         "target_groups": [
                                             {
-                                                "id": passed_filter["group_id"],
+                                                "id": target_group_id,
                                             }
+                                            for target_group_id in passed_filter[
+                                                "auto_followup"
+                                            ]["data"]["target_group_ids"]
                                         ],
                                         "status": "submitted",
                                     }
@@ -1984,15 +1994,24 @@ class AlertWorker:
                     # if there is an existing request, but the priority is lower than the one we want to post,
                     # update the existing request with the new priority
                     request_to_update = existing_requests_filtered[0][1]
+                    # if the status is completed or deleted, do not update
+                    if request_to_update["status"] in ["completed", "deleted"]:
+                        log(
+                            f"Followup request for {alert['objectId']} and allocation_id {passed_filter['auto_followup']['allocation_id']} already exists on SkyPortal, but is completed or deleted, no need for update"
+                        )
+                    # if the status is submitted, and the  new priority is higher, update
                     if (
-                        passed_filter["auto_followup"]["data"]["payload"]["priority"]
+                        request_to_update["status"] == "submitted"
+                        and passed_filter["auto_followup"]["data"]["payload"][
+                            "priority"
+                        ]
                         > request_to_update["payload"]["priority"]
                     ):
                         with timer(
                             f"Updating priority of auto followup request for {alert['objectId']} to SkyPortal",
                             self.verbose > 1,
                         ):
-                            # to update, the api needs to get the request id, target group id, and payload
+                            # to update, the api needs to get the request id, target group ids, and payload
                             # so we'll basically get that from the existing request, and simply update the priority
                             try:
                                 data = {

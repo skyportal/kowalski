@@ -82,6 +82,7 @@ AUTO_FOLLOWUP_KEYS = {
     "pipeline": list,
     "allocation_id": str,
     "payload": dict,
+    "target_group_ids": list,
 }
 
 
@@ -1933,6 +1934,7 @@ class FilterHandler(Handler):
                     }
                     "auto_followup": {
                       "allocation_id": 1,
+                      "target_group_ids": [1, 2],
                       "comment": "SEDM triggered by BTSbot",
                       "payload": {
                         "observation_type": "IFU",
@@ -2432,14 +2434,6 @@ class FilterHandler(Handler):
                         pass
                     elif isinstance(value, dict) and "pipeline" not in value:
                         pass
-                    # elif (
-                    #     modifiable_field == "auto_followup"
-                    #     and isinstance(value, dict)
-                    #     and "pipeline" not in value
-                    # ):
-                    #     return self.error(
-                    #         message=f"Cannot update filter id {filter_id}: {modifiable_field} must contain a pipeline"
-                    #     )
                     else:
                         pipeline = value.get("pipeline")
                         if not isinstance(pipeline, str):
