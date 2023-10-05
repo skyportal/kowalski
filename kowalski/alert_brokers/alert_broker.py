@@ -1887,8 +1887,6 @@ class AlertWorker:
 
             for passed_filter in passed_filters_followup:
                 # look for existing requests with the same allocation, target groups, and payload
-                if len(existing_requests) > 0:
-                    log(str(existing_requests[0]["target_groups"]))
                 existing_requests_filtered = [
                     (i, r)
                     for (i, r) in enumerate(existing_requests)
