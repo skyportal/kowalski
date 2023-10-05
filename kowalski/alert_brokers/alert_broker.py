@@ -1873,7 +1873,7 @@ class AlertWorker:
                 existing_requests = [
                     r
                     for r in existing_requests
-                    if r["status"] in ["completed", "submitted"]
+                    if r["status"] in ["completed", "submitted", "deleted"]
                 ]
                 # sort by priority (highest first)
                 existing_requests = sorted(
@@ -1994,8 +1994,17 @@ class AlertWorker:
                     # if there is an existing request, but the priority is lower than the one we want to post,
                     # update the existing request with the new priority
                     request_to_update = existing_requests_filtered[0][1]
+                    # if the status is completed or deleted, do not update
+                    if request_to_update["status"] in ["completed", "deleted"]:
+                        log(
+                            f"Followup request for {alert['objectId']} and allocation_id {passed_filter['auto_followup']['allocation_id']} already exists on SkyPortal, but is completed or deleted, no need for update"
+                        )
+                    # if the status is submitted, and the  new priority is higher, update
                     if (
-                        passed_filter["auto_followup"]["data"]["payload"]["priority"]
+                        request_to_update["status"] == "submitted"
+                        and passed_filter["auto_followup"]["data"]["payload"][
+                            "priority"
+                        ]
                         > request_to_update["payload"]["priority"]
                     ):
                         with timer(

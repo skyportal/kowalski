@@ -542,7 +542,7 @@ class TestAlertBrokerZTF:
         assert any([g["id"] == saved_group_id for g in source["groups"]])
         assert any([g["id"] == target_group_id for g in source["groups"]])
 
-        # verify that there is a follow-up request
+        # verify that there is no follow-up request
         response = self.worker.api_skyportal(
             "GET", f"/api/followup_request?sourceID={alert['objectId']}", None
         )
@@ -559,6 +559,86 @@ class TestAlertBrokerZTF:
         response = self.worker.api_skyportal(
             "DELETE", f"/api/classification/{classification_id}", None
         )
+
+        # unsave the source from the group
+        response = self.worker.api_skyportal(
+            "POST",
+            "/api/source_groups",
+            {
+                "objId": alert["objectId"],
+                "unsaveGroupIds": [saved_group_id, target_group_id],
+            },
+        )
+        assert response.status_code == 200
+
+        # last but not least, we verify that we don't trigger the same request again, if a request has been submitted but then deleted, or is completed already
+        filter = filter_template(self.worker.collection_alerts)
+        filter["group_id"] = saved_group_id
+        filter["autosave"] = {
+            "active": True,
+            "comment": "Saved to BTS by BTSbot.",
+        }
+        filter["auto_followup"] = {
+            "active": True,
+            "pipeline": [
+                {
+                    "$match": {
+                        "candidate.drb": {"$gt": 0.5},
+                    }
+                }
+            ],
+            "allocation_id": allocation_id,
+            "payload": {  # example payload for SEDM
+                "observation_type": "IFU",
+                "priority": 2,
+                "advanced": False,
+            },
+            "comment": "SEDM triggered by BTSbot",
+        }
+
+        passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
+        assert passed_filters is not None
+        assert len(passed_filters) == 1
+        assert "auto_followup" in passed_filters[0]
+        assert (
+            passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "IFU"
+        )
+
+        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+
+        # now fetch the follow-up request from SP
+        # we should not have any submitted follow-up requests
+        response = self.worker.api_skyportal(
+            "GET", f"/api/followup_request?sourceID={alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        followup_requests = response.json()["data"].get("followup_requests", [])
+        submitted = [
+            f
+            for f in followup_requests
+            if (f["allocation_id"] == allocation_id and f["status"] == "submitted")
+        ]
+        deleted = [
+            f
+            for f in followup_requests
+            if (f["allocation_id"] == allocation_id and f["status"] == "deleted")
+        ]
+        assert len(submitted) == 0
+        assert len(deleted) > 0
+
+        # verify that it was save still
+        response = self.worker.api_skyportal(
+            "GET", f"/api/sources/{alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        source = response.json()["data"]
+        assert source["id"] == "ZTF20aajcbhr"
+        # should be saved to Program A and Sitewide Group, but not Program B
+        assert any([g["id"] == saved_group_id for g in source["groups"]])
+        assert not any([g["id"] == target_group_id for g in source["groups"]])
+        assert not any([g["id"] == ignore_if_saved_group_id for g in source["groups"]])
 
         # unsave the source from the group
         response = self.worker.api_skyportal(
