@@ -298,24 +298,36 @@ class TestAlertBrokerZTF:
             "allocation_id": allocation_id,
             "payload": {  # example payload for SEDM
                 "observation_type": "IFU",
-                "priority": 3,
+                "priority": 2,
             },
         }
-        passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
+        # make a copy of that filter, but with priority 3
+        filter2 = deepcopy(filter)
+        filter2["auto_followup"]["payload"]["priority"] = 3
+        passed_filters = self.worker.alert_filter__user_defined(
+            [filter, filter2], self.alert
+        )
 
         assert passed_filters is not None
-        assert len(passed_filters) == 1
+        assert len(passed_filters) == 2  # both filters should have passed
         assert "auto_followup" in passed_filters[0]
         assert (
             passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
             == "IFU"
         )
-        assert passed_filters[0]["auto_followup"]["data"]["payload"]["priority"] == 3
+        assert passed_filters[0]["auto_followup"]["data"]["payload"]["priority"] == 2
+        assert "auto_followup" in passed_filters[1]
+        assert (
+            passed_filters[1]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "IFU"
+        )
+        assert passed_filters[1]["auto_followup"]["data"]["payload"]["priority"] == 3
 
         alert, prv_candidates = self.worker.alert_mongify(self.alert)
         self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
 
         # now fetch the follow-up request from SP
+        # it should have deduplicated and used the highest priority
         response = self.worker.api_skyportal(
             "GET", f"/api/followup_request?sourceID={alert['objectId']}", None
         )
@@ -328,7 +340,54 @@ class TestAlertBrokerZTF:
         ]
         assert len(followup_requests) == 1
         assert followup_requests[0]["payload"]["observation_type"] == "IFU"
-        assert followup_requests[0]["payload"]["priority"] == 3
+        assert (
+            followup_requests[0]["payload"]["priority"] == 3
+        )  # it should have deduplicated and used the highest priority
+
+        # now run it once more, but with a higher priority to see if the update works
+        filter2["auto_followup"]["payload"]["priority"] = 4
+        passed_filters = self.worker.alert_filter__user_defined(
+            [filter, filter2], self.alert
+        )
+
+        assert passed_filters is not None
+        assert len(passed_filters) == 2
+        assert "auto_followup" in passed_filters[0]
+        assert (
+            passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "IFU"
+        )
+        assert passed_filters[0]["auto_followup"]["data"]["payload"]["priority"] == 2
+        assert "auto_followup" in passed_filters[1]
+        assert (
+            passed_filters[1]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "IFU"
+        )
+        assert passed_filters[1]["auto_followup"]["data"]["payload"]["priority"] == 4
+
+        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+
+        # now fetch the follow-up request from SP
+        # it should have deduplicated and used the highest priority
+        response = self.worker.api_skyportal(
+            "GET", f"/api/followup_request?sourceID={alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        followup_requests_updated = response.json()["data"].get("followup_requests", [])
+        followup_requests_updated = [
+            f
+            for f in followup_requests_updated
+            if (f["allocation_id"] == allocation_id and f["status"] == "submitted")
+        ]
+        assert len(followup_requests_updated) == 1
+        assert followup_requests_updated[0]["payload"]["observation_type"] == "IFU"
+        assert (
+            followup_requests_updated[0]["payload"]["priority"] == 4
+        )  # it should have deduplicated and used the highest priority
+        assert (
+            followup_requests_updated[0]["id"] == followup_requests[0]["id"]
+        )  # the id should be the same
 
         # delete the follow-up request
         response = self.worker.api_skyportal(
