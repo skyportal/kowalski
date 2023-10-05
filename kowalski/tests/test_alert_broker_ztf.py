@@ -244,8 +244,11 @@ class TestAlertBrokerZTF:
         ignore_if_saved_group_id = [g for g in groups if g["name"] == "Program B"][0][
             "id"
         ]
+        target_group_id = [g for g in groups if g["name"] == "Sitewide Group"][0]["id"]
+
         assert saved_group_id is not None
         assert ignore_if_saved_group_id is not None
+        assert target_group_id is not None
 
         response = self.worker.api_skyportal("GET", "/api/allocation", None)
         assert response.status_code == 200
@@ -299,6 +302,7 @@ class TestAlertBrokerZTF:
             "payload": {  # example payload for SEDM
                 "observation_type": "IFU",
                 "priority": 2,
+                "advanced": False,
             },
         }
         # make a copy of that filter, but with priority 3
@@ -389,6 +393,51 @@ class TestAlertBrokerZTF:
             followup_requests_updated[0]["id"] == followup_requests[0]["id"]
         )  # the id should be the same
 
+        # now, we'll test the target_group_ids functionality for deduplication
+        # that is, if a filter has a target_group_ids, then it should only trigger a follow-up request
+        # if none of the existing requests' target groups have an overlap with the target_group_ids
+        # of the filter
+
+        filter_multiple_groups = deepcopy(filter)
+        filter_multiple_groups["auto_followup"]["target_group_ids"] = [saved_group_id]
+        filter_multiple_groups["group_id"] = target_group_id
+
+        passed_filters = self.worker.alert_filter__user_defined(
+            [filter_multiple_groups], self.alert
+        )
+
+        assert passed_filters is not None
+        assert len(passed_filters) == 1
+        assert "auto_followup" in passed_filters[0]
+        assert (
+            passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "IFU"
+        )
+        assert passed_filters[0]["auto_followup"]["data"]["payload"]["priority"] == 2
+        assert set(
+            passed_filters[0]["auto_followup"]["data"]["target_group_ids"]
+        ).issubset(set([target_group_id] + [saved_group_id]))
+
+        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+
+        # now fetch the follow-up request from SP
+        # we should still have just one follow-up request, the exact same as before
+        response = self.worker.api_skyportal(
+            "GET", f"/api/followup_request?sourceID={alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        followup_requests_updated = response.json()["data"].get("followup_requests", [])
+        followup_requests_updated = [
+            f
+            for f in followup_requests_updated
+            if (f["allocation_id"] == allocation_id and f["status"] == "submitted")
+        ]
+        assert len(followup_requests_updated) == 1
+        assert followup_requests_updated[0]["payload"]["observation_type"] == "IFU"
+        assert followup_requests_updated[0]["payload"]["priority"] == 4
+        assert followup_requests_updated[0]["id"] == followup_requests[0]["id"]
+
         # delete the follow-up request
         response = self.worker.api_skyportal(
             "DELETE", f"/api/followup_request/{followup_requests[0]['id']}", None
@@ -427,9 +476,10 @@ class TestAlertBrokerZTF:
         assert response.status_code == 200
         source = response.json()["data"]
         assert source["id"] == "ZTF20aajcbhr"
-        assert len(source["groups"]) == 1
-        # should only be saved to the group of the first filter
-        assert source["groups"][0]["id"] == saved_group_id
+        # should be saved to Program A and Sitewide Group, but not Program B
+        assert any([g["id"] == saved_group_id for g in source["groups"]])
+        assert any([g["id"] == target_group_id for g in source["groups"]])
+        assert not any([g["id"] == ignore_if_saved_group_id for g in source["groups"]])
 
         # verify that there isn't a follow-up request
         response = self.worker.api_skyportal(
@@ -444,8 +494,8 @@ class TestAlertBrokerZTF:
         ]
         assert len(followup_requests) == 0
 
-        # rerun the first filter, but with the ignore_if_saved_group_id
-        # this time we are testing that it does not trigger a follow-up request
+        # rerun the first filter, but not with the ignore_if_saved_group_id
+        # this time, we are testing that it does not trigger a follow-up request
         # if the source is already classified
 
         # first post a classification
@@ -487,9 +537,10 @@ class TestAlertBrokerZTF:
         assert response.status_code == 200
         source = response.json()["data"]
         assert source["id"] == "ZTF20aajcbhr"
-        assert len(source["groups"]) == 1
-        # should only be saved to the group of the first filter
-        assert source["groups"][0]["id"] == saved_group_id
+
+        # should only be saved to Program A and Sitewide Group
+        assert any([g["id"] == saved_group_id for g in source["groups"]])
+        assert any([g["id"] == target_group_id for g in source["groups"]])
 
         # verify that there is a follow-up request
         response = self.worker.api_skyportal(

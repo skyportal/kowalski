@@ -1327,7 +1327,14 @@ class AlertWorker:
                                     "allocation_id": _filter["auto_followup"][
                                         "allocation_id"
                                     ],
-                                    "target_group_ids": [_filter["group_id"]],
+                                    "target_group_ids": list(
+                                        set(
+                                            [_filter["group_id"]]
+                                            + _filter["auto_followup"].get(
+                                                "target_group_ids", []
+                                            )
+                                        )
+                                    ),
                                     "payload": {
                                         **_filter["auto_followup"].get("payload", {}),
                                         "priority": priority,
@@ -1440,7 +1447,7 @@ class AlertWorker:
                         )
                     if len(not_saved_group_ids) > 0:
                         log(
-                            f"Source {alert['objectId']} {alert['candid']} was not saved to groups {response.json()['data']['not_saved_group_ids']}"
+                            f"Source {alert['objectId']} {alert['candid']} was not saved to groups {not_saved_group_ids}"
                         )
                 else:
                     raise ValueError(response.json()["message"])
@@ -1879,15 +1886,17 @@ class AlertWorker:
                 existing_requests = []
 
             for passed_filter in passed_filters_followup:
-                # look for existing requests with the same allocation, group, and payload
+                # look for existing requests with the same allocation, target groups, and payload
+                if len(existing_requests) > 0:
+                    log(str(existing_requests[0]["target_groups"]))
                 existing_requests_filtered = [
                     (i, r)
                     for (i, r) in enumerate(existing_requests)
                     if r["allocation_id"]
-                    == passed_filter["auto_followup"]["allocation_id"]
-                    and set([passed_filter["group_id"]]).issubset(
-                        [g["id"] for g in r["target_groups"]]
-                    )
+                    == passed_filter["auto_followup"]["data"]["allocation_id"]
+                    and not set(
+                        passed_filter["auto_followup"]["data"]["target_group_ids"]
+                    ).isdisjoint(set([g["id"] for g in r["target_groups"]]))
                     and compare_dicts(
                         passed_filter["auto_followup"]["data"]["payload"],
                         r["payload"],
@@ -1930,8 +1939,11 @@ class AlertWorker:
                                         ]["payload"],
                                         "target_groups": [
                                             {
-                                                "id": passed_filter["group_id"],
+                                                "id": target_group_id,
                                             }
+                                            for target_group_id in passed_filter[
+                                                "auto_followup"
+                                            ]["data"]["target_group_ids"]
                                         ],
                                         "status": "submitted",
                                     }
@@ -1992,7 +2004,7 @@ class AlertWorker:
                             f"Updating priority of auto followup request for {alert['objectId']} to SkyPortal",
                             self.verbose > 1,
                         ):
-                            # to update, the api needs to get the request id, target group id, and payload
+                            # to update, the api needs to get the request id, target group ids, and payload
                             # so we'll basically get that from the existing request, and simply update the priority
                             try:
                                 data = {
