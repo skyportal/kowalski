@@ -1873,7 +1873,12 @@ class AlertWorker:
                 existing_requests = [
                     r
                     for r in existing_requests
-                    if r["status"] in ["completed", "submitted", "deleted"]
+                    if any(
+                        [
+                            status in str(r["status"]).lower()
+                            for status in ["complete", "submitted", "deleted"]
+                        ]
+                    )
                 ]
                 # sort by priority (highest first)
                 existing_requests = sorted(
@@ -1894,7 +1899,7 @@ class AlertWorker:
                     == passed_filter["auto_followup"]["data"]["allocation_id"]
                     and not set(
                         passed_filter["auto_followup"]["data"]["target_group_ids"]
-                    ).isdisjoint(set([g["id"] for g in r["target_groups"]]))
+                    ).isdisjoint(set([g["id"] for g in r.get("target_groups", [])]))
                     and compare_dicts(
                         passed_filter["auto_followup"]["data"]["payload"],
                         r["payload"],
@@ -1970,7 +1975,9 @@ class AlertWorker:
                                             )
                                             if response.json()["status"] != "success":
                                                 raise ValueError(
-                                                    response.json().get(
+                                                    response.json()
+                                                    .get("data", {})
+                                                    .get(
                                                         "message",
                                                         "unknow error posting comment",
                                                     )
@@ -1980,12 +1987,16 @@ class AlertWorker:
                                                 f"Failed to post followup comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
                                             )
                             else:
-                                raise ValueError(
-                                    response.json().get(
+                                error_message = response.json().get(
+                                    "message",
+                                    response.json()
+                                    .get("data", {})
+                                    .get(
                                         "message",
                                         "unknow error posting followup request",
-                                    )
+                                    ),
                                 )
+                                raise ValueError(error_message)
                         except Exception as e:
                             log(
                                 f"Failed to post followup request for {alert['objectId']} to SkyPortal: {e}"
@@ -1995,17 +2006,22 @@ class AlertWorker:
                     # update the existing request with the new priority
                     request_to_update = existing_requests_filtered[0][1]
                     # if the status is completed or deleted, do not update
-                    if request_to_update["status"] in ["completed", "deleted"]:
+                    if any(
+                        [
+                            status in str(request_to_update["status"]).lower()
+                            for status in ["complete", "deleted"]
+                        ]
+                    ):
                         log(
                             f"Followup request for {alert['objectId']} and allocation_id {passed_filter['auto_followup']['allocation_id']} already exists on SkyPortal, but is completed or deleted, no need for update"
                         )
                     # if the status is submitted, and the  new priority is higher, update
-                    if (
-                        request_to_update["status"] == "submitted"
-                        and passed_filter["auto_followup"]["data"]["payload"][
-                            "priority"
-                        ]
-                        > request_to_update["payload"]["priority"]
+                    if "submitted" in str(
+                        request_to_update["status"]
+                    ).lower() and float(
+                        passed_filter["auto_followup"]["data"]["payload"]["priority"]
+                    ) > float(
+                        request_to_update["payload"]["priority"]
                     ):
                         with timer(
                             f"Updating priority of auto followup request for {alert['objectId']} to SkyPortal",
