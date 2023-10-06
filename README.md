@@ -26,7 +26,7 @@ it is built using a `python` asynchronous web framework, `aiohttp`, and the stan
 serves as a simple, fast, and robust job queue.
 Multiple instances of the API service are maintained using the `Gunicorn` WSGI HTTP Server.
 - A [programmatic `python` client](https://github.com/dmitryduev/penquins) is also available
-to interact with Kowalski's API.
+to interact with Kowalski's API (we recommend versions>=2.3.2, which support multi-instance querying).
 - Incoming and outgoing traffic can be routed through `traefik`,
 which acts as a simple and performant reverse proxy/load balancer.
 - An alert brokering layer listens to `Kafka` alert streams and uses a `dask.distributed` cluster for
