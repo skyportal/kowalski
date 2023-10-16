@@ -145,8 +145,12 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                     alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one
                 )(
                     {"_id": object_id},
-                    {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
-                    {"$addToSet": {"fp_hists": {"$each": fp_hists}}},
+                    {
+                        "$addToSet": {
+                            "prv_candidates": {"$each": prv_candidates},
+                            "fp_hists": {"$each": fp_hists},
+                        }
+                    },
                     upsert=True,
                 )
 
