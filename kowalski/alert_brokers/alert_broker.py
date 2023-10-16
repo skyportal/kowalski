@@ -583,6 +583,9 @@ class AlertWorker:
         doc.pop("fp_hists", None)
         if fp_hists is None:
             fp_hists = []
+        else:
+            # sort by jd
+            fp_hists = sorted(fp_hists, key=lambda k: k["jd"])
 
         return doc, prv_candidates, fp_hists
 

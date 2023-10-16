@@ -105,6 +105,13 @@ class TestAlertBrokerZTF:
                 assert alert["candid"] == candid
                 assert len(prv_candidates) == 20
                 assert len(fp_hists) == 21
+                # verify that they are in order (jd, oldest to newest)
+                assert all(
+                    [
+                        fp_hists[i]["jd"] < fp_hists[i + 1]["jd"]
+                        for i in range(len(fp_hists) - 1)
+                    ]
+                )
 
                 # test the removal of nulls and bad fields (None, -99999, -99999.0)
                 assert "forcediffimflux" in fp_hists[0]
@@ -117,6 +124,34 @@ class TestAlertBrokerZTF:
                     for fp_hist in fp_hists
                 ]
                 assert "forcediffimflux" not in fp_hists[0]
+
+                # test the merging of existing fp_hists and new fp_hists
+                # we split the existing fp_hists in two to simulate the case where
+                # we have overlapping datapoints
+                existing_fp_hists = fp_hists[:15]
+                latest_fp_hists = fp_hists[11:]
+
+                new_fp_hists = self.worker.deduplicate_fp_hists(
+                    existing_fp_hists, latest_fp_hists
+                )
+                assert len(new_fp_hists) == 21
+
+                # verify that their jds are in order
+                assert all(
+                    [
+                        new_fp_hists[i]["jd"] < new_fp_hists[i + 1]["jd"]
+                        for i in range(len(new_fp_hists) - 1)
+                    ]
+                )
+                # verify that the datapoints are the exact same as original fp_hists
+                # that is, that all the keys are the same, and that the values are the same
+                for i in range(len(new_fp_hists)):
+                    assert (
+                        set(new_fp_hists[i].keys()).difference(set(fp_hists[i].keys()))
+                        == set()
+                    )
+                    for k in new_fp_hists[i].keys():
+                        assert new_fp_hists[i][k] == fp_hists[i][k]
 
     def test_make_photometry(self):
         df_photometry = self.worker.make_photometry(self.alert)
