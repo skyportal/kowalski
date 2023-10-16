@@ -540,8 +540,8 @@ class AlertWorker:
         Prepare a raw alert for ingestion into MongoDB:
           - add a placeholder for ML-based classifications
           - add coordinates for 2D spherical indexing and compute Galactic coordinates
-          - cut off the prv_candidates section
-          - cut off the fp_hists section (if it exists)
+          - extract the prv_candidates section
+          - extract the fp_hists section (if it exists)
 
         :param alert:
         :return:
@@ -578,7 +578,7 @@ class AlertWorker:
         if prv_candidates is None:
             prv_candidates = []
 
-        # cut off the fp_hists section, if it exists
+        # extract the fp_hists section, if it exists
         fp_hists = deepcopy(doc.get("fp_hists", None))
         doc.pop("fp_hists", None)
         if fp_hists is None:
