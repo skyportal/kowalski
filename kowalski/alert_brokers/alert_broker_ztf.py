@@ -150,31 +150,34 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                     upsert=True,
                 )
 
+                # FOR NOW: we decided to only store the forced photometry for the very first alert we get for an object
+                # so, no need to update anything here
+
                 # update fp_hists
-                existing_fp_hists = retry(
-                    alert_worker.mongo.db[alert_worker.collection_alerts_aux].find_one
-                )({"_id": object_id}, {"fp_hists": 1})
-                if existing_fp_hists is not None:
-                    existing_fp_hists = existing_fp_hists.get("fp_hists", [])
-                    if len(existing_fp_hists) > 0:
-                        new_fp_hists = alert_worker.deduplicate_fp_hists(
-                            existing_fp_hists, fp_hists
-                        )
-                    else:
-                        new_fp_hists = fp_hists
-                else:
-                    new_fp_hists = fp_hists
-                retry(
-                    alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one
-                )(
-                    {"_id": object_id},
-                    {
-                        "$set": {
-                            "fp_hists": new_fp_hists,
-                        }
-                    },
-                    upsert=True,
-                )
+                # existing_fp_hists = retry(
+                #     alert_worker.mongo.db[alert_worker.collection_alerts_aux].find_one
+                # )({"_id": object_id}, {"fp_hists": 1})
+                # if existing_fp_hists is not None:
+                #     existing_fp_hists = existing_fp_hists.get("fp_hists", [])
+                #     if len(existing_fp_hists) > 0:
+                #         new_fp_hists = alert_worker.deduplicate_fp_hists(
+                #             existing_fp_hists, fp_hists
+                #         )
+                #     else:
+                #         new_fp_hists = fp_hists
+                # else:
+                #     new_fp_hists = fp_hists
+                # retry(
+                #     alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one
+                # )(
+                #     {"_id": object_id},
+                #     {
+                #         "$set": {
+                #             "fp_hists": new_fp_hists,
+                #         }
+                #     },
+                #     upsert=True,
+                # )
 
         if config["misc"]["broker"]:
             # execute user-defined alert filters
