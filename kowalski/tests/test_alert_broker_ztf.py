@@ -68,7 +68,7 @@ def filter_template(upstream):
 
 
 def post_alert(worker, alert):
-    alert, _ = worker.alert_mongify(alert)
+    alert, _, _ = worker.alert_mongify(alert)
     # check if it already exists
     if worker.mongo.db[worker.collection_alerts].count_documents(
         {"candid": alert["candid"]}
@@ -90,16 +90,40 @@ class TestAlertBrokerZTF:
 
     def test_alert_mongification(self):
         """Test massaging avro packet into a dict digestible by mongodb"""
-        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        alert, prv_candidates, fp_hists = self.worker.alert_mongify(self.alert)
         assert alert["candid"] == self.candid
         assert len(prv_candidates) == 31
+        assert len(fp_hists) == 0
+
+    def test_alert_mongofication_with_fphists(self):
+        """Test massaging avro packet into a dict digestible by mongodb, with the new ZTF alert schema"""
+        candid = 2475433850015010009
+        sample_avro = f"data/ztf_alerts/20231012/{candid}.avro"
+        with open(sample_avro, "rb") as f:
+            for record in fastavro.reader(f):
+                alert, prv_candidates, fp_hists = self.worker.alert_mongify(record)
+                assert alert["candid"] == candid
+                assert len(prv_candidates) == 20
+                assert len(fp_hists) == 21
+
+                # test the removal of nulls and bad fields (None, -99999, -99999.0)
+                assert "forcediffimflux" in fp_hists[0]
+                fp_hists = [
+                    {
+                        kk: vv
+                        for kk, vv in fp_hist.items()
+                        if vv not in [None, -99999, -99999.0]
+                    }
+                    for fp_hist in fp_hists
+                ]
+                assert "forcediffimflux" not in fp_hists[0]
 
     def test_make_photometry(self):
         df_photometry = self.worker.make_photometry(self.alert)
         assert len(df_photometry) == 32
 
     def test_make_thumbnails(self):
-        alert, _ = self.worker.alert_mongify(self.alert)
+        alert, _, _ = self.worker.alert_mongify(self.alert)
         for ttype, istrument_type in [
             ("new", "Science"),
             ("ref", "Template"),
@@ -110,7 +134,7 @@ class TestAlertBrokerZTF:
 
     def test_alert_filter__ml(self):
         """Test executing ML models on the alert"""
-        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
         all_prv_candidates = deepcopy(prv_candidates) + [deepcopy(alert["candidate"])]
         scores = self.worker.alert_filter__ml(alert, all_prv_candidates)
         assert len(scores) > 0
@@ -118,7 +142,7 @@ class TestAlertBrokerZTF:
 
     def test_alert_filter__xmatch(self):
         """Test cross matching with external catalog"""
-        alert, _ = self.worker.alert_mongify(self.alert)
+        alert, _, _ = self.worker.alert_mongify(self.alert)
         xmatches = self.worker.alert_filter__xmatch(alert)
         catalogs_to_xmatch = config["database"].get("xmatch", {}).get("ZTF", {}).keys()
         assert isinstance(xmatches, dict)
@@ -327,7 +351,7 @@ class TestAlertBrokerZTF:
         )
         assert passed_filters[1]["auto_followup"]["data"]["payload"]["priority"] == 3
 
-        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
         self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
 
         # now fetch the follow-up request from SP
@@ -369,7 +393,7 @@ class TestAlertBrokerZTF:
         )
         assert passed_filters[1]["auto_followup"]["data"]["payload"]["priority"] == 4
 
-        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
         self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
 
         # now fetch the follow-up request from SP
@@ -418,7 +442,7 @@ class TestAlertBrokerZTF:
             passed_filters[0]["auto_followup"]["data"]["target_group_ids"]
         ).issubset(set([target_group_id] + [saved_group_id]))
 
-        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
         self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
 
         # now fetch the follow-up request from SP
@@ -466,7 +490,7 @@ class TestAlertBrokerZTF:
             == "IFU"
         )
 
-        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
         self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
 
         # now fetch the source from SP
@@ -527,7 +551,7 @@ class TestAlertBrokerZTF:
             == "IFU"
         )
 
-        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
         self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
 
         # now fetch the source from SP
@@ -605,7 +629,7 @@ class TestAlertBrokerZTF:
             == "IFU"
         )
 
-        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
         self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
 
         # now fetch the follow-up request from SP

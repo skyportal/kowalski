@@ -58,7 +58,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
 
         # candid not in db, ingest decoded avro packet into db
         with timer(f"Mongification of {object_id} {candid}", alert_worker.verbose > 1):
-            alert, prv_candidates = alert_worker.alert_mongify(alert)
+            alert, prv_candidates, fp_hists = alert_worker.alert_mongify(alert)
 
         # create alert history
         all_prv_candidates = deepcopy(prv_candidates) + [deepcopy(alert["candidate"])]
@@ -104,6 +104,12 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             for prv_candidate in prv_candidates
         ]
 
+        # fp_hists: pop nulls - save space
+        fp_hists = [
+            {kk: vv for kk, vv in fp_hist.items() if vv not in [None, -99999, -99999.0]}
+            for fp_hist in fp_hists
+        ]
+
         alert_aux, xmatches, passed_filters = None, None, None
         # cross-match with external catalogs if objectId not in collection_alerts_aux:
         if (
@@ -123,6 +129,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 "_id": object_id,
                 "cross_matches": xmatches,
                 "prv_candidates": prv_candidates,
+                "fp_hists": fp_hists,
             }
 
             with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
@@ -139,6 +146,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 )(
                     {"_id": object_id},
                     {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
+                    {"$addToSet": {"fp_hists": {"$each": fp_hists}}},
                     upsert=True,
                 )
 
@@ -160,6 +168,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
         del (
             alert,
             prv_candidates,
+            fp_hists,
             all_prv_candidates,
             scores,
             xmatches,

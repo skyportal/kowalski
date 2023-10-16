@@ -35,7 +35,7 @@ class TestAlertBrokerWNTR:
 
     def test_alert_mongification(self):
         """Test massaging avro packet into a dict digestible by mongodb"""
-        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
         assert alert["candid"] == self.candid
         assert len(alert["candidate"]) > 0  # ensure cand data is not empty
         assert alert["objectId"] == self.alert["objectId"]
@@ -50,7 +50,7 @@ class TestAlertBrokerWNTR:
         assert df_photometry["filter"][0] == "2massj"
 
     def test_make_thumbnails(self):
-        alert, _ = self.worker.alert_mongify(self.alert)
+        alert, _, _ = self.worker.alert_mongify(self.alert)
         for ttype, istrument_type in [
             ("new", "Science"),
             ("ref", "Template"),
@@ -61,7 +61,7 @@ class TestAlertBrokerWNTR:
 
     def test_alert_filter__xmatch(self):
         """Test cross matching with external catalog"""
-        alert, _ = self.worker.alert_mongify(self.alert)
+        alert, _, _ = self.worker.alert_mongify(self.alert)
         xmatches = self.worker.alert_filter__xmatch(alert)
         catalogs_to_xmatch = config["database"].get("xmatch", {}).get("WNTR", {}).keys()
         assert isinstance(xmatches, dict)
