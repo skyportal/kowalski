@@ -141,6 +141,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
         # clean up after thyself
         del msg
 
+
 class ZTFRetrievalAlertWorker(AlertWorker, ABC):
     def __init__(self, **kwargs):
         super().__init__(instrument="ZTF", **kwargs)
@@ -214,10 +215,23 @@ def topic_listener(
     # Start alert stream consumer
     stream_reader = ZTFAlertConsumer(topic, dask_client, instrument="ZTF", **conf)
 
+    def is_night_pst() -> bool:
+        now_utc = datetime.datetime.utcnow()
+        return now_utc.hour >= 0 and now_utc.hour < 14
+
+    counter = 0
     while True:
+        if counter % 1000 == 0:
+            counter = 0
+            if is_night_pst():
+                log("Night time, pausing retrieval until morning")
+                time.sleep(120)
+            else:
+                log("Day time, retrieving alerts")
         try:
             # poll!
             stream_reader.poll()
+            counter += 1
 
         except EopError as e:
             # Write when reaching end of partition
