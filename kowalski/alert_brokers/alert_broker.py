@@ -540,7 +540,8 @@ class AlertWorker:
         Prepare a raw alert for ingestion into MongoDB:
           - add a placeholder for ML-based classifications
           - add coordinates for 2D spherical indexing and compute Galactic coordinates
-          - cut off the prv_candidates section
+          - extract the prv_candidates section
+          - extract the fp_hists section (if it exists)
 
         :param alert:
         :return:
@@ -577,7 +578,16 @@ class AlertWorker:
         if prv_candidates is None:
             prv_candidates = []
 
-        return doc, prv_candidates
+        # extract the fp_hists section, if it exists
+        fp_hists = deepcopy(doc.get("fp_hists", None))
+        doc.pop("fp_hists", None)
+        if fp_hists is None:
+            fp_hists = []
+        else:
+            # sort by jd
+            fp_hists = sorted(fp_hists, key=lambda k: k["jd"])
+
+        return doc, prv_candidates, fp_hists
 
     def make_thumbnail(
         self, alert: Mapping, skyportal_type: str, alert_packet_type: str
@@ -1637,7 +1647,7 @@ class AlertWorker:
           - decide which points to post to what groups based on permissions
           - post alert light curve in single PUT call to /api/photometry specifying stream_ids
 
-        :param alert: alert with a stripped-off prv_candidates section
+        :param alert: alert with a stripped-off prv_candidates section and fp_hists sections
         :param prv_candidates: could be plain prv_candidates section of an alert, or extended alert history
         :param passed_filters: list of filters that alert passed, with their output
         :return:

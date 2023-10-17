@@ -34,7 +34,7 @@ class TestAlertBrokerPGIR:
 
     def test_alert_mongification(self):
         """Test massaging avro packet into a dict digestible by mongodb"""
-        alert, prv_candidates = self.worker.alert_mongify(self.alert)
+        alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
         assert alert["candid"] == self.candid
         assert len(prv_candidates) == 71
 
@@ -43,7 +43,7 @@ class TestAlertBrokerPGIR:
         assert len(df_photometry) == 71
 
     def test_make_thumbnails(self):
-        alert, _ = self.worker.alert_mongify(self.alert)
+        alert, _, _ = self.worker.alert_mongify(self.alert)
         for ttype, istrument_type in [
             ("new", "Science"),
             ("ref", "Template"),
@@ -54,13 +54,13 @@ class TestAlertBrokerPGIR:
 
     def test_alert_filter__ml(self):
         """Test executing ML models on the alert"""
-        alert, _ = self.worker.alert_mongify(self.alert)
+        alert, _, _ = self.worker.alert_mongify(self.alert)
         scores = self.worker.alert_filter__ml(alert)
         log(scores)
 
     def test_alert_filter__xmatch(self):
         """Test cross matching with external catalog"""
-        alert, _ = self.worker.alert_mongify(self.alert)
+        alert, _, _ = self.worker.alert_mongify(self.alert)
         xmatches = self.worker.alert_filter__xmatch(alert)
         catalogs_to_xmatch = config["database"].get("xmatch", {}).get("PGIR", {}).keys()
         assert isinstance(xmatches, dict)

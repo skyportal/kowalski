@@ -422,6 +422,43 @@ class TestIngester:
                 time.sleep(15)
                 continue
 
+        # now do the same with 21 alerts that use the new alert schema
+        date = datetime.datetime.utcnow().strftime("%Y%m%d")
+        topic_name = f"ztf_{date}_programid1_test"
+        path_alerts = "ztf_alerts/20231012"
+        with KafkaStream(
+            topic_name,
+            pathlib.Path(f"data/{path_alerts}"),
+            config=config,
+            test=True,
+        ):
+            log("Starting up Ingester")
+            watchdog(obs_date=date, test=True)
+            log("Digested and ingested: all done!")
+
+        log("Checking the ZTF alert collection states")
+        num_retries = 20
+        # alert processing takes time, which depends on the available resources
+        # so allow some additional time for the processing to finish
+        for i in range(num_retries):
+            if i == num_retries - 1:
+                raise RuntimeError("Alert ingestion failed")
+
+            n_alerts = mongo.db[collection_alerts].count_documents({})
+            n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
+
+            try:
+                assert n_alerts == 313 + 24
+                assert n_alerts_aux == 145 + 24
+                break
+            except AssertionError:
+                print(
+                    "Found an unexpected amount of alert/aux data: "
+                    f"({n_alerts}/{n_alerts_aux}, expecting 358/169). "
+                    "Retrying in 15 seconds..."
+                )
+                time.sleep(15)
+                continue
         if config["misc"]["broker"]:
             log("Checking that posting to SkyPortal succeeded")
 
