@@ -207,10 +207,9 @@ def topic_listener(
     else:
         conf["group.id"] = os.environ.get("HOSTNAME", "kowalski")
 
-    # make it unique:
-    conf[
-        "group.id"
-    ] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
+    # make it unique to the retrieval process, so that stopping and restarting the retrieval service won't
+    # cause the consumer to re-read the entire topic
+    conf["group.id"] = f"{conf['group.id']}_retrieval"
 
     # Start alert stream consumer
     stream_reader = ZTFAlertConsumer(topic, dask_client, instrument="ZTF", **conf)
