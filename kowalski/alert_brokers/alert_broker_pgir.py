@@ -58,7 +58,7 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
 
         # candid not in db, ingest decoded avro packet into db
         with timer(f"Mongification of {object_id} {candid}", alert_worker.verbose > 1):
-            alert, prv_candidates = alert_worker.alert_mongify(alert)
+            alert, prv_candidates, _ = alert_worker.alert_mongify(alert)
 
         # create alert history
         all_prv_candidates = deepcopy(prv_candidates) + [deepcopy(alert["candidate"])]

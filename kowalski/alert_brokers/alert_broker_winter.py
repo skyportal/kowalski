@@ -80,7 +80,7 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
 
         # candid not in db, ingest decoded avro packet into db
         with timer(f"Mongification of {object_id} {candid}"):
-            alert, prv_candidates = alert_worker.alert_mongify(alert)
+            alert, prv_candidates, _ = alert_worker.alert_mongify(alert)
 
         # future: add ML model filtering here
 

@@ -58,7 +58,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
 
         # candid not in db, ingest decoded avro packet into db
         with timer(f"Mongification of {object_id} {candid}", alert_worker.verbose > 1):
-            alert, prv_candidates = alert_worker.alert_mongify(alert)
+            alert, prv_candidates, fp_hists = alert_worker.alert_mongify(alert)
 
         # create alert history
         all_prv_candidates = deepcopy(prv_candidates) + [deepcopy(alert["candidate"])]
@@ -104,6 +104,12 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             for prv_candidate in prv_candidates
         ]
 
+        # fp_hists: pop nulls - save space
+        fp_hists = [
+            {kk: vv for kk, vv in fp_hist.items() if vv not in [None, -99999, -99999.0]}
+            for fp_hist in fp_hists
+        ]
+
         alert_aux, xmatches, passed_filters = None, None, None
         # cross-match with external catalogs if objectId not in collection_alerts_aux:
         if (
@@ -123,6 +129,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 "_id": object_id,
                 "cross_matches": xmatches,
                 "prv_candidates": prv_candidates,
+                "fp_hists": fp_hists,
             }
 
             with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
@@ -134,6 +141,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             with timer(
                 f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1
             ):
+                # update prv_candidates
                 retry(
                     alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one
                 )(
@@ -141,6 +149,35 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                     {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
                     upsert=True,
                 )
+
+                # FOR NOW: we decided to only store the forced photometry for the very first alert we get for an object
+                # so, no need to update anything here
+
+                # update fp_hists
+                # existing_fp_hists = retry(
+                #     alert_worker.mongo.db[alert_worker.collection_alerts_aux].find_one
+                # )({"_id": object_id}, {"fp_hists": 1})
+                # if existing_fp_hists is not None:
+                #     existing_fp_hists = existing_fp_hists.get("fp_hists", [])
+                #     if len(existing_fp_hists) > 0:
+                #         new_fp_hists = alert_worker.deduplicate_fp_hists(
+                #             existing_fp_hists, fp_hists
+                #         )
+                #     else:
+                #         new_fp_hists = fp_hists
+                # else:
+                #     new_fp_hists = fp_hists
+                # retry(
+                #     alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one
+                # )(
+                #     {"_id": object_id},
+                #     {
+                #         "$set": {
+                #             "fp_hists": new_fp_hists,
+                #         }
+                #     },
+                #     upsert=True,
+                # )
 
         if config["misc"]["broker"]:
             # execute user-defined alert filters
@@ -160,6 +197,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
         del (
             alert,
             prv_candidates,
+            fp_hists,
             all_prv_candidates,
             scores,
             xmatches,
@@ -456,6 +494,26 @@ class ZTFAlertWorker(AlertWorker, ABC):
                             f"Failed to post {alert['objectId']} photometry stream_id={stream_id} to SkyPortal: {e}"
                         )
                         continue
+
+    def deduplicate_fp_hists(self, existing_fp=[], latest_fp=[]):
+        # for the forced photometry (fp_hists) unfortunately it's not as simple as deduplicating with a set
+        # the fp_hists of each candidate of an object is recomputed everytime, so datapoints
+        # at the same jd can be different, so we grab the existing fp_hists aggregate, and build a new one.
+
+        # first find the oldest jd in the latest fp_hists
+        oldest_jd_in_latest = min([fp["jd"] for fp in latest_fp])
+        # get all the datapoints in the existing fp_hists that are older than the oldest jd in the latest fp_hists
+        older_datapoints = [fp for fp in existing_fp if fp["jd"] < oldest_jd_in_latest]
+
+        # TODO: implement a better logic here. Could be based on:
+        # - SNR (better SNR datapoints might be better)
+        # - position (centroid, closer to the avg position might be better)
+        # - mag (if 1 sigma brighter or dimmer than the current datapoints, use the newer ones)
+
+        # for now, just append the latest fp_hists to the older ones,
+        # to prioritize newer datapoints which might come from an updated pipeline
+
+        return older_datapoints + latest_fp
 
 
 class WorkerInitializer(dask.distributed.WorkerPlugin):
