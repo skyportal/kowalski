@@ -46,7 +46,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
 
         # candid not in db, ingest decoded avro packet into db
         with timer(f"Mongification of {object_id} {candid}", alert_worker.verbose > 1):
-            alert, prv_candidates = alert_worker.alert_mongify(alert)
+            alert, prv_candidates, _ = alert_worker.alert_mongify(alert)
 
         # prv_candidates: pop nulls - save space
         prv_candidates = [
@@ -225,6 +225,7 @@ def topic_listener(
             if is_night_pst():
                 log("Night time, pausing retrieval until morning")
                 time.sleep(120)
+                continue
             else:
                 log("Day time, retrieving alerts")
         try:
