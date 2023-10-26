@@ -481,7 +481,7 @@ def process_file(argument_list: Sequence):
         )
         return
 
-    file_name, rm_file = argument_list
+    file_name, rm_file, pausing_times = argument_list
     try:
         # connect to MongoDB:
         mongo = get_mongo_client()
@@ -506,6 +506,14 @@ def process_file(argument_list: Sequence):
 
         nb_alerts = len(avro_files)
         for i, avro_file in enumerate(avro_files):
+            if i % 1000 == 0 and pausing_times is not None:
+                if pausing_times[0] <= utc_now().hour <= pausing_times[1]:
+                    log(
+                        f"Pausing ingestion for {pausing_times[1] - pausing_times[0]} hours"
+                    )
+                    time.sleep(abs(pausing_times[1] - pausing_times[0]) * 3600)
+                    log("Resuming ingestion")
+
             # ingest the avro file:
             with timer(f"Processing alert {i + 1}/{nb_alerts}"):
                 try:
@@ -548,33 +556,62 @@ def process_file(argument_list: Sequence):
 
 def run(
     path: str,
-    stream: str = None,
+    mindate: str = None,
+    maxdate: str = None,
     num_proc: int = multiprocessing.cpu_count(),
     rm: bool = False,
+    pausing_times: Sequence = None,
 ):
-    """Preprocess and Ingest ZTF matchfiles into Kowalski
+    """Preprocess and Ingest ZTF alerts into Kowalski's aux table
 
     :param path: local path to matchfiles
-    :param tag: matchfile release time tag
-    :param num_proc: number of processes for parallel ingestion
-    :param batch_size: batch size for light curve data ingestion
-    :param rm: remove matchfiles after ingestion?
-    :param dry_run: dry run?
-    :param failures_only: ingest only failed matchfiles?
+    :param mindate: min date to process
+    :param maxdate: max date to process
+    :param num_proc: number of processes to use
+    :param rm: remove files after processing
+    :param pausing_times: time window (in hours) in which to pause processing (UTC)
     :return:
     """
 
     # make sure the path is an absolute path
     path = os.path.abspath(path)
 
-    if stream is None:
-        # in the path provided, we should find a ton of .tar.gz files
-        files = [str(f) for f in pathlib.Path(path).glob("*.tar.gz")]
-    else:
-        # limit which file we grab to those that start with the stream name
-        files = [str(f) for f in pathlib.Path(path).glob(f"{stream}*.tar.gz")]
+    files = [str(f) for f in pathlib.Path(path).glob("*.tar.gz")]
 
-    input_list = [(f, rm) for f in sorted(files)]
+    # sort the files by date, if provided
+    if mindate is not None:
+        mindate = datetime.datetime.strptime(mindate, "%Y%m%d")
+        files = [
+            f
+            for f in files
+            if mindate
+            <= datetime.datetime.strptime(
+                pathlib.Path(f).name.split("_")[2].split(".")[0], "%Y%m%d"
+            )
+        ]
+    if maxdate is not None:
+        maxdate = datetime.datetime.strptime(maxdate, "%Y%m%d")
+        files = [
+            f
+            for f in files
+            if datetime.datetime.strptime(
+                pathlib.Path(f).name.split("_")[2].split(".")[0], "%Y%m%d"
+            )
+            <= maxdate
+        ]
+
+    if pausing_times is not None:
+        # verify that its a list of length 2, with floats (hours)
+        if len(pausing_times) != 2:
+            raise Exception(
+                "pausing_times must be a list of length 2, with floats (hours)"
+            )
+        if not all(isinstance(x, float) or isinstance(x, int) for x in pausing_times):
+            raise Exception(
+                "pausing_times must be a list of length 2, with floats (hours)"
+            )
+
+    input_list = [(f, rm, pausing_times) for f in files]
 
     with multiprocessing.Pool(processes=num_proc) as pool:
         for _ in tqdm(pool.imap(process_file, input_list), total=len(files)):
