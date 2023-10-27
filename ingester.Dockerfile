@@ -51,6 +51,7 @@ COPY ["kowalski/__init__.py", \
 COPY ["kowalski/tools/__init__.py", \
         "kowalski/tools/check_app_environment.py", \
         "kowalski/tools/check_db_entries.py", \
+        "kowalski/tools/fetch_ztf_alerts.py", \
         "kowalski/tools/fetch_ztf_matchfiles.py", \
         "kowalski/tools/generate_supervisord_conf.py", \
         "kowalski/tools/init_models.py", \
@@ -88,6 +89,7 @@ COPY ["kowalski/ingesters/__init__.py", \
         "kowalski/ingesters/ingest_ptf_matchfiles.py", \
         "kowalski/ingesters/ingest_turbo.py", \
         "kowalski/ingesters/ingest_vlass.py", \
+        "kowalski/ingesters/ingest_ztf_alert_aux.py", \
         "kowalski/ingesters/ingest_ztf_matchfiles.py", \
         "kowalski/ingesters/ingest_ztf_public.py", \
         "kowalski/ingesters/ingest_ztf_source_classifications.py", \
