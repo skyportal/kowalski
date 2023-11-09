@@ -1364,6 +1364,15 @@ class AlertWorker:
                                 },
                             }
 
+                            if not isinstance(_filter.get("autosave", False), bool):
+                                passed_filter["auto_followup"]["data"][
+                                    "ignore_source_group_ids"
+                                ] = [
+                                    _filter.get("autosave", {}).get(
+                                        "ignore_group_ids", []
+                                    )
+                                ]
+
                     passed_filters.append(passed_filter)
 
             except Exception as e:
@@ -1927,9 +1936,7 @@ class AlertWorker:
                             response = self.api_skyportal(
                                 "POST",
                                 "/api/followup_request",
-                                passed_filter["auto_followup"][
-                                    "data"
-                                ],  # already contains the optional ignore_group_ids
+                                passed_filter["auto_followup"]["data"],
                             )
                             if (
                                 response.json()["status"] == "success"
@@ -1939,7 +1946,7 @@ class AlertWorker:
                                 is False
                             ):
                                 log(
-                                    f"Posted followup request for {alert['objectId']} to SkyPortal"
+                                    f"Posted followup request successfully for {alert['objectId']} to SkyPortal"
                                 )
                                 # add it to the existing requests
                                 existing_requests.append(
@@ -1971,7 +1978,14 @@ class AlertWorker:
                                         "text": passed_filter["auto_followup"][
                                             "comment"
                                         ],
-                                        "group_ids": [passed_filter["group_id"]],
+                                        "group_ids": list(
+                                            set(
+                                                [passed_filter["group_id"]]
+                                                + passed_filter.get("auto_followup", {})
+                                                .get("data", {})
+                                                .get("target_group_ids", [])
+                                            )
+                                        ),
                                     }
                                     with timer(
                                         f"Posting followup comment {comment['text']} for {alert['objectId']} to SkyPortal",
@@ -1997,15 +2011,20 @@ class AlertWorker:
                                                 f"Failed to post followup comment {comment['text']} for {alert['objectId']} to SkyPortal: {e}"
                                             )
                             else:
-                                error_message = response.json().get(
-                                    "message",
-                                    response.json()
-                                    .get("data", {})
-                                    .get(
+                                try:
+                                    error_message = response.json().get(
                                         "message",
-                                        "unknow error posting followup request",
-                                    ),
-                                )
+                                        response.json()
+                                        .get("data", {})
+                                        .get(
+                                            "message",
+                                            "unknow error posting followup request",
+                                        ),
+                                    )
+                                except Exception:
+                                    error_message = (
+                                        "unknow error posting followup request"
+                                    )
                                 raise ValueError(error_message)
                         except Exception as e:
                             log(
