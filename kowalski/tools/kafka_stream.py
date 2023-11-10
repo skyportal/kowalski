@@ -21,12 +21,18 @@ parser.add_argument(
     type=bool,
     help="test mode. if in test mode, alerts will be pushed to bootstarp.test.server",
 )
-
+parser.add_argument(
+    "--max_alerts",
+    type=int,
+    default=None,
+    help="maximum number of alerts to stream (optional)",
+)
 args = parser.parse_args()
 
 topic = args.topic
 path_alerts = args.path_alerts
 test = args.test
+max_alerts = args.max_alerts
 
 if not isinstance(topic, str) or topic == "":
     raise ValueError("topic must be a non-empty string")
@@ -48,6 +54,7 @@ stream = KafkaStream(
     path_alerts=pathlib.Path(f"data/{path_alerts}"),
     test=test,
     config=config,
+    max_alerts=max_alerts,
 )
 
 running = True
@@ -56,7 +63,9 @@ while running:
     # if the user hits Ctrl+C, stop the stream
     try:
         stream.start()
-        time.sleep(1000000000)
+        while True:
+            time.sleep(60)
+            print("heartbeat")
     except KeyboardInterrupt:
         print("\nStopping Kafka stream...")
         stream.stop()
