@@ -233,10 +233,13 @@ class KafkaStream:
             os.remove(meta_properties)
 
     def __enter__(self):
-        # call the start method asynchonously, so it keeps running in the background and we can return
-        # the KafkaStream object to the caller
-        # only do this if we are not in test mode
-        if not self.test:
+        # when not in test mode, call the start method in a separate thread
+        # this helps so that you can start polling the topic right away
+        # otherwise, the start method will block until all alerts are ingested
+        # which is not possible if you are ingesting more alerts than the queue size
+        if self.test:
+            self.start()
+        else:
             threading.Thread(target=self.start).start()
         self.as_context_manager = True
         time.sleep(15)  # give it a chance to finish ingesting properly
