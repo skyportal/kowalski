@@ -505,8 +505,12 @@ class ZTFAlertWorker(AlertWorker, ABC):
         magerr = 1.0857 * (values[1] / values[0])
         limmag3sig = -2.5 * np.log10(3 * values[1]) + values[2]
         limmag5sig = -2.5 * np.log10(5 * values[1]) + values[2]
-        if snr < 0:
+        if np.isnan(snr):
             return {}
+        if snr < 0:
+            return {
+                "snr": snr,
+            }
         mag_data = {
             "mag": mag,
             "magerr": magerr,
