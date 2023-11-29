@@ -558,15 +558,8 @@ class ZTFAlertWorker(AlertWorker, ABC):
             f"Updating fp_hists of {alert['objectId']} {alert['candid']}",
             self.verbose > 1,
         ):
-            # 1. concat the new fp_hists with the existing ones
-            # 2. unwind the resulting array to get one document per fp_hist
-            # 3. group by jd and keep the one with the highest alert_mag for each jd
-            # 4. sort by jd
-            # 5. group all the deduplicated fp_hists back into an array
-            # 6. update the document
-            # TODO: find a way to run the update at the same time as we create the new deduplicated array,
-            # to avoid potential (even if very unlikely) concurrency issues as much as possible.
             update_pipeline = [
+                # 1. concat the new fp_hists with the existing ones
                 {
                     "$project": {
                         "all_fp_hists": {
@@ -577,7 +570,9 @@ class ZTFAlertWorker(AlertWorker, ABC):
                         }
                     }
                 },
+                # 2. unwind the resulting array to get one document per fp_hist
                 {"$unwind": "$all_fp_hists"},
+                # 3. group by jd and keep the one with the highest alert_mag for each jd
                 {
                     "$set": {
                         "all_fp_hists.alert_mag": {
@@ -594,20 +589,25 @@ class ZTFAlertWorker(AlertWorker, ABC):
                         }
                     }
                 },
+                # 4. sort by jd and alert_mag
                 {
                     "$sort": {
                         "all_fp_hists.jd": 1,
                         "all_fp_hists.alert_mag": 1,
                     }
                 },
+                # 5. group all the deduplicated fp_hists back into an array, keeping the first one (the brightest at each jd)
                 {
                     "$group": {
                         "_id": "$all_fp_hists.jd",
                         "fp_hist": {"$first": "$$ROOT.all_fp_hists"},
                     }
                 },
+                # 6. sort by jd again
                 {"$sort": {"fp_hist.jd": 1}},
+                # 7. group all the fp_hists documents back into a single array
                 {"$group": {"_id": None, "fp_hists": {"$push": "$fp_hist"}}},
+                # 8. project only the new fp_hists array
                 {"$project": {"fp_hists": 1, "_id": 0}},
             ]
             n_retries = 0
