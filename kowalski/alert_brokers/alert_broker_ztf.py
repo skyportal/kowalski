@@ -565,7 +565,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
             # 5. group all the deduplicated fp_hists back into an array
             # 6. update the document
             # TODO: find a way to run the update at the same time as we create the new deduplicated array,
-            # to avoid potential (even if very unlickely) concurrency issues as much as possible.
+            # to avoid potential (even if very unlikely) concurrency issues as much as possible.
             update_pipeline = [
                 {
                     "$project": {

@@ -268,7 +268,7 @@ class TestAlertBrokerZTF:
         assert all([aux["fp_hists"][i]["alert_mag"] == alert_mag for i in range(14)])
         assert all([aux["fp_hists"][i]["alert_mag"] == 30.0 for i in range(14, 19)])
 
-        # verify that their are still in order by jd (oldest to newest)
+        # verify they are still in order by jd (oldest to newest)
         assert all(
             [
                 aux["fp_hists"][i]["jd"] < aux["fp_hists"][i + 1]["jd"]
@@ -300,7 +300,7 @@ class TestAlertBrokerZTF:
         assert all([aux["fp_hists"][i]["alert_mag"] == alert_mag for i in range(11)])
         assert all([aux["fp_hists"][i]["alert_mag"] == 15.0 for i in range(11, 21)])
 
-        # verify that their are still in order by jd (oldest to newest)
+        # verify they are still in order by jd (oldest to newest)
         assert all(
             [
                 aux["fp_hists"][i]["jd"] < aux["fp_hists"][i + 1]["jd"]

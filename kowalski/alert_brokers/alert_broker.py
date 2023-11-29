@@ -2003,7 +2003,7 @@ class AlertWorker:
                                                     .get("data", {})
                                                     .get(
                                                         "message",
-                                                        "unknow error posting comment",
+                                                        "unknown error posting comment",
                                                     )
                                                 )
                                         except Exception as e:
@@ -2018,12 +2018,12 @@ class AlertWorker:
                                         .get("data", {})
                                         .get(
                                             "message",
-                                            "unknow error posting followup request",
+                                            "unknown error posting followup request",
                                         ),
                                     )
                                 except Exception:
                                     error_message = (
-                                        "unknow error posting followup request"
+                                        "unknown error posting followup request"
                                     )
                                 raise ValueError(error_message)
                         except Exception as e:
@@ -2098,7 +2098,7 @@ class AlertWorker:
                                     raise ValueError(
                                         response.json().get(
                                             "message",
-                                            "unknow error updating followup request",
+                                            "unknown error updating followup request",
                                         )
                                     )
                             except Exception as e:
