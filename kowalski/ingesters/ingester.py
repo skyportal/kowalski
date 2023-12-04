@@ -4,6 +4,7 @@ import subprocess
 import time
 from confluent_kafka import Producer
 from kowalski.log import log
+import threading
 
 
 def delivery_report(err, msg):
@@ -18,11 +19,20 @@ def delivery_report(err, msg):
 class KafkaStream:
     as_context_manager = False
 
-    def __init__(self, topic, path_alerts, config, test=False):
+    def __init__(self, topic, path_alerts, config, test=False, **kwargs):
         self.config = config
         self.topic = topic
         self.path_alerts = path_alerts
         self.test = test
+
+        if kwargs.get("max_alerts") is not None:
+            try:
+                int(kwargs.get("max_alerts"))
+            except ValueError:
+                raise ValueError("max_alerts must be an integer")
+            self.max_alerts = int(kwargs.get("max_alerts"))
+        else:
+            self.max_alerts = None
 
     def start(self):
         # create a kafka topic and start a producer to stream the alerts
@@ -148,7 +158,11 @@ class KafkaStream:
             }
         )
 
-        for p in self.path_alerts.glob("*.avro"):
+        alerts = list(self.path_alerts.glob("*.avro"))
+        if self.max_alerts is not None:
+            alerts = alerts[: self.max_alerts]
+        log(f"Streaming {len(alerts)} alerts")
+        for p in alerts:
             with open(str(p), "rb") as data:
                 # Trigger any available delivery report callbacks from previous produce() calls
                 producer.poll(0)
@@ -158,7 +172,18 @@ class KafkaStream:
                 # Asynchronously produce a message, the delivery report callback
                 # will be triggered from poll() above, or flush() below, when the message has
                 # been successfully delivered or failed permanently.
-                producer.produce(self.topic, data.read(), callback=delivery_report)
+                while True:
+                    try:
+                        producer.produce(
+                            self.topic, data.read(), callback=delivery_report
+                        )
+                        break
+                    except BufferError:
+                        print(
+                            "Local producer queue is full (%d messages awaiting delivery): try again\n"
+                            % len(producer)
+                        )
+                        time.sleep(1)
 
                 # Wait for any outstanding messages to be delivered and delivery report
                 # callbacks to be triggered.
@@ -208,7 +233,14 @@ class KafkaStream:
             os.remove(meta_properties)
 
     def __enter__(self):
-        self.start()
+        # when not in test mode, call the start method in a separate thread
+        # this helps so that you can start polling the topic right away
+        # otherwise, the start method will block until all alerts are ingested
+        # which is not possible if you are ingesting more alerts than the queue size
+        if self.test:
+            self.start()
+        else:
+            threading.Thread(target=self.start).start()
         self.as_context_manager = True
         time.sleep(15)  # give it a chance to finish ingesting properly
         return self

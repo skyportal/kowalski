@@ -67,21 +67,58 @@ def filter_template(upstream):
     return template
 
 
-def post_alert(worker, alert):
-    alert, _, _ = worker.alert_mongify(alert)
+def post_alert(worker: ZTFAlertWorker, alert, fp_cutoff=1):
+    delete_alert(worker, alert)
+    alert, prv_candidates, fp_hists = worker.alert_mongify(alert)
     # check if it already exists
     if worker.mongo.db[worker.collection_alerts].count_documents(
         {"candid": alert["candid"]}
     ):
         log(f"Alert {alert['candid']} already exists, skipping")
-        return
-    worker.mongo.insert_one(collection=worker.collection_alerts, document=alert)
+    else:
+        worker.mongo.insert_one(collection=worker.collection_alerts, document=alert)
+
+    if worker.mongo.db[worker.collection_alerts_aux].count_documents(
+        {"_id": alert["objectId"]}
+    ):
+        # delete if it exists
+        worker.mongo.delete_one(
+            collection=worker.collection_alerts_aux,
+            document={"_id": alert["objectId"]},
+        )
+
+    # fp_hists: pop nulls - save space
+    fp_hists = [
+        {kk: vv for kk, vv in fp_hist.items() if vv not in [None, -99999, -99999.0]}
+        for fp_hist in fp_hists
+    ]
+
+    fp_hists = worker.format_fp_hists(alert, fp_hists)
+
+    # sort fp_hists by jd
+    fp_hists = sorted(fp_hists, key=lambda x: x["jd"])
+
+    if fp_cutoff < 1:
+        index = int(fp_cutoff * len(fp_hists))
+        fp_hists = fp_hists[:index]
+
+    aux = {
+        "_id": alert["objectId"],
+        "prv_candidates": prv_candidates,
+        "cross_matches": {},
+        "fp_hists": fp_hists,
+    }
+    worker.mongo.insert_one(collection=worker.collection_alerts_aux, document=aux)
 
 
 def delete_alert(worker, alert):
     worker.mongo.delete_one(
         collection=worker.collection_alerts,
         document={"candidate.candid": alert["candid"]},
+    )
+    worker.mongo.delete_one(
+        collection=worker.collection_alerts_aux,
+        document={"_id": alert["objectId"]},
     )
 
 
@@ -155,6 +192,121 @@ class TestAlertBrokerZTF:
                 #     )
                 #     for k in new_fp_hists[i].keys():
                 #         assert new_fp_hists[i][k] == fp_hists[i][k]
+
+    def test_ingest_alert_with_fp_hists(self):
+        candid = 2475433850015010009
+        sample_avro = f"data/ztf_alerts/20231012/{candid}.avro"
+        alert_mag = 21.0
+        fp_hists = []
+        with open(sample_avro, "rb") as f:
+            records = [record for record in fastavro.reader(f)]
+            for record in records:
+                # delete_alert(self.worker, record)
+                alert, prv_candidates, fp_hists = self.worker.alert_mongify(record)
+                alert_mag = alert["candidate"]["magpsf"]
+                post_alert(self.worker, record, fp_cutoff=0.7)
+
+        # verify that the alert was ingested
+        assert (
+            self.worker.mongo.db[self.worker.collection_alerts].count_documents(
+                {"candid": candid}
+            )
+            == 1
+        )
+        assert (
+            self.worker.mongo.db[self.worker.collection_alerts_aux].count_documents(
+                {"_id": record["objectId"]}
+            )
+            == 1
+        )
+
+        # verify that fp_hists was ingested correctly
+        aux = self.worker.mongo.db[self.worker.collection_alerts_aux].find_one(
+            {"_id": record["objectId"]}
+        )
+        assert "fp_hists" in aux
+        assert len(aux["fp_hists"]) == 14  # we had a cutoff at 21 * 0.7 = 14.7, so 14
+
+        # print("---------- Original ----------")
+        # for fp in aux["fp_hists"]:
+        #     print(f"{fp['jd']}: {fp['alert_mag']}")
+
+        # fp_hists: pop nulls - save space and make sure its the same as what is in the DB
+        fp_hists = [
+            {kk: vv for kk, vv in fp_hist.items() if vv not in [None, -99999, -99999.0]}
+            for fp_hist in fp_hists
+        ]
+
+        # sort fp_hists by jd
+        fp_hists = sorted(fp_hists, key=lambda x: x["jd"])
+
+        # now, let's try the alert worker's update_fp_hists method, passing it the full fp_hists
+        # and verify that it we have 21 exactly
+
+        # first we add some forced photometry, where we have new rows, but overlapping rows from a fainter alert
+        record["candidate"]["magpsf"] = 30.0
+        # keep the last 10 fp_hists
+        fp_hists_copy = fp_hists[-10:]
+        # remove the last 2
+        fp_hists_copy = fp_hists_copy[:-2]
+
+        fp_hists_formatted = self.worker.format_fp_hists(alert, fp_hists_copy)
+        self.worker.update_fp_hists(record, fp_hists_formatted)
+
+        aux = self.worker.mongo.db[self.worker.collection_alerts_aux].find_one(
+            {"_id": record["objectId"]}
+        )
+        # print(aux)
+        assert "fp_hists" in aux
+        assert len(aux["fp_hists"]) == 19
+
+        # print("---------- First update ----------")
+        # for fp in aux["fp_hists"]:
+        #     print(f"{fp['jd']}: {fp['alert_mag']}")
+
+        # we should have the same first 14 fp_hists as before, then the new ones
+        assert all([aux["fp_hists"][i]["alert_mag"] == alert_mag for i in range(14)])
+        assert all([aux["fp_hists"][i]["alert_mag"] == 30.0 for i in range(14, 19)])
+
+        # verify they are still in order by jd (oldest to newest)
+        assert all(
+            [
+                aux["fp_hists"][i]["jd"] < aux["fp_hists"][i + 1]["jd"]
+                for i in range(len(aux["fp_hists"]) - 1)
+            ]
+        )
+
+        # now, the last 10 datapoints, but as if they were from a brighter alert
+        # we should have an overlap with both the original FP, and the datapoints (from faint alert) we just added
+        record["candidate"]["magpsf"] = 15.0
+        # keep the last 10 fp_hists
+        fp_hists_copy = fp_hists[-10:]
+
+        fp_hists_formatted = self.worker.format_fp_hists(alert, fp_hists_copy)
+        self.worker.update_fp_hists(record, fp_hists_formatted)
+
+        aux = self.worker.mongo.db[self.worker.collection_alerts_aux].find_one(
+            {"_id": record["objectId"]}
+        )
+
+        assert "fp_hists" in aux
+        assert len(aux["fp_hists"]) == 21
+
+        # print("---------- Last update ----------")
+        # for fp in aux["fp_hists"]:
+        #     print(f"{fp['jd']}: {fp['alert_mag']}")
+
+        # the result should be 21 fp_hists, with the first 11 being the same as before, and the last 10 being the same as the new fp_hists
+        assert all([aux["fp_hists"][i]["alert_mag"] == alert_mag for i in range(11)])
+        assert all([aux["fp_hists"][i]["alert_mag"] == 15.0 for i in range(11, 21)])
+
+        # verify they are still in order by jd (oldest to newest)
+        assert all(
+            [
+                aux["fp_hists"][i]["jd"] < aux["fp_hists"][i + 1]["jd"]
+                for i in range(len(aux["fp_hists"]) - 1)
+            ]
+        )
 
     def test_make_photometry(self):
         df_photometry = self.worker.make_photometry(self.alert)
