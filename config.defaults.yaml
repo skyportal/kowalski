@@ -1155,10 +1155,10 @@ kowalski:
         bts:
           triplet: True
           feature_names: ('sgscore1', 'distpsnr1', 'sgscore2', 'distpsnr2', 'fwhm', 'magpsf', 'sigmapsf', 'chipsf', 'ra', 'dec', 'diffmaglim', 'ndethist', 'nmtchps', 'age', 'days_since_peak', 'days_to_peak', 'peakmag_so_far', 'drb', 'ncovhist', 'nnondet', 'chinr', 'sharpnr', 'scorr', 'sky', 'maxmag_so_far')
-          version: "v1"
+          version: "v1.0.1"
           format: "pb"
           order: ["triplet", "features"]
-          url: "https://raw.githubusercontent.com/nabeelre/BTSbot/main/production_models/v1.tar.gz"
+          url: "https://raw.githubusercontent.com/nabeelre/BTSbot/main/production_models/v1.0.1.tar.gz"
 
 
   skyportal:
