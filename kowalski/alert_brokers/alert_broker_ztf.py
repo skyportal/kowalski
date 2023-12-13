@@ -559,6 +559,8 @@ class ZTFAlertWorker(AlertWorker, ABC):
             self.verbose > 1,
         ):
             update_pipeline = [
+                # 0. match the document
+                {"$match": {"_id": alert["objectId"]}},
                 # 1. concat the new fp_hists with the existing ones
                 {
                     "$project": {
@@ -617,6 +619,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
                     self.mongo.db[self.collection_alerts_aux]
                     .aggregate(
                         update_pipeline,
+                        allowDiskUse=True,
                     )
                     .next()
                     .get("fp_hists", [])
