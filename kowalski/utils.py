@@ -347,6 +347,8 @@ class Mongo:
 
         if self.replica_set is not None:
             conn_string += f"?replicaSet={self.replica_set}"
+        else:
+            conn_string += "?directConnection=true"
 
         self.client = pymongo.MongoClient(conn_string)
         self.db = self.client.get_database(db)
