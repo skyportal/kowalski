@@ -1185,6 +1185,23 @@ def compare_dicts(a: dict, b: dict, ignore_keys=[], same_keys=False):
         elif isinstance(v, list):
             if not all([i in b[k] for i in v]):
                 return False
+        elif k == "observation_type":
+            # we make an exception for observation_type, as the logic is a bit more complicated
+            # this has been designed with SEDM in mind, but can easily be extended to other instruments
+            obs_list = {"a": [], "b": []}
+            for dict_name, dict_content in [("a", a), ("b", b)]:
+                if dict_content[k] == "Mix 'n Match":
+                    obs_list[dict_name] = dict_content.get("observation_choices", [])
+                else:
+                    if "IFU" in dict_content[k]:
+                        obs_list[dict_name].append("IFU")
+
+                    if "3-shot" in dict_content[k]:
+                        obs_list[dict_name].extend(["g", "r", "i"])
+                    elif "4-shot" in dict_content[k]:
+                        obs_list[dict_name].extend(["u", "g", "r", "i"])
+            if not set(obs_list["a"]).issubset(set(obs_list["b"])):
+                return False
         elif b[k] != v:
             return False
     return True
