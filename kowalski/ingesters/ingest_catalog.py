@@ -409,6 +409,7 @@ def process_file(argument_list: Sequence):
             except Exception as exception:
                 total_bad_documents += 1
                 log(str(exception))
+                continue
 
             # ingest in batches
             try:
