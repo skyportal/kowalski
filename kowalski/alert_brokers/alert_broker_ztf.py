@@ -660,7 +660,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
                         .next()
                     )
 
-                    if len(last_fp_hist) == 0:
+                    if last_fp_hist is None:
                         # the pipeline first checked if the fp_hists field exists, so if it's empty,
                         # we can cancel the upadte, as we only update existing fp_hists (new objects with full history)
                         return
@@ -683,7 +683,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
                     update_conditions = {
                         "_id": alert["objectId"],
                     }
-                    if last_fp_hist[0]["n_fp_hists"] == 0:
+                    if last_fp_hist["n_fp_hists"] == 0:
                         # existing BUT empty fp_hists field for that object, we verify that it is still empty
                         update_conditions["fp_hists.0"] = {"$exists": False}
                     else:
