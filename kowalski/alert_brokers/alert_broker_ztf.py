@@ -475,7 +475,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
                 ):
                     try:
                         response = self.api_skyportal(
-                            "PUT", "/api/photometry", photometry
+                            "PUT", "/api/photometry", photometry, timeout=15
                         )
                         if response.json()["status"] == "success":
                             log(
