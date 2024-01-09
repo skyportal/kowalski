@@ -486,12 +486,15 @@ class AlertWorker:
             )
         log("AlertWorker setup complete")
 
-    def api_skyportal(self, method: str, endpoint: str, data: Optional[Mapping] = None):
+    def api_skyportal(
+        self, method: str, endpoint: str, data: Optional[Mapping] = None, **kwargs
+    ):
         """Make an API call to a SkyPortal instance
 
         :param method:
         :param endpoint:
         :param data:
+        :param kwargs:
         :return:
         """
         method = method.lower()
@@ -509,6 +512,8 @@ class AlertWorker:
         if method not in ["head", "get", "post", "put", "patch", "delete"]:
             raise ValueError(f"Unsupported method: {method}")
 
+        timeout = kwargs.get("timeout", 5)
+
         if method == "get":
             response = methods[method](
                 f"{config['skyportal']['protocol']}://"
@@ -516,6 +521,7 @@ class AlertWorker:
                 f"{endpoint}",
                 params=data,
                 headers=self.session_headers,
+                timeout=timeout,
             )
         else:
             response = methods[method](
@@ -524,6 +530,7 @@ class AlertWorker:
                 f"{endpoint}",
                 json=data,
                 headers=self.session_headers,
+                timeout=timeout,
             )
 
         return response
@@ -1367,11 +1374,9 @@ class AlertWorker:
                             if not isinstance(_filter.get("autosave", False), bool):
                                 passed_filter["auto_followup"]["data"][
                                     "ignore_source_group_ids"
-                                ] = [
-                                    _filter.get("autosave", {}).get(
-                                        "ignore_group_ids", []
-                                    )
-                                ]
+                                ] = _filter.get("autosave", {}).get(
+                                    "ignore_group_ids", []
+                                )
 
                     passed_filters.append(passed_filter)
 

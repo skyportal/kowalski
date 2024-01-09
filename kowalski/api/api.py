@@ -3296,18 +3296,23 @@ class SkymapHandler(Handler):
 
         # check if the skymap already exists
 
+        query = {
+            "$and": [
+                {
+                    "$or": [
+                        {"dateobs": dateobs},
+                        {"triggerid": triggerid},
+                    ],
+                },
+                {"localization_name": skymap["localization_name"]},
+            ]
+        }
+        if len(aliases) > 0:
+            query["$and"][0]["$or"].append({"aliases": {"$all": aliases}})
+
         existing_skymap = await request.app["mongo"][
             config["database"]["collections"]["skymaps"]
-        ].find_one(
-            {
-                "$or": [
-                    {"dateobs": dateobs},
-                    {"triggerid": triggerid},
-                    {"aliases": {"$all": aliases}},
-                ],
-                "localization_name": skymap["localization_name"],
-            }
-        )
+        ].find_one(query)
 
         existing_contour_levels = []
         missing_contour_levels = []
