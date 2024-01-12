@@ -891,7 +891,9 @@ def watchdog(obs_date: str = None, test: bool = False):
 
                     for i in range(processes_per_topic):
                         topics_on_watch[t][i].daemon = True
-                        log(f"set daemon to true {topics_on_watch}")
+                        log(
+                            f"set daemon to true for thread {i} topic {topics_on_watch}"
+                        )
                         topics_on_watch[t][i].start()
 
                 else:
