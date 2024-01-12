@@ -865,38 +865,12 @@ def watchdog(obs_date: str = None, test: bool = False):
                 ]
             log(f"Topics: {topics_tonight}")
 
+            processes_per_topic = (
+                config["kafka"].get("processes_per_topic", {}).get("ZTF", 1)
+            )
+
             for t in topics_tonight:
-                if t not in topics_on_watch:
-                    log(f"Starting listener thread for {t}")
-                    offset_reset = config["kafka"]["default.topic.config"][
-                        "auto.offset.reset"
-                    ]
-                    if not test:
-                        bootstrap_servers = config["kafka"]["bootstrap.servers"]
-                    else:
-                        bootstrap_servers = config["kafka"]["bootstrap.test.servers"]
-                    group = config["kafka"]["group"]
-
-                    processes_per_topic = (
-                        config["kafka"].get("processes_per_topic", {}).get("ZTF", 1)
-                    )
-                    topics_on_watch[t] = []
-                    for _ in range(processes_per_topic):
-                        topics_on_watch[t].append(
-                            multiprocessing.Process(
-                                target=topic_listener,
-                                args=(t, bootstrap_servers, offset_reset, group, test),
-                            )
-                        )
-
-                    for i in range(processes_per_topic):
-                        topics_on_watch[t][i].daemon = True
-                        log(
-                            f"set daemon to true for thread {i} topic {topics_on_watch}"
-                        )
-                        topics_on_watch[t][i].start()
-
-                else:
+                if t in topics_on_watch and len(topics_on_watch[t]) > 0:
                     log(f"Performing thread health check for {t}")
                     try:
                         for i in range(len(topics_on_watch[t])):
@@ -911,6 +885,43 @@ def watchdog(obs_date: str = None, test: bool = False):
                     except Exception as _e:
                         log(f"Failed to perform health check: {_e}")
                         pass
+
+                if (
+                    t not in topics_on_watch
+                    or len(topics_on_watch[t]) < processes_per_topic
+                ):
+                    current_processes = 0
+                    missing_processes = processes_per_topic
+                    if t not in topics_on_watch:
+                        log(f"Starting listener thread(s) for {t}")
+                        topics_on_watch[t] = []
+                    else:
+                        log(f"Restarting missing listener thread(s) for {t}")
+                        current_processes = len(topics_on_watch[t])
+                        missing_processes -= len(topics_on_watch[t])
+                    offset_reset = config["kafka"]["default.topic.config"][
+                        "auto.offset.reset"
+                    ]
+                    if not test:
+                        bootstrap_servers = config["kafka"]["bootstrap.servers"]
+                    else:
+                        bootstrap_servers = config["kafka"]["bootstrap.test.servers"]
+                    group = config["kafka"]["group"]
+
+                    for _ in range(missing_processes):
+                        topics_on_watch[t].append(
+                            multiprocessing.Process(
+                                target=topic_listener,
+                                args=(t, bootstrap_servers, offset_reset, group, test),
+                            )
+                        )
+
+                    for i in range(current_processes, len(topics_on_watch[t])):
+                        topics_on_watch[t][i].daemon = True
+                        log(
+                            f"set daemon to true for thread {i} topic {topics_on_watch}"
+                        )
+                        topics_on_watch[t][i].start()
 
             if test:
                 time.sleep(120)
