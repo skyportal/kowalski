@@ -39,6 +39,8 @@ kowalski:
     bootstrap.test.servers: "localhost:9092"
     zookeeper.test: "localhost:2181"
     path: "kafka_2.13-3.4.1"
+    processes_per_topic:
+      ZTF: 2
 
   database:
     max_pool_size: 200
