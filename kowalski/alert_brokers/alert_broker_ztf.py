@@ -317,8 +317,6 @@ class ZTFAlertWorker(AlertWorker, ABC):
                     self.verbose > 1,
                 ):
                     response = self.api_skyportal_get_group(active_filter["group_id"])
-                if self.verbose > 1:
-                    log(response.json())
                 if response.json()["status"] == "success":
                     group_name = (
                         response.json()["data"]["nickname"]
@@ -861,6 +859,7 @@ def watchdog(obs_date: str = None, test: bool = False):
                     for t in topics
                     if (datestr in t)
                     and ("programid" in t)
+                    and ("ztf" in t)
                     and ("zuds" not in t)
                     and ("pgir" not in t)
                 ]
@@ -878,23 +877,35 @@ def watchdog(obs_date: str = None, test: bool = False):
                         bootstrap_servers = config["kafka"]["bootstrap.test.servers"]
                     group = config["kafka"]["group"]
 
-                    topics_on_watch[t] = multiprocessing.Process(
-                        target=topic_listener,
-                        args=(t, bootstrap_servers, offset_reset, group, test),
+                    processes_per_topic = (
+                        config["kafka"].get("processes_per_topic", {}).get("ZTF", 1)
                     )
-                    topics_on_watch[t].daemon = True
-                    log(f"set daemon to true {topics_on_watch}")
-                    topics_on_watch[t].start()
+                    topics_on_watch[t] = []
+                    for _ in range(processes_per_topic):
+                        topics_on_watch[t].append(
+                            multiprocessing.Process(
+                                target=topic_listener,
+                                args=(t, bootstrap_servers, offset_reset, group, test),
+                            )
+                        )
+
+                    for i in range(processes_per_topic):
+                        topics_on_watch[t][i].daemon = True
+                        log(f"set daemon to true {topics_on_watch}")
+                        topics_on_watch[t][i].start()
 
                 else:
                     log(f"Performing thread health check for {t}")
                     try:
-                        if not topics_on_watch[t].is_alive():
-                            log(f"Thread {t} died, removing")
-                            # topics_on_watch[t].terminate()
-                            topics_on_watch.pop(t, None)
-                        else:
-                            log(f"Thread {t} appears normal")
+                        for i in range(len(topics_on_watch[t])):
+                            if not topics_on_watch[t][i].is_alive():
+                                log(f"Thread {i} topic {t} died, removing")
+                                topics_on_watch[t].pop(i)
+                            else:
+                                log(f"Thread {i} topic {t} appears normal")
+                        if len(topics_on_watch[t]) == 0:
+                            log(f"Topic {t} has no threads left, removing")
+                            topics_on_watch.pop(t)
                     except Exception as _e:
                         log(f"Failed to perform health check: {_e}")
                         pass
@@ -903,7 +914,9 @@ def watchdog(obs_date: str = None, test: bool = False):
                 time.sleep(120)
                 # when testing, wait for topic listeners to pull all the data, then break
                 for t in topics_on_watch:
-                    topics_on_watch[t].kill()
+                    for i in range(len(topics_on_watch[t])):
+                        topics_on_watch[t][i].kill()
+                        log(f"Test mode: Killed thread {i} - topic {t} after 120s")
                 break
 
         except Exception as e:
