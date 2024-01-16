@@ -132,8 +132,16 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 "prv_candidates": prv_candidates,
             }
 
-            # only add the fp_hists if its a brand new object, not just if there is no entry there
-            if alert["candidate"]["ndethist"] <= 1:
+            # only add the fp_hists if its a recent/new object, which we determine based on either:
+            # - ndethist <= 1, we never detected it before
+            # - we detected it before (maybe missed a few alerts), but the first detection was
+            #   less than 30 days ago, which is the maximum time window of the incoming data
+            #   which means that we still have a lightcurve that dates back to the first detection
+            if (
+                alert["candidate"]["ndethist"] <= 1
+                or (alert["candidate"]["jd"] - alert["candidate"].get("jdstarthist", 0))
+                < 30
+            ):
                 alert_aux["fp_hists"] = alert_worker.format_fp_hists(alert, fp_hists)
 
             with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
