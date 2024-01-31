@@ -91,6 +91,11 @@ def process_file(argument_list: Sequence):
             nhdu = 1
             names = hdulist[nhdu].columns.names
             dataframe = pd.DataFrame(np.asarray(hdulist[nhdu].data), columns=names)
+            for col in dataframe.columns:
+                if dataframe[col].dtype in [">f4", ">f8"]:
+                    dataframe[col] = dataframe[col].astype(float)
+                elif dataframe[col].dtype in [">i2", ">i4", ">i8"]:
+                    dataframe[col] = dataframe[col].astype(int)
 
         if max_docs is not None and isinstance(max_docs, int):
             dataframe = dataframe.iloc[:max_docs]
@@ -171,6 +176,8 @@ def process_file(argument_list: Sequence):
                     # GeoJSON for 2D indexing
                     document["coordinates"] = dict()
                     # string format: H:M:S, D:M:S
+                    if document[ra_col] == 360.0:
+                        document[ra_col] = 0.0
                     document["coordinates"]["radec_str"] = [
                         deg2hms(document[ra_col]),
                         deg2dms(document[dec_col]),
@@ -181,6 +188,17 @@ def process_file(argument_list: Sequence):
                         "type": "Point",
                         "coordinates": _radec_geojson,
                     }
+
+                    # if the entry is a string, strip it
+                    # if it ends up being an empty string, it will be dropped
+                    keys_to_pop = []
+                    for key, value in document.items():
+                        if isinstance(value, str):
+                            document[key] = value.strip()
+                            if not document[key] or len(document[key]) == 0:
+                                keys_to_pop.append(key)
+                    for key in keys_to_pop:
+                        document.pop(key)
                 except Exception as e:
                     log(str(e))
                     bad_document_indexes.append(document_index)
@@ -292,7 +310,7 @@ def process_file(argument_list: Sequence):
             mongo.insert_many(collection=collection, documents=batch)
 
     elif format == "parquet":
-        df = pq.read_table(file).to_pandas()
+        df: pd.DataFrame = pq.read_table(file).to_pandas()
         for name in list(df.columns):
             if name.startswith("_"):
                 df.rename(columns={name: name[1:]}, inplace=True)
