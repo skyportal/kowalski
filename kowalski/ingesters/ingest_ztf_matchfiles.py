@@ -153,16 +153,30 @@ def process_file(argument_list: Sequence):
 
             def clean_up_document(document):
                 """Format passed in dicts for Mongo insertion"""
+                # we found some edge cases where the documents already had a "coordinates" field
+                # which was empty. If that happens, remove it
+                if (
+                    "coordinates" in document
+                    and type(document["coordinates"]) == dict
+                    and len(document["coordinates"]) == 0
+                ):
+                    document.pop("coordinates")
                 # convert types for pymongo:
                 for k, v in document.items():
-                    if k != "data":
-                        if k in sources_int_fields:
-                            document[k] = int(document[k])
-                        else:
-                            document[k] = float(document[k])
-                            if k not in ("ra", "dec"):
-                                # this will save a lot of space:
-                                document[k] = round(document[k], 3)
+                    try:
+                        if k != "data":
+                            if k in sources_int_fields:
+                                document[k] = int(document[k])
+                            else:
+                                document[k] = float(document[k])
+                                if k not in ("ra", "dec"):
+                                    # this will save a lot of space:
+                                    document[k] = round(document[k], 3)
+                    except Exception as e:
+                        log(
+                            f"Failed to convert {k} to int or float: {e}, with value {str(v)}"
+                        )
+                        raise e
 
                 # generate unique _id:
                 document["_id"] = baseid + document["matchid"]
@@ -176,6 +190,8 @@ def process_file(argument_list: Sequence):
                 document["coordinates"] = dict()
                 _ra = document["ra"]
                 _dec = document["dec"]
+                if _ra == 360.0:
+                    _ra = 0.0
                 _radec_str = [deg2hms(_ra), deg2dms(_dec)]
                 document["coordinates"]["radec_str"] = _radec_str
                 # for GeoJSON, must be lon:[-180, 180], lat:[-90, 90] (i.e. in deg)
@@ -515,6 +531,11 @@ def run(
     with multiprocessing.Pool(processes=num_proc) as pool:
         for _ in tqdm(pool.imap(process_file, input_list), total=len(files)):
             pass
+
+    with multiprocessing.Pool(processes=num_proc) as pool:
+        with tqdm(total=len(files)) as pbar:
+            for _ in pool.imap_unordered(process_file, input_list):
+                pbar.update(1)
 
 
 if __name__ == "__main__":

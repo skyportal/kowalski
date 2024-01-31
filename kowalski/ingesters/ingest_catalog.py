@@ -292,7 +292,7 @@ def process_file(argument_list: Sequence):
             mongo.insert_many(collection=collection, documents=batch)
 
     elif format == "parquet":
-        df = pq.read_table(file).to_pandas()
+        df: pd.DataFrame = pq.read_table(file).to_pandas()
         for name in list(df.columns):
             if name.startswith("_"):
                 df.rename(columns={name: name[1:]}, inplace=True)
