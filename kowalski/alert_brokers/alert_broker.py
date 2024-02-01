@@ -1368,6 +1368,7 @@ class AlertWorker:
                                     "source_group_ids": [_filter["group_id"]],
                                     "not_if_classified": True,
                                     "not_if_spectra_exist": True,
+                                    "not_if_tns_classified": True,
                                 },
                             }
 
