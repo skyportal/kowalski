@@ -379,6 +379,31 @@ kowalski:
                           },
                       },
                   },
+                "fp_hists":
+                  {
+                    "$filter":
+                      {
+                        "input": { "$arrayElemAt": ["$aux.fp_hists", 0] },
+                        "as": "item",
+                        "cond":
+                          {
+                            "$and":
+                              [
+                                { "$in": ["$$item.programid", null] },
+                                {
+                                  "$lt":
+                                    [
+                                      {
+                                        "$subtract":
+                                          ["$candidate.jd", "$$item.jd"],
+                                      },
+                                      365,
+                                    ],
+                                },
+                              ],
+                          },
+                      },
+                  },
                 "schemavsn": 1,
                 "publisher": 1,
                 "objectId": 1,
