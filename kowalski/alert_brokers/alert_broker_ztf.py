@@ -355,6 +355,10 @@ class ZTFAlertWorker(AlertWorker, ABC):
                 pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0][
                     "$in"
                 ][1] = active_filter["permissions"]
+                if "fp_hists" in pipeline[3]["$project"]:
+                    pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"]["$and"][0][
+                        "$in"
+                    ][1] = active_filter["permissions"]
 
                 # if autosave is a dict with a pipeline key, also add the upstream pipeline to it:
                 if (
