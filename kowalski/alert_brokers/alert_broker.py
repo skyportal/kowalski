@@ -1314,6 +1314,34 @@ class AlertWorker:
                                 "priority"
                             ] = lambda alert, alert_history, data: 5
 
+                        # validate the optional radius key, and set to 0.5 arcsec if not present
+                        if auto_followup_filter.get("radius", None) is None:
+                            auto_followup_filter["radius"] = 0.5
+                        else:
+                            try:
+                                auto_followup_filter["radius"] = float(
+                                    auto_followup_filter["radius"]
+                                )
+                            except Exception:
+                                log(
+                                    f'Filter {_filter["fid"]} has an invalid auto-followup radius, using default of 0.5 arcsec'
+                                )
+                                auto_followup_filter["radius"] = 0.5
+
+                        # validate the optional validity_days key, and set to 7 days if not present
+                        if auto_followup_filter.get("validity_days", None) is None:
+                            auto_followup_filter["validity_days"] = 7
+                        else:
+                            try:
+                                auto_followup_filter["validity_days"] = int(
+                                    auto_followup_filter["validity_days"]
+                                )
+                            except Exception:
+                                log(
+                                    f'Filter {_filter["fid"]} has an invalid auto-followup validity_days, using default of 7 days'
+                                )
+                                auto_followup_filter["validity_days"] = 7
+
                         # match candid
                         auto_followup_filter["pipeline"][0]["$match"]["candid"] = alert[
                             "candid"
@@ -1360,7 +1388,11 @@ class AlertWorker:
                                         ),
                                         "end_date": (
                                             datetime.datetime.utcnow()
-                                            + datetime.timedelta(days=7)
+                                            + datetime.timedelta(
+                                                days=_filter["auto_followup"].get(
+                                                    "validity_days", 7
+                                                )
+                                            )
                                         ).strftime("%Y-%m-%dT%H:%M:%S.%f"),
                                         # one week validity window
                                     },
@@ -1369,6 +1401,10 @@ class AlertWorker:
                                     "not_if_classified": True,
                                     "not_if_spectra_exist": True,
                                     "not_if_tns_classified": True,
+                                    "not_if_duplicates": True,
+                                    "radius": _filter["auto_followup"].get(
+                                        "radius", 0.5
+                                    ),  # in arcsec
                                 },
                             }
 
