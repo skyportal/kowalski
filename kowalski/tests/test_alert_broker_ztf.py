@@ -451,11 +451,11 @@ class TestAlertBrokerZTF:
         assert passed_filters[0]["auto_followup"]["data"]["payload"]["priority"] == 3
         assert passed_filters[0]["auto_followup"]["data"]["radius"] == 1.0
         start_date = datetime.strptime(
-            passed_filters[0]["auto_followup"]["data"]["start_date"],
+            passed_filters[0]["auto_followup"]["data"]["payload"]["start_date"],
             "%Y-%m-%dT%H:%M:%S.%f",
         )
         end_date = datetime.strptime(
-            passed_filters[0]["auto_followup"]["data"]["end_date"],
+            passed_filters[0]["auto_followup"]["data"]["payload"]["end_date"],
             "%Y-%m-%dT%H:%M:%S.%f",
         )
         assert (end_date - start_date).days == 3
