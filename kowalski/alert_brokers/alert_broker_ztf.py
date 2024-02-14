@@ -378,6 +378,15 @@ class ZTFAlertWorker(AlertWorker, ABC):
                     ]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter[
                         "permissions"
                     ]
+                    if (
+                        "fp_hists"
+                        in active_filter["autosave"]["pipeline"][3]["$project"]
+                    ):
+                        active_filter["autosave"]["pipeline"][3]["$project"][
+                            "fp_hists"
+                        ]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter[
+                            "permissions"
+                        ]
                 # same for the auto_followup pipeline:
                 if (
                     isinstance(active_filter.get("auto_followup", None), dict)
@@ -396,6 +405,15 @@ class ZTFAlertWorker(AlertWorker, ABC):
                     ]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter[
                         "permissions"
                     ]
+                    if (
+                        "fp_hists"
+                        in active_filter["auto_followup"]["pipeline"][3]["$project"]
+                    ):
+                        active_filter["auto_followup"]["pipeline"][3]["$project"][
+                            "fp_hists"
+                        ]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter[
+                            "permissions"
+                        ]
 
                 filter_template = {
                     "group_id": active_filter["group_id"],
