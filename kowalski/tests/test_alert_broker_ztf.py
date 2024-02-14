@@ -1,9 +1,12 @@
+from copy import deepcopy
+from datetime import datetime
+
 import fastavro
 import pytest
+
 from kowalski.alert_brokers.alert_broker_ztf import ZTFAlertWorker
 from kowalski.config import load_config
 from kowalski.log import log
-from copy import deepcopy
 
 """ load config and secrets """
 config = load_config(config_files=["config.yaml"])["kowalski"]
@@ -432,6 +435,8 @@ class TestAlertBrokerZTF:
                 "observation_type": "IFU",
                 "priority": 3,
             },
+            "radius": 1.0,
+            "validity_days": 3,
         }
         passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
         delete_alert(self.worker, self.alert)
@@ -444,6 +449,16 @@ class TestAlertBrokerZTF:
             == "IFU"
         )
         assert passed_filters[0]["auto_followup"]["data"]["payload"]["priority"] == 3
+        assert passed_filters[0]["auto_followup"]["data"]["radius"] == 1.0
+        start_date = datetime.strptime(
+            passed_filters[0]["auto_followup"]["data"]["payload"]["start_date"],
+            "%Y-%m-%dT%H:%M:%S.%f",
+        )
+        end_date = datetime.strptime(
+            passed_filters[0]["auto_followup"]["data"]["payload"]["end_date"],
+            "%Y-%m-%dT%H:%M:%S.%f",
+        )
+        assert (end_date - start_date).days == 3
 
     def test_alert_filter__user_defined_followup_with_broker(self):
         """Test pushing an alert through a filter that also has auto follow-up activated, and broker mode activated"""
