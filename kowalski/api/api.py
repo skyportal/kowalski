@@ -2108,6 +2108,10 @@ class FilterHandler(Handler):
                     filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"][
                         "$and"
                     ][0]["$in"][1] = filter_new.permissions
+                    if "fp_hists" in filter_template[3]["$project"]:
+                        filter_template[3]["$project"]["fp_hists"]["$filter"]["cond"][
+                            "$and"
+                        ][0]["$in"][1] = filter_new.permissions
                 cursor = request.app["mongo"][filter_new.catalog].aggregate(
                     filter_template, allowDiskUse=False, maxTimeMS=3000
                 )
@@ -2200,6 +2204,10 @@ class FilterHandler(Handler):
                     filter_template[3]["$project"]["prv_candidates"]["$filter"]["cond"][
                         "$and"
                     ][0]["$in"][1] = permissions
+                    if "fp_hists" in filter_template[3]["$project"]:
+                        filter_template[3]["$project"]["fp_hists"]["$filter"]["cond"][
+                            "$and"
+                        ][0]["$in"][1] = permissions
                 try:
                     cursor = request.app["mongo"][catalog].aggregate(
                         filter_template, allowDiskUse=False, maxTimeMS=3000
@@ -2472,6 +2480,12 @@ class FilterHandler(Handler):
                                 ]["cond"]["$and"][0]["$in"][
                                     1
                                 ] = filter_existing.permissions
+                                if "fp_hists" in filter_template[3]["$project"]:
+                                    filter_template[3]["$project"]["fp_hists"][
+                                        "$filter"
+                                    ]["cond"]["$and"][0]["$in"][
+                                        1
+                                    ] = filter_existing.permissions
                             try:
                                 cursor = request.app["mongo"][
                                     filter_existing.catalog
