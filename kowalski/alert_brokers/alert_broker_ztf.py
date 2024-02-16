@@ -111,6 +111,10 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             for fp_hist in fp_hists
         ]
 
+        # format fp_hists, add alert_mag, alert_ra, alert_dec
+        # and computing the FP's mag, magerr, snr, limmag3sig, limmag5sig
+        fp_hists = alert_worker.format_fp_hists(alert, fp_hists)
+
         alert_aux, xmatches, passed_filters = None, None, None
         # cross-match with external catalogs if objectId not in collection_alerts_aux:
         if (
@@ -142,7 +146,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 or (alert["candidate"]["jd"] - alert["candidate"].get("jdstarthist", 0))
                 < 30
             ):
-                alert_aux["fp_hists"] = alert_worker.format_fp_hists(alert, fp_hists)
+                alert_aux["fp_hists"] = fp_hists
 
             with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
                 retry(alert_worker.mongo.insert_one)(
@@ -166,6 +170,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 # the idea is that we start accumulating FP only for new objects, to avoid
                 # having some objects with incomplete FP history, which would be confusing for the filters
                 # either there is full FP, or there isn't any
+                # we also update the fp_hists array we have here with the updated 30-day window
                 if (
                     retry(
                         alert_worker.mongo.db[
@@ -177,9 +182,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                     )
                     == 1
                 ):
-                    alert_worker.update_fp_hists(
-                        alert, alert_worker.format_fp_hists(alert, fp_hists)
-                    )
+                    fp_hists = alert_worker.update_fp_hists(alert, fp_hists)
 
         if config["misc"]["broker"]:
             # execute user-defined alert filters
@@ -193,7 +196,9 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 )
 
             # post to SkyPortal
-            alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+            alert_worker.alert_sentinel_skyportal(
+                alert, prv_candidates, fp_hists=fp_hists, passed_filters=passed_filters
+            )
 
         # clean up after thyself
         del (
@@ -462,7 +467,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
             f"Making alert photometry of {alert['objectId']} {alert['candid']}",
             self.verbose > 1,
         ):
-            df_photometry = self.make_photometry(alert)
+            df_photometry = self.make_photometry(alert, include_fp_hists=True)
 
             log(
                 f"Alert {alert['objectId']} contains program_ids={df_photometry['programid']}"
@@ -758,6 +763,25 @@ class ZTFAlertWorker(AlertWorker, ABC):
                         time.sleep(np.random.uniform(0, 5))
                 else:
                     break
+
+            # query the DB for the last 30 days of fp_hists to get the updated fp_hists
+            new_fp_hists = list(
+                self.mongo.db[self.collection_alerts_aux]
+                .find(
+                    {
+                        "_id": alert["objectId"],
+                        "fp_hists.jd": {"$gte": alert["candidate"]["jd"] - 30},
+                    },
+                    {"fp_hists": 1},
+                )
+                .sort([("jd", 1)])
+            )
+            if len(new_fp_hists) > 0:
+                new_fp_hists = new_fp_hists[0]["fp_hists"]
+            else:
+                new_fp_hists = []
+
+            return new_fp_hists
 
 
 class WorkerInitializer(dask.distributed.WorkerPlugin):

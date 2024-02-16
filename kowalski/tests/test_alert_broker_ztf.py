@@ -315,6 +315,25 @@ class TestAlertBrokerZTF:
         df_photometry = self.worker.make_photometry(self.alert)
         assert len(df_photometry) == 32
 
+    def test_make_photometry_with_fp_hists(self):
+        # here we ingest an alert with fp_hists, and verify that the photometry is correct
+        candid = 2475433850015010009
+        sample_avro = f"data/ztf_alerts/20231012/{candid}.avro"
+        with open(sample_avro, "rb") as f:
+            records = [record for record in fastavro.reader(f)]
+            for record in records:
+                post_alert(self.worker, record, fp_cutoff=1)
+
+        df_photometry = self.worker.make_photometry(record, include_fp_hists=True)
+        assert len(df_photometry) == 38
+        # should be 20 prv_candidates + 18 fp_hists
+        # prv_candidates have origin = None, and fp_hists have origin = 'alert_fp'
+        assert "origin" in df_photometry.columns
+        assert len(df_photometry[df_photometry["origin"] == "alert_fp"]) == 17
+        assert len(df_photometry[df_photometry["origin"].isnull()]) == 21
+        # verify that they all have a fluxerr value
+        assert all(df_photometry["fluxerr"].notnull())
+
     def test_make_thumbnails(self):
         alert, _, _ = self.worker.alert_mongify(self.alert)
         for ttype, istrument_type in [
@@ -557,7 +576,9 @@ class TestAlertBrokerZTF:
         assert passed_filters[1]["auto_followup"]["data"]["payload"]["priority"] == 3
 
         alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
-        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
 
         # now fetch the follow-up request from SP
         # it should have deduplicated and used the highest priority
@@ -599,7 +620,9 @@ class TestAlertBrokerZTF:
         assert passed_filters[1]["auto_followup"]["data"]["payload"]["priority"] == 4
 
         alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
-        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
 
         # now fetch the follow-up request from SP
         # it should have deduplicated and used the highest priority
@@ -648,7 +671,9 @@ class TestAlertBrokerZTF:
         ).issubset(set([target_group_id] + [saved_group_id]))
 
         alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
-        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
 
         # now fetch the follow-up request from SP
         # we should still have just one follow-up request, the exact same as before
@@ -696,7 +721,9 @@ class TestAlertBrokerZTF:
         )
 
         alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
-        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
 
         # now fetch the source from SP
         response = self.worker.api_skyportal(
@@ -757,7 +784,9 @@ class TestAlertBrokerZTF:
         )
 
         alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
-        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
 
         # now fetch the source from SP
         response = self.worker.api_skyportal(
@@ -835,7 +864,9 @@ class TestAlertBrokerZTF:
         )
 
         alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
-        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
 
         # now fetch the follow-up request from SP
         # we should not have any submitted follow-up requests
