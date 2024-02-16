@@ -2470,6 +2470,12 @@ class FilterHandler(Handler):
                                 ]["cond"]["$and"][0]["$in"][
                                     1
                                 ] = filter_existing.permissions
+                                if "fp_hists" in filter_template[3]["$project"]:
+                                    filter_template[3]["$project"]["fp_hists"][
+                                        "$filter"
+                                    ]["cond"]["$and"][0]["$in"][
+                                        1
+                                    ] = filter_existing.permissions
                             try:
                                 cursor = request.app["mongo"][
                                     filter_existing.catalog
