@@ -85,6 +85,8 @@ AUTO_FOLLOWUP_KEYS = {
     "target_group_ids": list,
     "validity_days": int,
     "radius": float,
+    "radius": float,
+    "validity_days": int,
 }
 
 
