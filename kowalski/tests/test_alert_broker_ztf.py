@@ -33,7 +33,7 @@ def alert_fixture(request):
     log("Successfully loaded")
 
 
-def filter_template(upstream):
+def filter_template(upstream, include_fp_hists=False):
     # prepend upstream aggregation stages:
     upstream_pipeline = config["database"]["filters"][upstream]
     pipeline = upstream_pipeline + [
@@ -48,8 +48,20 @@ def filter_template(upstream):
                 "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
             }
         },
-        {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
+        {
+            "$project": {
+                "_id": 0,
+                "candid": 1,
+                "objectId": 1,
+                "annotations": 1,
+                "t_now": "$candidate.jd",
+            }
+        },
     ]
+    # if include_fp_hists:
+    if include_fp_hists:
+        pipeline[-1]["$project"]["fp_hists"] = 1
+
     # set permissions
     pipeline[0]["$match"]["candidate.programid"]["$in"] = [0, 1, 2, 3]
     pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][
@@ -951,7 +963,7 @@ class TestAlertBrokerZTF:
             for record in records:
                 post_alert(self.worker, record, fp_cutoff=1)
 
-        filter = filter_template(self.worker.collection_alerts)
+        filter = filter_template(self.worker.collection_alerts, include_fp_hists=True)
         filter["autosave"] = True
         # we edit the pipeline to include a condition that uses the forced photometry
         # for reference, this condition checks if we have any detections in forced photomety
@@ -1003,6 +1015,7 @@ class TestAlertBrokerZTF:
         passed_filters = self.worker.alert_filter__user_defined([filter], record)
 
         assert passed_filters is not None
+        print(passed_filters)
         assert len(passed_filters) == 1
         assert "autosave" in passed_filters[0]
 
@@ -1016,6 +1029,10 @@ class TestAlertBrokerZTF:
 
         # format the forced photometry
         fp_hists_formatted = self.worker.format_fp_hists(alert, fp_hists)
+
+        # only run the rest if the broker mode is activated
+        if config["misc"].get("broker", False) is False:
+            pytest.skip("Broker mode not activated, skipping the rest of the test")
 
         self.worker.alert_sentinel_skyportal(
             alert,

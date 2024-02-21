@@ -744,6 +744,10 @@ class AlertWorker:
             df_light_curve["filter"] = df_light_curve["fid"].apply(
                 lambda x: nir_filters[x]
             )
+        elif self.instrument == "TURBO":
+            # the filters are just the fid values
+            # TODO: add the actual filter names
+            df_light_curve["filter"] = df_light_curve["fid"].apply(lambda x: str(x))
 
         df_light_curve["mjd"] = df_light_curve["jd"] - 2400000.5
 
@@ -820,16 +824,9 @@ class AlertWorker:
                 df_fp_hists["filter"] = df_fp_hists["fid"].apply(
                     lambda x: ztf_filters[x]
                 )
-            elif self.instrument == "PGIR":
-                # fixme: PGIR uses 2massj, which is not in sncosmo as of 20210803
-                #        cspjs seems to be close/good enough as an approximation
-                df_light_curve["filter"] = "cspjs"
-            elif self.instrument == "WNTR":
-                # 20220818: added WNTR
-                # 20220929: nir bandpasses have been added to sncosmo
-                nir_filters = {0: "ps1::y", 1: "2massj", 2: "2massh", 3: "2massks"}
-                df_fp_hists["filter"] = df_fp_hists["fid"].apply(
-                    lambda x: nir_filters[x]
+            else:
+                raise NotImplementedError(
+                    f"Processing of forced photometry for {self.instrument} not implemented"
                 )
 
             # add mjd and convert columns to float
