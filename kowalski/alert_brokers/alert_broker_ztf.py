@@ -496,6 +496,9 @@ class ZTFAlertWorker(AlertWorker, ABC):
                 "filter": df_photometry.loc[stream_id_mask, "filter"].tolist(),
                 "ra": df_photometry.loc[stream_id_mask, "ra"].tolist(),
                 "dec": df_photometry.loc[stream_id_mask, "dec"].tolist(),
+                "origin": df_photometry.loc[stream_id_mask, "origin"].tolist()
+                if "origin" in df_photometry
+                else [],
             }
 
             if (len(photometry.get("flux", ())) > 0) or (
@@ -508,7 +511,10 @@ class ZTFAlertWorker(AlertWorker, ABC):
                 ):
                     try:
                         response = self.api_skyportal(
-                            "PUT", "/api/photometry", photometry, timeout=15
+                            "PUT",
+                            "/api/photometry?ignore_flux_deduplication=true&ignore_flux_deduplication_replace=true",
+                            photometry,
+                            timeout=15,
                         )
                         if response.json()["status"] == "success":
                             log(
@@ -540,10 +546,6 @@ class ZTFAlertWorker(AlertWorker, ABC):
         limmag5sig = -2.5 * np.log10(5 * values[1]) + values[2]
         if np.isnan(snr):
             return {}
-        if snr < 0:
-            return {
-                "snr": snr,
-            }
         mag_data = {
             "mag": mag,
             "magerr": magerr,

@@ -783,6 +783,10 @@ class AlertWorker:
         detected = np.isfinite(df_light_curve["magpsf"])
         undetected = ~detected
 
+        # for the detections, add a "has_flux" column and set it to True
+        df_light_curve["has_flux"] = False
+        df_light_curve.loc[detected, "has_flux"] = True
+
         # step 4: calculate the flux error
         df_light_curve["fluxerr"] = None  # initialize the column
 
@@ -793,6 +797,9 @@ class AlertWorker:
             * np.log(10)
             / 2.5
         )
+
+        # set the zeropoint
+        df_light_curve["zp"] = 23.9
 
         # step 4b: calculate fluxerr for non detections using diffmaglim
         df_light_curve.loc[undetected, "fluxerr"] = (
@@ -847,7 +854,8 @@ class AlertWorker:
                 / 5.0
             )  # as diffmaglim is the 5-sigma depth
 
-            df_fp_hists["snr"] = df_fp_hists["flux"] / df_fp_hists["fluxerr"]
+            # calculate the snr (as absolute value of the flux divided by the fluxerr)
+            df_fp_hists["snr"] = np.abs(df_fp_hists["flux"] / df_fp_hists["fluxerr"])
 
             # we only consider datapoints as detections if they have an snr > 3
             # (for reference, alert detections are considered if they have an snr > 5)
@@ -856,21 +864,41 @@ class AlertWorker:
                 df_fp_hists["snr"] > 3, other=np.nan
             )
 
-            # add an origin field with the value "alert_fp" so SkyPortal knows it's forced photometry
-            df_fp_hists["origin"] = "alert_fp"
-
-            # step 6: merge the fp_hists section with the light curve
-            df_light_curve = pd.concat([df_light_curve, df_fp_hists], sort=False)
+            # add a has_flux column and set it to True for the detections (where flux is not np.nan)
+            df_fp_hists["has_flux"] = False
+            df_fp_hists.loc[~df_fp_hists["flux"].isna(), "has_flux"] = True
 
             # deduplicate by mjd, filter, and flux
-            df_light_curve = (
-                df_light_curve.drop_duplicates(subset=["mjd", "filter", "flux"])
+            df_fp_hists = (
+                df_fp_hists.drop_duplicates(subset=["mjd", "filter", "flux"])
                 .reset_index(drop=True)
                 .sort_values(by=["mjd"])
             )
 
-        # step 6: set the zeropoint and magnitude system
-        df_light_curve["zp"] = 23.9
+            # add an origin field with the value "alert_fp" so SkyPortal knows it's forced photometry
+            df_fp_hists["origin"] = "alert_fp"
+
+            # add the zeropoint
+            df_fp_hists["zp"] = df_fp_hists["magzpsci"]
+
+            # step 6: merge the fp_hists section with the light curve
+            df_light_curve = pd.concat([df_light_curve, df_fp_hists], sort=False)
+
+            # deduplicate by mjd, filter, and has_flux
+
+            # the idea here is that if at the same jd we have > 1 detection in the same filter, we only keep one
+            # same for non detections
+            # but if we have a detection and a non detection at the same jd in the same filter, we keep both
+
+            # likely to happen with the addition of forced photometry where we might have detections
+            # where the prv_candidates section only had non detections
+            df_light_curve = (
+                df_light_curve.drop_duplicates(subset=["mjd", "filter", "has_flux"])
+                .reset_index(drop=True)
+                .sort_values(by=["mjd"])
+            )
+
+        # step 6: set the magnitude system
         df_light_curve["zpsys"] = "ab"
 
         # only "new" photometry requested?
@@ -1818,7 +1846,9 @@ class AlertWorker:
                 try:
                     aux = list(
                         retry(self.mongo.db[self.collection_alerts_aux].find)(
-                            {"_id": alert["objectId"]}, {"prv_candidates": 1}, limit=1
+                            {"_id": alert["objectId"]},
+                            {"prv_candidates": 1, "fp_hists": 1},
+                            limit=1,
                         )
                     )[0]
                     alert["prv_candidates"] = aux["prv_candidates"]
