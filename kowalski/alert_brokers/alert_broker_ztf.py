@@ -8,6 +8,7 @@ import threading
 import time
 import traceback
 import numpy as np
+import pandas as pd
 from abc import ABC
 from copy import deepcopy
 from typing import Mapping, Sequence
@@ -470,7 +471,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
             df_photometry = self.make_photometry(alert, include_fp_hists=True)
 
             log(
-                f"Alert {alert['objectId']} contains program_ids={df_photometry['programid']}"
+                f"Alert {alert['objectId']} contains program_ids={list(df_photometry['programid'])}"
             )
 
             df_photometry["stream_id"] = df_photometry["programid"].apply(
@@ -481,52 +482,64 @@ class ZTFAlertWorker(AlertWorker, ABC):
             f"Posting {alert['objectId']} photometry for stream_ids={set(df_photometry.stream_id.unique())} to SkyPortal"
         )
 
-        # post photometry by stream_id
-        for stream_id in set(df_photometry.stream_id.unique()):
-            stream_id_mask = df_photometry.stream_id == int(stream_id)
-            photometry = {
-                "obj_id": alert["objectId"],
-                "stream_ids": [int(stream_id)],
-                "instrument_id": self.instrument_id,
-                "mjd": df_photometry.loc[stream_id_mask, "mjd"].tolist(),
-                "flux": df_photometry.loc[stream_id_mask, "flux"].tolist(),
-                "fluxerr": df_photometry.loc[stream_id_mask, "fluxerr"].tolist(),
-                "zp": df_photometry.loc[stream_id_mask, "zp"].tolist(),
-                "magsys": df_photometry.loc[stream_id_mask, "zpsys"].tolist(),
-                "filter": df_photometry.loc[stream_id_mask, "filter"].tolist(),
-                "ra": df_photometry.loc[stream_id_mask, "ra"].tolist(),
-                "dec": df_photometry.loc[stream_id_mask, "dec"].tolist(),
-                "origin": df_photometry.loc[stream_id_mask, "origin"].tolist()
-                if "origin" in df_photometry
-                else [],
-            }
+        # split the dataframe in 2, one for the alert photometry (prv_candidates) and one for the forced photometry (fp_hists)
+        # the first has no origin, the second has origin = 'alert_fp'
+        if "origin" in df_photometry.columns:
+            df_prv_candidates = df_photometry[df_photometry["origin"].isnull()]
+            df_fp_hists = df_photometry[df_photometry["origin"] == "alert_fp"]
+        else:
+            df_prv_candidates = df_photometry
+            df_fp_hists = pd.DataFrame()
 
-            if (len(photometry.get("flux", ())) > 0) or (
-                len(photometry.get("fluxerr", ())) > 0
-            ):
-                with timer(
-                    f"Posting photometry of {alert['objectId']} {alert['candid']}, "
-                    f"stream_id={stream_id} to SkyPortal",
-                    self.verbose > 1,
+        for df, is_fp in zip([df_prv_candidates, df_fp_hists], [False, True]):
+            if df.empty or len(df) == 0:
+                continue
+            # post photometry by stream_id
+            for stream_id in set(df.stream_id.unique()):
+                stream_id_mask = df.stream_id == int(stream_id)
+                photometry = {
+                    "obj_id": alert["objectId"],
+                    "stream_ids": [int(stream_id)],
+                    "instrument_id": self.instrument_id,
+                    "mjd": df.loc[stream_id_mask, "mjd"].tolist(),
+                    "flux": df.loc[stream_id_mask, "flux"].tolist(),
+                    "fluxerr": df.loc[stream_id_mask, "fluxerr"].tolist(),
+                    "zp": df.loc[stream_id_mask, "zp"].tolist(),
+                    "magsys": df.loc[stream_id_mask, "zpsys"].tolist(),
+                    "filter": df.loc[stream_id_mask, "filter"].tolist(),
+                    "ra": df.loc[stream_id_mask, "ra"].tolist(),
+                    "dec": df.loc[stream_id_mask, "dec"].tolist(),
+                    "origin": df.loc[stream_id_mask, "origin"].tolist()
+                    if "origin" in df
+                    else [],
+                }
+
+                if (len(photometry.get("flux", ())) > 0) or (
+                    len(photometry.get("fluxerr", ())) > 0
                 ):
-                    try:
-                        response = self.api_skyportal(
-                            "PUT",
-                            "/api/photometry?ignore_flux_deduplication=true&ignore_flux_deduplication_replace=true",
-                            photometry,
-                            timeout=15,
-                        )
-                        if response.json()["status"] == "success":
-                            log(
-                                f"Posted {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
+                    with timer(
+                        f"Posting {'(forced)' if is_fp else ''} photometry of {alert['objectId']} {alert['candid']}, "
+                        f"stream_id={stream_id} to SkyPortal",
+                        self.verbose > 1,
+                    ):
+                        try:
+                            response = self.api_skyportal(
+                                "PUT",
+                                f"/api/photometry{'?ignore_flux_deduplication=true&ignore_flux_deduplication_replace=true' if is_fp else ''}",
+                                photometry,
+                                timeout=15,
                             )
-                        else:
-                            raise ValueError(response.json()["message"])
-                    except Exception as e:
-                        log(
-                            f"Failed to post {alert['objectId']} photometry stream_id={stream_id} to SkyPortal: {e}"
-                        )
-                        continue
+                            if response.json()["status"] == "success":
+                                log(
+                                    f"Posted {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
+                                )
+                            else:
+                                raise ValueError(response.json()["message"])
+                        except Exception as e:
+                            log(
+                                f"Failed to post {alert['objectId']} photometry stream_id={stream_id} to SkyPortal: {e}"
+                            )
+                            continue
 
     def flux_to_mag(self, flux, fluxerr, zp):
         """Convert flux to magnitude and calculate SNR

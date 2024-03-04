@@ -1591,7 +1591,6 @@ class AlertWorker:
                     log(
                         f"Saved {alert['objectId']} {alert['candid']} as a Source on SkyPortal"
                     )
-                    print(response.json())
                     saved_to_groups = response.json()["data"].get(
                         "saved_to_groups", None
                     )
@@ -1888,7 +1887,11 @@ class AlertWorker:
                     # this should never happen, but just in case
                     log(f"Failed to get all alerts for {alert['objectId']}: {e}")
 
-                self.alert_put_photometry(alert)
+                try:
+                    self.alert_put_photometry(alert)
+                except Exception as e:
+                    traceback.print_exc()
+                    raise e
 
                 # post thumbnails
                 self.alert_post_thumbnails(alert)
