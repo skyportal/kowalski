@@ -20,7 +20,7 @@ def init_kafka():
 
         # check if by any chance the .tar.gz file is already there
         if not Path(f"kafka_{scala_version}-{kafka_version}.tgz").exists():
-            kafka_url = f"https://downloads.apache.org/kafka/{kafka_version}/kafka_{scala_version}-{kafka_version}.tgz"
+            kafka_url = f"https://archive.apache.org/dist/kafka/{kafka_version}/kafka_{scala_version}-{kafka_version}.tgz"
             print(f"Downloading Kafka from {kafka_url}")
 
             r = requests.get(kafka_url)
