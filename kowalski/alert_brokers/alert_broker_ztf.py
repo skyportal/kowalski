@@ -525,7 +525,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
                         try:
                             response = self.api_skyportal(
                                 "PUT",
-                                f"/api/photometry{'?ignore_flux_deduplication=true&ignore_flux_deduplication_replace=true' if is_fp else ''}",
+                                f"/api/photometry{'?duplicate_ignore_flux=true&overwrite_flux=true' if is_fp else ''}",
                                 photometry,
                                 timeout=15,
                             )
