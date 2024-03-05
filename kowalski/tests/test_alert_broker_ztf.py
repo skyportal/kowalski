@@ -1073,3 +1073,62 @@ class TestAlertBrokerZTF:
             )
             == 2
         )
+
+        fp_detection = [
+            p for p in photometry if p["origin"] == "alert_fp" and p["mag"] is not None
+        ][0]
+
+        # we want to test the update of the forced photometry data.
+        # To do so, modify the flux (flux+ 10) of all the detections in the forced photometry
+        for i in range(len(fp_hists_formatted)):
+            if fp_hists_formatted[i].get("forcediffimflux") is not None:
+                fp_hists_formatted[i]["forcediffimflux"] += 10
+
+        self.worker.alert_sentinel_skyportal(
+            alert,
+            prv_candidates,
+            fp_hists=fp_hists_formatted,
+            passed_filters=passed_filters,
+        )
+
+        # verify that the forced photometry was updated in SkyPortal
+        # everything should be the same
+        response = self.worker.api_skyportal(
+            "GET", f"/api/sources/{record['objectId']}/photometry", None
+        )
+
+        assert response.status_code == 200
+        photometry = response.json()["data"]
+        assert len(photometry) == 39
+
+        assert "origin" in photometry[0]
+        assert len([p for p in photometry if p["origin"] == "alert_fp"]) == 18
+        assert len([p for p in photometry if p["origin"] in [None, "None"]]) == 21
+
+        assert (
+            len(
+                [
+                    p
+                    for p in photometry
+                    if p["origin"] == "alert_fp" and p["mag"] is not None
+                ]
+            )
+            == 1
+        )
+
+        assert (
+            len(
+                [
+                    p
+                    for p in photometry
+                    if p["origin"] in [None, "None"] and p["mag"] is not None
+                ]
+            )
+            == 2
+        )
+
+        updated_fp_detection = [
+            p for p in photometry if p["origin"] == "alert_fp" and p["mag"] is not None
+        ][0]
+
+        assert updated_fp_detection["mag"] < fp_detection["mag"]
