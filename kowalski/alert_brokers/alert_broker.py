@@ -828,7 +828,7 @@ class AlertWorker:
                     f"Processing of forced photometry for {self.instrument} not implemented"
                 )
 
-            # add the zeropoint now (used in missing fluxerr calculation)
+            # add the zeropoint now (used in missing upper limit calculation)
             df_fp_hists["zp"] = df_fp_hists["magzpsci"]
 
             # add mjd and convert columns to float
