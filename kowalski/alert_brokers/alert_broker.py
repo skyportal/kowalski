@@ -845,9 +845,10 @@ class AlertWorker:
                 else np.nan
             )
 
-            # where the fluxerr is np.nan, calculate it from diffmaglim
-            missing_fluxerr = df_fp_hists["fluxerr"].isna()
-            df_fp_hists.loc[missing_fluxerr, "fluxerr"] = (
+            # where the flux is np.nan, we consider it a non-detection
+            # for these, we compute the upper limits from the diffmaglim
+            missing_flux = df_fp_hists["flux"].isna()
+            df_fp_hists.loc[missing_flux, "fluxerr"] = (
                 10
                 ** (
                     -0.4
