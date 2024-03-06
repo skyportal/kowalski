@@ -8,6 +8,7 @@ import threading
 import time
 import traceback
 import numpy as np
+import pandas as pd
 from abc import ABC
 from copy import deepcopy
 from typing import Mapping, Sequence
@@ -111,6 +112,10 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             for fp_hist in fp_hists
         ]
 
+        # format fp_hists, add alert_mag, alert_ra, alert_dec
+        # and computing the FP's mag, magerr, snr, limmag3sig, limmag5sig
+        fp_hists = alert_worker.format_fp_hists(alert, fp_hists)
+
         alert_aux, xmatches, passed_filters = None, None, None
         # cross-match with external catalogs if objectId not in collection_alerts_aux:
         if (
@@ -142,7 +147,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 or (alert["candidate"]["jd"] - alert["candidate"].get("jdstarthist", 0))
                 < 30
             ):
-                alert_aux["fp_hists"] = alert_worker.format_fp_hists(alert, fp_hists)
+                alert_aux["fp_hists"] = fp_hists
 
             with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
                 retry(alert_worker.mongo.insert_one)(
@@ -166,6 +171,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 # the idea is that we start accumulating FP only for new objects, to avoid
                 # having some objects with incomplete FP history, which would be confusing for the filters
                 # either there is full FP, or there isn't any
+                # we also update the fp_hists array we have here with the updated 30-day window
                 if (
                     retry(
                         alert_worker.mongo.db[
@@ -177,9 +183,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                     )
                     == 1
                 ):
-                    alert_worker.update_fp_hists(
-                        alert, alert_worker.format_fp_hists(alert, fp_hists)
-                    )
+                    fp_hists = alert_worker.update_fp_hists(alert, fp_hists)
 
         if config["misc"]["broker"]:
             # execute user-defined alert filters
@@ -193,7 +197,9 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 )
 
             # post to SkyPortal
-            alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+            alert_worker.alert_sentinel_skyportal(
+                alert, prv_candidates, fp_hists=fp_hists, passed_filters=passed_filters
+            )
 
         # clean up after thyself
         del (
@@ -462,10 +468,10 @@ class ZTFAlertWorker(AlertWorker, ABC):
             f"Making alert photometry of {alert['objectId']} {alert['candid']}",
             self.verbose > 1,
         ):
-            df_photometry = self.make_photometry(alert)
+            df_photometry = self.make_photometry(alert, include_fp_hists=True)
 
             log(
-                f"Alert {alert['objectId']} contains program_ids={df_photometry['programid']}"
+                f"Alert {alert['objectId']} contains program_ids={list(df_photometry['programid'])}"
             )
 
             df_photometry["stream_id"] = df_photometry["programid"].apply(
@@ -476,46 +482,64 @@ class ZTFAlertWorker(AlertWorker, ABC):
             f"Posting {alert['objectId']} photometry for stream_ids={set(df_photometry.stream_id.unique())} to SkyPortal"
         )
 
-        # post photometry by stream_id
-        for stream_id in set(df_photometry.stream_id.unique()):
-            stream_id_mask = df_photometry.stream_id == int(stream_id)
-            photometry = {
-                "obj_id": alert["objectId"],
-                "stream_ids": [int(stream_id)],
-                "instrument_id": self.instrument_id,
-                "mjd": df_photometry.loc[stream_id_mask, "mjd"].tolist(),
-                "flux": df_photometry.loc[stream_id_mask, "flux"].tolist(),
-                "fluxerr": df_photometry.loc[stream_id_mask, "fluxerr"].tolist(),
-                "zp": df_photometry.loc[stream_id_mask, "zp"].tolist(),
-                "magsys": df_photometry.loc[stream_id_mask, "zpsys"].tolist(),
-                "filter": df_photometry.loc[stream_id_mask, "filter"].tolist(),
-                "ra": df_photometry.loc[stream_id_mask, "ra"].tolist(),
-                "dec": df_photometry.loc[stream_id_mask, "dec"].tolist(),
-            }
+        # split the dataframe in 2, one for the alert photometry (prv_candidates) and one for the forced photometry (fp_hists)
+        # the first has no origin, the second has origin = 'alert_fp'
+        if "origin" in df_photometry.columns:
+            df_prv_candidates = df_photometry[df_photometry["origin"].isnull()]
+            df_fp_hists = df_photometry[df_photometry["origin"] == "alert_fp"]
+        else:
+            df_prv_candidates = df_photometry
+            df_fp_hists = pd.DataFrame()
 
-            if (len(photometry.get("flux", ())) > 0) or (
-                len(photometry.get("fluxerr", ())) > 0
-            ):
-                with timer(
-                    f"Posting photometry of {alert['objectId']} {alert['candid']}, "
-                    f"stream_id={stream_id} to SkyPortal",
-                    self.verbose > 1,
+        for df, is_fp in zip([df_prv_candidates, df_fp_hists], [False, True]):
+            if df.empty or len(df) == 0:
+                continue
+            # post photometry by stream_id
+            for stream_id in set(df.stream_id.unique()):
+                stream_id_mask = df.stream_id == int(stream_id)
+                photometry = {
+                    "obj_id": alert["objectId"],
+                    "stream_ids": [int(stream_id)],
+                    "instrument_id": self.instrument_id,
+                    "mjd": df.loc[stream_id_mask, "mjd"].tolist(),
+                    "flux": df.loc[stream_id_mask, "flux"].tolist(),
+                    "fluxerr": df.loc[stream_id_mask, "fluxerr"].tolist(),
+                    "zp": df.loc[stream_id_mask, "zp"].tolist(),
+                    "magsys": df.loc[stream_id_mask, "zpsys"].tolist(),
+                    "filter": df.loc[stream_id_mask, "filter"].tolist(),
+                    "ra": df.loc[stream_id_mask, "ra"].tolist(),
+                    "dec": df.loc[stream_id_mask, "dec"].tolist(),
+                    "origin": df.loc[stream_id_mask, "origin"].tolist()
+                    if "origin" in df
+                    else [],
+                }
+
+                if (len(photometry.get("flux", ())) > 0) or (
+                    len(photometry.get("fluxerr", ())) > 0
                 ):
-                    try:
-                        response = self.api_skyportal(
-                            "PUT", "/api/photometry", photometry, timeout=15
-                        )
-                        if response.json()["status"] == "success":
-                            log(
-                                f"Posted {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
+                    with timer(
+                        f"Posting {'(forced)' if is_fp else ''} photometry of {alert['objectId']} {alert['candid']}, "
+                        f"stream_id={stream_id} to SkyPortal",
+                        self.verbose > 1,
+                    ):
+                        try:
+                            response = self.api_skyportal(
+                                "PUT",
+                                f"/api/photometry{'?duplicate_ignore_flux=true&overwrite_flux=true' if is_fp else ''}",
+                                photometry,
+                                timeout=15,
                             )
-                        else:
-                            raise ValueError(response.json()["message"])
-                    except Exception as e:
-                        log(
-                            f"Failed to post {alert['objectId']} photometry stream_id={stream_id} to SkyPortal: {e}"
-                        )
-                        continue
+                            if response.json()["status"] == "success":
+                                log(
+                                    f"Posted {alert['objectId']} photometry stream_id={stream_id} to SkyPortal"
+                                )
+                            else:
+                                raise ValueError(response.json()["message"])
+                        except Exception as e:
+                            log(
+                                f"Failed to post {alert['objectId']} photometry stream_id={stream_id} to SkyPortal: {e}"
+                            )
+                            continue
 
     def flux_to_mag(self, flux, fluxerr, zp):
         """Convert flux to magnitude and calculate SNR
@@ -535,10 +559,6 @@ class ZTFAlertWorker(AlertWorker, ABC):
         limmag5sig = -2.5 * np.log10(5 * values[1]) + values[2]
         if np.isnan(snr):
             return {}
-        if snr < 0:
-            return {
-                "snr": snr,
-            }
         mag_data = {
             "mag": mag,
             "magerr": magerr,
@@ -758,6 +778,25 @@ class ZTFAlertWorker(AlertWorker, ABC):
                         time.sleep(np.random.uniform(0, 5))
                 else:
                     break
+
+            # query the DB for the last 30 days of fp_hists to get the updated fp_hists
+            new_fp_hists = list(
+                self.mongo.db[self.collection_alerts_aux]
+                .find(
+                    {
+                        "_id": alert["objectId"],
+                        "fp_hists.jd": {"$gte": alert["candidate"]["jd"] - 30},
+                    },
+                    {"fp_hists": 1},
+                )
+                .sort([("jd", 1)])
+            )
+            if len(new_fp_hists) > 0:
+                new_fp_hists = new_fp_hists[0]["fp_hists"]
+            else:
+                new_fp_hists = []
+
+            return new_fp_hists
 
 
 class WorkerInitializer(dask.distributed.WorkerPlugin):

@@ -365,15 +365,16 @@ class TestIngester:
         path_alerts = "ztf_alerts/20200202"
 
         # grab some more alerts from gs://ztf-fritz/sample-public-alerts
+        storage_bucket_url = "gs://ztf-fritz-backup/sample-public-alerts"
         try:
-            log("Grabbing more alerts from gs://ztf-fritz/sample-public-alerts")
-            r = requests.get("https://www.googleapis.com/storage/v1/b/ztf-fritz/o")
+            log(f"Grabbing more alerts from {storage_bucket_url}")
+            r = requests.get(
+                "https://www.googleapis.com/storage/v1/b/ztf-fritz-backup/o"
+            )
             aa = r.json()["items"]
             ids = [pathlib.Path(a["id"]).parent for a in aa if "avro" in a["id"]]
         except Exception as e:
-            log(
-                "Grabbing alerts from gs://ztf-fritz/sample-public-alerts failed, but it is ok"
-            )
+            log(f"Grabbing alerts from {storage_bucket_url} failed, but it is ok")
             log(f"{e}")
             ids = []
         subprocess.run(
@@ -382,11 +383,11 @@ class TestIngester:
                 "-m",
                 "cp",
                 "-n",
-                "gs://ztf-fritz/sample-public-alerts/*.avro",
+                f"{storage_bucket_url}/*.avro",
                 f"data/{path_alerts}",
             ]
         )
-        log(f"Fetched {len(ids)} alerts from gs://ztf-fritz/sample-public-alerts")
+        log(f"Fetched {len(ids)} alerts from {storage_bucket_url}")
         # push!
         with KafkaStream(
             topic_name,
@@ -437,7 +438,7 @@ class TestIngester:
             log("Digested and ingested: all done!")
 
         log("Checking the ZTF alert collection states")
-        num_retries = 20
+        num_retries = 30
         # alert processing takes time, which depends on the available resources
         # so allow some additional time for the processing to finish
         for i in range(num_retries):

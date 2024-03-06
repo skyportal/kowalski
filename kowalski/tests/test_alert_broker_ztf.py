@@ -33,7 +33,7 @@ def alert_fixture(request):
     log("Successfully loaded")
 
 
-def filter_template(upstream):
+def filter_template(upstream, include_fp_hists=False):
     # prepend upstream aggregation stages:
     upstream_pipeline = config["database"]["filters"][upstream]
     pipeline = upstream_pipeline + [
@@ -48,13 +48,32 @@ def filter_template(upstream):
                 "annotations.mean_rb": {"$avg": "$prv_candidates.rb"},
             }
         },
-        {"$project": {"_id": 0, "candid": 1, "objectId": 1, "annotations": 1}},
+        {
+            "$project": {
+                "_id": 0,
+                "candid": 1,
+                "objectId": 1,
+                "annotations": 1,
+                "t_now": "$candidate.jd",
+            }
+        },
     ]
+    # if include_fp_hists:
+    if include_fp_hists:
+        pipeline[-1]["$project"]["fp_hists"] = 1
+
     # set permissions
     pipeline[0]["$match"]["candidate.programid"]["$in"] = [0, 1, 2, 3]
     pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0]["$in"][
         1
     ] = [0, 1, 2, 3]
+
+    pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"]["$and"][0]["$in"][1] = [
+        0,
+        1,
+        2,
+        3,
+    ]
 
     template = {
         "group_id": 2,
@@ -315,6 +334,42 @@ class TestAlertBrokerZTF:
         df_photometry = self.worker.make_photometry(self.alert)
         assert len(df_photometry) == 32
 
+    def test_make_photometry_with_fp_hists(self):
+        # here we ingest an alert with fp_hists, and verify that the photometry is correct
+        candid = 2475433850015010009
+        sample_avro = f"data/ztf_alerts/20231012/{candid}.avro"
+        with open(sample_avro, "rb") as f:
+            records = [record for record in fastavro.reader(f)]
+            for record in records:
+                post_alert(self.worker, record, fp_cutoff=1)
+
+        df_photometry = self.worker.make_photometry(record, include_fp_hists=True)
+        assert len(df_photometry) == 39
+        # prv_candidates have origin = None, and fp_hists have origin = 'alert_fp'
+        assert "origin" in df_photometry.columns
+        assert len(df_photometry[df_photometry["origin"] == "alert_fp"]) == 18
+        assert len(df_photometry[df_photometry["origin"].isnull()]) == 21
+        # verify that they all have a fluxerr value
+        assert all(df_photometry["fluxerr"].notnull())
+
+        assert (
+            len(
+                df_photometry[
+                    df_photometry["flux"].notnull() & df_photometry["origin"].isnull()
+                ]
+            )
+            == 5
+        )
+        assert (
+            len(
+                df_photometry[
+                    df_photometry["flux"].notnull()
+                    & (df_photometry["origin"] == "alert_fp")
+                ]
+            )
+            == 4
+        )
+
     def test_make_thumbnails(self):
         alert, _, _ = self.worker.alert_mongify(self.alert)
         for ttype, istrument_type in [
@@ -557,7 +612,9 @@ class TestAlertBrokerZTF:
         assert passed_filters[1]["auto_followup"]["data"]["payload"]["priority"] == 3
 
         alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
-        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
 
         # now fetch the follow-up request from SP
         # it should have deduplicated and used the highest priority
@@ -599,7 +656,9 @@ class TestAlertBrokerZTF:
         assert passed_filters[1]["auto_followup"]["data"]["payload"]["priority"] == 4
 
         alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
-        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
 
         # now fetch the follow-up request from SP
         # it should have deduplicated and used the highest priority
@@ -648,7 +707,9 @@ class TestAlertBrokerZTF:
         ).issubset(set([target_group_id] + [saved_group_id]))
 
         alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
-        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
 
         # now fetch the follow-up request from SP
         # we should still have just one follow-up request, the exact same as before
@@ -696,7 +757,9 @@ class TestAlertBrokerZTF:
         )
 
         alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
-        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
 
         # now fetch the source from SP
         response = self.worker.api_skyportal(
@@ -757,7 +820,9 @@ class TestAlertBrokerZTF:
         )
 
         alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
-        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
 
         # now fetch the source from SP
         response = self.worker.api_skyportal(
@@ -835,7 +900,9 @@ class TestAlertBrokerZTF:
         )
 
         alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
-        self.worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
 
         # now fetch the follow-up request from SP
         # we should not have any submitted follow-up requests
@@ -881,3 +948,187 @@ class TestAlertBrokerZTF:
         assert response.status_code == 200
 
         delete_alert(self.worker, self.alert)
+
+    def test_alert_filter__user_defined__with_fp_hists(self):
+        # user filter runs on an alert that has forced photometry
+        # we verify:
+        # - the filter can be applied to the alert
+        # - the filter can make use of the forced photometry
+        # - when saving to SkyPortal, the forced photometry is saved as well
+
+        candid = 2475433850015010009
+        sample_avro = f"data/ztf_alerts/20231012/{candid}.avro"
+        with open(sample_avro, "rb") as f:
+            records = [record for record in fastavro.reader(f)]
+            for record in records:
+                post_alert(self.worker, record, fp_cutoff=1)
+
+        filter = filter_template(self.worker.collection_alerts, include_fp_hists=True)
+        filter["autosave"] = True
+        # we edit the pipeline to include a condition that uses the forced photometry
+        # for reference, this condition checks if we have any detections in forced photomety
+        # that are within 0.015 days of the alert, and have a SNR > 3
+        # telling us that this is not a moving object + has been detected before
+        # add a $project stage at the end of the pipeline
+        filter["pipeline"].append(
+            {
+                "$project": {
+                    "stationary_fp": {
+                        "$cond": {
+                            "if": {"$eq": [{"$type": "$fp_hists"}, "missing"]},
+                            "then": False,
+                            "else": {
+                                "$anyElementTrue": {
+                                    "$map": {
+                                        "input": "$fp_hists",
+                                        "as": "cand",
+                                        "in": {
+                                            "$and": [
+                                                {
+                                                    "$gt": [
+                                                        {
+                                                            "$abs": {
+                                                                "$subtract": [
+                                                                    "$t_now",
+                                                                    "$$cand.jd",
+                                                                ]
+                                                            }
+                                                        },
+                                                        0.015,
+                                                    ]
+                                                },
+                                                {"$gte": ["$$cand.snr", 3]},
+                                            ]
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    }
+                }
+            }
+        )
+
+        # now filter on that condition being true, so add a $match stage at the end
+        filter["pipeline"].append({"$match": {"stationary_fp": True}})
+
+        passed_filters = self.worker.alert_filter__user_defined([filter], record)
+
+        assert passed_filters is not None
+        assert len(passed_filters) == 1
+        assert "autosave" in passed_filters[0]
+
+        alert, prv_candidates, fp_hists = self.worker.alert_mongify(record)
+
+        # pop nulls from the fp_hists
+        fp_hists = [
+            {kk: vv for kk, vv in fp_hist.items() if vv not in [None, -99999, -99999.0]}
+            for fp_hist in fp_hists
+        ]
+
+        # format the forced photometry
+        fp_hists_formatted = self.worker.format_fp_hists(alert, fp_hists)
+
+        # only run the rest if the broker mode is activated
+        if config["misc"].get("broker", False) is False:
+            pytest.skip("Broker mode not activated, skipping the rest of the test")
+
+        self.worker.alert_sentinel_skyportal(
+            alert,
+            prv_candidates,
+            fp_hists=fp_hists_formatted,
+            passed_filters=passed_filters,
+        )
+
+        # verify that the forced photometry was saved to SkyPortal
+        response = self.worker.api_skyportal(
+            "GET", f"/api/sources/{record['objectId']}/photometry", None
+        )
+
+        assert response.status_code == 200
+        photometry = response.json()["data"]
+        assert len(photometry) == 39
+
+        assert "origin" in photometry[0]
+        assert len([p for p in photometry if p["origin"] == "alert_fp"]) == 18
+        assert len([p for p in photometry if p["origin"] in [None, "None"]]) == 21
+
+        assert (
+            len(
+                [
+                    p
+                    for p in photometry
+                    if p["origin"] == "alert_fp" and p["mag"] is not None
+                ]
+            )
+            == 1
+        )
+        assert (
+            len(
+                [
+                    p
+                    for p in photometry
+                    if p["origin"] in [None, "None"] and p["mag"] is not None
+                ]
+            )
+            == 2
+        )
+
+        fp_detection = [
+            p for p in photometry if p["origin"] == "alert_fp" and p["mag"] is not None
+        ][0]
+
+        # we want to test the update of the forced photometry data.
+        # To do so, modify the flux (flux+ 10) of all the detections in the forced photometry
+        for i in range(len(fp_hists_formatted)):
+            if fp_hists_formatted[i].get("forcediffimflux") is not None:
+                fp_hists_formatted[i]["forcediffimflux"] += 10
+
+        self.worker.alert_sentinel_skyportal(
+            alert,
+            prv_candidates,
+            fp_hists=fp_hists_formatted,
+            passed_filters=passed_filters,
+        )
+
+        # verify that the forced photometry was updated in SkyPortal
+        # everything should be the same
+        response = self.worker.api_skyportal(
+            "GET", f"/api/sources/{record['objectId']}/photometry", None
+        )
+
+        assert response.status_code == 200
+        photometry = response.json()["data"]
+        assert len(photometry) == 39
+
+        assert "origin" in photometry[0]
+        assert len([p for p in photometry if p["origin"] == "alert_fp"]) == 18
+        assert len([p for p in photometry if p["origin"] in [None, "None"]]) == 21
+
+        assert (
+            len(
+                [
+                    p
+                    for p in photometry
+                    if p["origin"] == "alert_fp" and p["mag"] is not None
+                ]
+            )
+            == 1
+        )
+
+        assert (
+            len(
+                [
+                    p
+                    for p in photometry
+                    if p["origin"] in [None, "None"] and p["mag"] is not None
+                ]
+            )
+            == 2
+        )
+
+        updated_fp_detection = [
+            p for p in photometry if p["origin"] == "alert_fp" and p["mag"] is not None
+        ][0]
+
+        assert updated_fp_detection["mag"] < fp_detection["mag"]

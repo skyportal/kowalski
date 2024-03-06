@@ -166,7 +166,9 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
                 )
 
             # post to SkyPortal
-            alert_worker.alert_sentinel_skyportal(alert, prv_candidates, passed_filters)
+            alert_worker.alert_sentinel_skyportal(
+                alert, prv_candidates, passed_filters=passed_filters
+            )
 
         # clean up after thyself
         del (

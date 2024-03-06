@@ -709,7 +709,9 @@ class AlertWorker:
 
         return triplet
 
-    def make_photometry(self, alert: Mapping, jd_start: float = None):
+    def make_photometry(
+        self, alert: Mapping, jd_start: float = None, include_fp_hists: bool = False
+    ):
         """
         Make a de-duplicated pandas.DataFrame with photometry of alert['objectId']
 
@@ -721,6 +723,7 @@ class AlertWorker:
         df_candidate = pd.DataFrame(alert["candidate"], index=[0])
 
         df_prv_candidates = pd.DataFrame(alert["prv_candidates"])
+
         df_light_curve = pd.concat(
             [df_candidate, df_prv_candidates], ignore_index=True, sort=False
         )
@@ -741,8 +744,11 @@ class AlertWorker:
             df_light_curve["filter"] = df_light_curve["fid"].apply(
                 lambda x: nir_filters[x]
             )
+        elif self.instrument == "TURBO":
+            # the filters are just the fid values
+            # TODO: add the actual filter names
+            df_light_curve["filter"] = df_light_curve["fid"].apply(lambda x: str(x))
 
-        df_light_curve["magsys"] = "ab"
         df_light_curve["mjd"] = df_light_curve["jd"] - 2400000.5
 
         df_light_curve["mjd"] = df_light_curve["mjd"].apply(lambda x: np.float64(x))
@@ -754,7 +760,7 @@ class AlertWorker:
         )
 
         df_light_curve = (
-            df_light_curve.drop_duplicates(subset=["mjd", "magpsf"])
+            df_light_curve.drop_duplicates(subset=["mjd", "magpsf", "filter"])
             .reset_index(drop=True)
             .sort_values(by=["mjd"])
         )
@@ -768,7 +774,7 @@ class AlertWorker:
         # step 1: calculate the coefficient that determines whether the
         # flux should be negative or positive
         coeff = df_light_curve["isdiffpos"].apply(
-            lambda x: 1.0 if x in [True, 1, "y", "Y", "t", "1"] else -1.0
+            lambda x: 1.0 if x in [True, 1, "y", "Y", "t", "1", "T"] else -1.0
         )
 
         # step 2: calculate the flux normalized to an arbitrary AB zeropoint of
@@ -781,6 +787,10 @@ class AlertWorker:
         detected = np.isfinite(df_light_curve["magpsf"])
         undetected = ~detected
 
+        # for the detections, add a "has_flux" column and set it to True
+        df_light_curve["has_flux"] = False
+        df_light_curve.loc[detected, "has_flux"] = True
+
         # step 4: calculate the flux error
         df_light_curve["fluxerr"] = None  # initialize the column
 
@@ -792,13 +802,100 @@ class AlertWorker:
             / 2.5
         )
 
+        # set the zeropoint
+        df_light_curve["zp"] = 23.9
+
         # step 4b: calculate fluxerr for non detections using diffmaglim
         df_light_curve.loc[undetected, "fluxerr"] = (
             10 ** (-0.4 * (df_light_curve.loc[undetected, "diffmaglim"] - 23.9)) / 5.0
         )  # as diffmaglim is the 5-sigma depth
 
-        # step 5: set the zeropoint and magnitude system
-        df_light_curve["zp"] = 23.9
+        # step 5 (optional): process the fp_hists section
+        if include_fp_hists and len(alert.get("fp_hists", [])) > 0:
+            # fp_hists is already in flux space, so we process it separately
+            df_fp_hists = pd.DataFrame(alert.get("fp_hists", []))
+
+            # filter out bad data:
+            mask_good_diffmaglim = df_fp_hists["diffmaglim"] > 0
+            df_fp_hists = df_fp_hists.loc[mask_good_diffmaglim]
+
+            # add filter column
+            if self.instrument == "ZTF":
+                df_fp_hists["filter"] = df_fp_hists["fid"].apply(
+                    lambda x: ztf_filters[x]
+                )
+            else:
+                raise NotImplementedError(
+                    f"Processing of forced photometry for {self.instrument} not implemented"
+                )
+
+            # add mjd and convert columns to float
+            df_fp_hists["mjd"] = df_fp_hists["jd"] - 2400000.5
+            df_fp_hists["mjd"] = df_fp_hists["mjd"].apply(lambda x: np.float64(x))
+            df_fp_hists["flux"] = (
+                df_fp_hists["forcediffimflux"].apply(lambda x: np.float64(x))
+                if "forcediffimflux" in df_fp_hists
+                else np.nan
+            )
+            df_fp_hists["fluxerr"] = (
+                df_fp_hists["forcediffimfluxunc"].apply(lambda x: np.float64(x))
+                if "forcediffimfluxunc" in df_fp_hists
+                else np.nan
+            )
+
+            # where the fluxerr is np.nan, calculate it from diffmaglim
+            missing_fluxerr = df_fp_hists["fluxerr"].isna()
+            df_fp_hists.loc[missing_fluxerr, "fluxerr"] = (
+                10
+                ** (-0.4 * (df_fp_hists.loc[mask_good_diffmaglim, "diffmaglim"] - 23.9))
+                / 5.0
+            )  # as diffmaglim is the 5-sigma depth
+
+            # calculate the snr (as absolute value of the flux divided by the fluxerr)
+            df_fp_hists["snr"] = np.abs(df_fp_hists["flux"] / df_fp_hists["fluxerr"])
+
+            # we only consider datapoints as detections if they have an snr > 3
+            # (for reference, alert detections are considered if they have an snr > 5)
+            # otherwise, we set flux to np.nan
+            df_fp_hists["flux"] = df_fp_hists["flux"].where(
+                df_fp_hists["snr"] > 3, other=np.nan
+            )
+
+            # add a has_flux column and set it to True for the detections (where flux is not np.nan)
+            df_fp_hists["has_flux"] = False
+            df_fp_hists.loc[~df_fp_hists["flux"].isna(), "has_flux"] = True
+
+            # deduplicate by mjd, filter, and flux
+            df_fp_hists = (
+                df_fp_hists.drop_duplicates(subset=["mjd", "filter", "flux"])
+                .reset_index(drop=True)
+                .sort_values(by=["mjd"])
+            )
+
+            # add an origin field with the value "alert_fp" so SkyPortal knows it's forced photometry
+            df_fp_hists["origin"] = "alert_fp"
+
+            # add the zeropoint
+            df_fp_hists["zp"] = df_fp_hists["magzpsci"]
+
+            # step 6: merge the fp_hists section with the light curve
+            df_light_curve = pd.concat([df_light_curve, df_fp_hists], sort=False)
+
+            # deduplicate by mjd, filter, and has_flux
+
+            # the idea here is that if at the same jd we have > 1 detection in the same filter, we only keep one
+            # same for non detections
+            # but if we have a detection and a non detection at the same jd in the same filter, we keep both
+
+            # likely to happen with the addition of forced photometry where we might have detections
+            # where the prv_candidates section only had non detections
+            df_light_curve = (
+                df_light_curve.drop_duplicates(subset=["mjd", "filter", "has_flux"])
+                .reset_index(drop=True)
+                .sort_values(by=["mjd"])
+            )
+
+        # step 6: set the magnitude system
         df_light_curve["zpsys"] = "ab"
 
         # only "new" photometry requested?
@@ -1494,7 +1591,6 @@ class AlertWorker:
                     log(
                         f"Saved {alert['objectId']} {alert['candid']} as a Source on SkyPortal"
                     )
-                    print(response.json())
                     saved_to_groups = response.json()["data"].get(
                         "saved_to_groups", None
                     )
@@ -1679,7 +1775,9 @@ class AlertWorker:
             "Must be implemented in subclass, too survey-specific."
         )
 
-    def alert_sentinel_skyportal(self, alert, prv_candidates, passed_filters):
+    def alert_sentinel_skyportal(
+        self, alert, prv_candidates, fp_hists=[], passed_filters=[]
+    ):
         """
         Post alerts to SkyPortal, if need be.
 
@@ -1742,15 +1840,21 @@ class AlertWorker:
 
                 # post full light curve
                 try:
-                    alert["prv_candidates"] = list(
+                    aux = list(
                         retry(self.mongo.db[self.collection_alerts_aux].find)(
-                            {"_id": alert["objectId"]}, {"prv_candidates": 1}, limit=1
+                            {"_id": alert["objectId"]},
+                            {"prv_candidates": 1, "fp_hists": 1},
+                            limit=1,
                         )
-                    )[0]["prv_candidates"]
+                    )[0]
+                    alert["prv_candidates"] = aux["prv_candidates"]
+                    alert["fp_hists"] = aux.get("fp_hists", [])
+                    del aux
                 except Exception as e:
                     # this should never happen, but just in case
                     log(e)
                     alert["prv_candidates"] = prv_candidates
+                    alert["fp_hists"] = fp_hists
 
                 # also get all the alerts for this object, to make sure to have all the detections
                 try:
@@ -1783,7 +1887,11 @@ class AlertWorker:
                     # this should never happen, but just in case
                     log(f"Failed to get all alerts for {alert['objectId']}: {e}")
 
-                self.alert_put_photometry(alert)
+                try:
+                    self.alert_put_photometry(alert)
+                except Exception as e:
+                    traceback.print_exc()
+                    raise e
 
                 # post thumbnails
                 self.alert_post_thumbnails(alert)
@@ -1870,6 +1978,7 @@ class AlertWorker:
                     )
             # post alert photometry in single call to /api/photometry
             alert["prv_candidates"] = prv_candidates
+            alert["fp_hists"] = fp_hists
 
             self.alert_put_photometry(alert)
 
