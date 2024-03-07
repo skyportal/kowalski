@@ -787,10 +787,6 @@ class AlertWorker:
         detected = np.isfinite(df_light_curve["magpsf"])
         undetected = ~detected
 
-        # for the detections, add a "has_flux" column and set it to True
-        df_light_curve["has_flux"] = False
-        df_light_curve.loc[detected, "has_flux"] = True
-
         # step 4: calculate the flux error
         df_light_curve["fluxerr"] = None  # initialize the column
 
@@ -809,6 +805,9 @@ class AlertWorker:
         df_light_curve.loc[undetected, "fluxerr"] = (
             10 ** (-0.4 * (df_light_curve.loc[undetected, "diffmaglim"] - 23.9)) / 5.0
         )  # as diffmaglim is the 5-sigma depth
+
+        # add an empty origin field
+        df_light_curve["origin"] = None
 
         # step 5 (optional): process the fp_hists section
         if include_fp_hists and len(alert.get("fp_hists", [])) > 0:
@@ -829,6 +828,9 @@ class AlertWorker:
                     f"Processing of forced photometry for {self.instrument} not implemented"
                 )
 
+            # add the zeropoint now (used in missing upper limit calculation)
+            df_fp_hists["zp"] = df_fp_hists["magzpsci"]
+
             # add mjd and convert columns to float
             df_fp_hists["mjd"] = df_fp_hists["jd"] - 2400000.5
             df_fp_hists["mjd"] = df_fp_hists["mjd"].apply(lambda x: np.float64(x))
@@ -843,11 +845,18 @@ class AlertWorker:
                 else np.nan
             )
 
-            # where the fluxerr is np.nan, calculate it from diffmaglim
-            missing_fluxerr = df_fp_hists["fluxerr"].isna()
-            df_fp_hists.loc[missing_fluxerr, "fluxerr"] = (
+            # where the flux is np.nan, we consider it a non-detection
+            # for these, we compute the upper limits from the diffmaglim
+            missing_flux = df_fp_hists["flux"].isna()
+            df_fp_hists.loc[missing_flux, "fluxerr"] = (
                 10
-                ** (-0.4 * (df_fp_hists.loc[mask_good_diffmaglim, "diffmaglim"] - 23.9))
+                ** (
+                    -0.4
+                    * (
+                        df_fp_hists.loc[mask_good_diffmaglim, "diffmaglim"]
+                        - df_fp_hists.loc[mask_good_diffmaglim, "zp"]
+                    )
+                )
                 / 5.0
             )  # as diffmaglim is the 5-sigma depth
 
@@ -861,10 +870,6 @@ class AlertWorker:
                 df_fp_hists["snr"] > 3, other=np.nan
             )
 
-            # add a has_flux column and set it to True for the detections (where flux is not np.nan)
-            df_fp_hists["has_flux"] = False
-            df_fp_hists.loc[~df_fp_hists["flux"].isna(), "has_flux"] = True
-
             # deduplicate by mjd, filter, and flux
             df_fp_hists = (
                 df_fp_hists.drop_duplicates(subset=["mjd", "filter", "flux"])
@@ -875,25 +880,8 @@ class AlertWorker:
             # add an origin field with the value "alert_fp" so SkyPortal knows it's forced photometry
             df_fp_hists["origin"] = "alert_fp"
 
-            # add the zeropoint
-            df_fp_hists["zp"] = df_fp_hists["magzpsci"]
-
             # step 6: merge the fp_hists section with the light curve
             df_light_curve = pd.concat([df_light_curve, df_fp_hists], sort=False)
-
-            # deduplicate by mjd, filter, and has_flux
-
-            # the idea here is that if at the same jd we have > 1 detection in the same filter, we only keep one
-            # same for non detections
-            # but if we have a detection and a non detection at the same jd in the same filter, we keep both
-
-            # likely to happen with the addition of forced photometry where we might have detections
-            # where the prv_candidates section only had non detections
-            df_light_curve = (
-                df_light_curve.drop_duplicates(subset=["mjd", "filter", "has_flux"])
-                .reset_index(drop=True)
-                .sort_values(by=["mjd"])
-            )
 
         # step 6: set the magnitude system
         df_light_curve["zpsys"] = "ab"

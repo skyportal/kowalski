@@ -344,10 +344,10 @@ class TestAlertBrokerZTF:
                 post_alert(self.worker, record, fp_cutoff=1)
 
         df_photometry = self.worker.make_photometry(record, include_fp_hists=True)
-        assert len(df_photometry) == 39
+        assert len(df_photometry) == 42
         # prv_candidates have origin = None, and fp_hists have origin = 'alert_fp'
         assert "origin" in df_photometry.columns
-        assert len(df_photometry[df_photometry["origin"] == "alert_fp"]) == 18
+        assert len(df_photometry[df_photometry["origin"] == "alert_fp"]) == 21
         assert len(df_photometry[df_photometry["origin"].isnull()]) == 21
         # verify that they all have a fluxerr value
         assert all(df_photometry["fluxerr"].notnull())
@@ -367,7 +367,7 @@ class TestAlertBrokerZTF:
                     & (df_photometry["origin"] == "alert_fp")
                 ]
             )
-            == 4
+            == 6
         )
 
     def test_make_thumbnails(self):
@@ -1047,10 +1047,10 @@ class TestAlertBrokerZTF:
 
         assert response.status_code == 200
         photometry = response.json()["data"]
-        assert len(photometry) == 39
+        assert len(photometry) == 42
 
         assert "origin" in photometry[0]
-        assert len([p for p in photometry if p["origin"] == "alert_fp"]) == 18
+        assert len([p for p in photometry if p["origin"] == "alert_fp"]) == 21
         assert len([p for p in photometry if p["origin"] in [None, "None"]]) == 21
 
         assert (
@@ -1061,7 +1061,7 @@ class TestAlertBrokerZTF:
                     if p["origin"] == "alert_fp" and p["mag"] is not None
                 ]
             )
-            == 1
+            == 3
         )
         assert (
             len(
@@ -1082,7 +1082,7 @@ class TestAlertBrokerZTF:
         # To do so, modify the flux (flux+ 10) of all the detections in the forced photometry
         for i in range(len(fp_hists_formatted)):
             if fp_hists_formatted[i].get("forcediffimflux") is not None:
-                fp_hists_formatted[i]["forcediffimflux"] += 10
+                fp_hists_formatted[i]["forcediffimflux"] += 50
 
         self.worker.alert_sentinel_skyportal(
             alert,
@@ -1099,10 +1099,10 @@ class TestAlertBrokerZTF:
 
         assert response.status_code == 200
         photometry = response.json()["data"]
-        assert len(photometry) == 39
+        assert len(photometry) == 42
 
         assert "origin" in photometry[0]
-        assert len([p for p in photometry if p["origin"] == "alert_fp"]) == 18
+        assert len([p for p in photometry if p["origin"] == "alert_fp"]) == 21
         assert len([p for p in photometry if p["origin"] in [None, "None"]]) == 21
 
         assert (
@@ -1113,7 +1113,7 @@ class TestAlertBrokerZTF:
                     if p["origin"] == "alert_fp" and p["mag"] is not None
                 ]
             )
-            == 1
+            == 3
         )
 
         assert (
