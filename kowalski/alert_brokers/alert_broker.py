@@ -220,8 +220,10 @@ class AlertConsumer:
         raise NotImplementedError("Must be implemented in subclass")
 
     def submit_alert(self, record: Mapping):
+        # we look for objectId and objectid if missing,
+        # to support both ZTF and WNTR alert schemas
         with timer(
-            f"Submitting alert {record['objectId']} {record['candid']} for processing",
+            f"Submitting alert {record.get('objectId', record['objectid'])} {record['candid']} for processing",
             self.verbose > 1,
         ):
             future = self.dask_client.submit(
