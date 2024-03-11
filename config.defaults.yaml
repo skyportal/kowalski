@@ -1233,7 +1233,6 @@ kowalski:
     lifetime_restart: true
 
   dask_wntr:
-    # TODO verify! can't used PGIR's
     host: 127.0.0.1
     scheduler_port: 8784
     dashboard_address: :8785

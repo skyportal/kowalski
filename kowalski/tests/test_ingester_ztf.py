@@ -102,7 +102,6 @@ class Program:
                 timeout=3,
             )
             result = resp.json()
-
             assert result["status"] == "success"
             assert "data" in result
             assert "id" in result["data"]
@@ -138,7 +137,6 @@ class Program:
                 timeout=3,
             )
             result = resp.json()
-
             assert result["status"] == "success"
             assert "data" in result
             assert "id" in result["data"]

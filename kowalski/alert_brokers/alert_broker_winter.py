@@ -203,8 +203,12 @@ class WNTRAlertWorker(AlertWorker, ABC):
             response = self.api_skyportal("GET", "/api/streams")
         if response.json()["status"] == "success" and len(response.json()["data"]) > 0:
             for stream in response.json()["data"]:
-                if "WNTR" in stream.get("name"):
-                    self.wntr_stream_id = stream["id"]
+                for name_options in ["WNTR", "WINTER"]:
+                    if (
+                        name_options.lower().strip()
+                        in str(stream.get("name")).lower().strip()
+                    ):
+                        self.wntr_stream_id = stream["id"]
         if self.wntr_stream_id is None:
             log("Failed to get WNTR alert stream ids from SkyPortal")
             raise ValueError("Failed to get WNTR alert stream ids from SkyPortal")
@@ -514,7 +518,11 @@ def topic_listener(
     )
     # init each worker with AlertWorker instance
     worker_initializer = WorkerInitializer()
-    dask_client.register_worker_plugin(worker_initializer, name="worker-init")
+    try:
+        dask_client.register_worker_plugin(worker_initializer, name="worker-init")
+    except Exception as e:
+        log(f"Failed to register worker plugin: {e}")
+        log(f"Traceback: {traceback.format_exc()}")
     # Configure consumer connection to Kafka broker
     conf = {
         "bootstrap.servers": bootstrap_servers,

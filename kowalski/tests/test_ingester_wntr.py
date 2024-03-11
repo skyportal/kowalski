@@ -103,8 +103,8 @@ class TestIngester:
                 filter_id=program3.filter_id,
                 update_annotations=True,
                 pipeline=[
-                    {"$match": {"objectId": "WIRC21aaaac"}}
-                ],  # there are 2 alerts in the test set for this oid
+                    {"$match": {"objectId": "WNTR24auhaa"}}
+                ],  # there is 1 alerts in the test set for this oid
             )
 
         # create a test WNTR topic for the current UTC date
