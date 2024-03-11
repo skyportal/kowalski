@@ -619,7 +619,7 @@ class AlertWorker:
                 image_data = hdu[0].data
 
         # Survey-specific transformations to get North up and West on the right
-        if self.instrument == "ZTF":
+        if self.instrument in ["ZTF", "WNTR"]:
             image_data = np.flipud(image_data)
         elif self.instrument == "PGIR":
             image_data = np.rot90(np.fliplr(image_data), 3)
