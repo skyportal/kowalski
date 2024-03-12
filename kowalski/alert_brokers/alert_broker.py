@@ -231,8 +231,14 @@ class AlertConsumer:
     def submit_alert(self, record: Mapping):
         # we look for objectId and objectid if missing,
         # to support both ZTF and WNTR alert schemas
+        objectId = record.get("objectId", record.get("objectid", None))
+        if objectId is None:
+            log(
+                f"Failed to get objectId from record {record}, skipping alert submission"
+            )
+            return
         with timer(
-            f"Submitting alert {record.get('objectId', record['objectid'])} {record['candid']} for processing",
+            f"Submitting alert {objectId} {record['candid']} for processing",
             self.verbose > 1,
         ):
             future = self.dask_client.submit(
