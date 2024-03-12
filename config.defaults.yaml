@@ -251,12 +251,6 @@ kowalski:
           fields:
             - ["candid", -1]
           unique: true
-        - name: jd_drb_candid
-          fields:
-            - ["candidate.jd", -1]
-            - ["candidate.drb", -1]
-            - ["candid", -1]
-          unique: false
 
       TURBO_alerts:
         - name: radec_candid
