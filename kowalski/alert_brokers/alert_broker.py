@@ -7,6 +7,7 @@ import inspect
 import io
 import os
 import pathlib
+import platform
 import sys
 import traceback
 from ast import literal_eval
@@ -16,6 +17,7 @@ from typing import Mapping, Optional, Sequence
 import confluent_kafka
 import dask.distributed
 import fastavro
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -49,6 +51,13 @@ from kowalski.utils import (
 from warnings import simplefilter
 
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+
+try:
+    if platform.uname()[0] == "Darwin":
+        # make the matplotlib backend non-interactive on mac to avoid crashes
+        matplotlib.pyplot.switch_backend("Agg")
+except Exception as e:
+    log(f"Failed to switch matplotlib backend to non-interactive: {e}")
 
 # Tensorflow is problematic for Mac's currently, so we can add an option to disable it
 USE_TENSORFLOW = os.environ.get("USE_TENSORFLOW", True) in [
@@ -220,8 +229,16 @@ class AlertConsumer:
         raise NotImplementedError("Must be implemented in subclass")
 
     def submit_alert(self, record: Mapping):
+        # we look for objectId and objectid if missing,
+        # to support both ZTF and WNTR alert schemas
+        objectId = record.get("objectId", record.get("objectid", None))
+        if objectId is None:
+            log(
+                f"Failed to get objectId from record {record}, skipping alert submission"
+            )
+            return
         with timer(
-            f"Submitting alert {record['objectId']} {record['candid']} for processing",
+            f"Submitting alert {objectId} {record['candid']} for processing",
             self.verbose > 1,
         ):
             future = self.dask_client.submit(
@@ -468,11 +485,14 @@ class AlertWorker:
 
         # get instrument id
         self.instrument_id = 1
+        instrument_name_on_skyportal = self.instrument
+        if self.instrument == "WNTR":
+            instrument_name_on_skyportal = "WINTER"
         with timer(
             f"Getting {self.instrument} instrument_id from SkyPortal", self.verbose > 1
         ):
             response = self.api_skyportal(
-                "GET", "/api/instrument", {"name": self.instrument}
+                "GET", "/api/instrument", {"name": instrument_name_on_skyportal}
             )
         if response.json()["status"] == "success" and len(response.json()["data"]) > 0:
             self.instrument_id = response.json()["data"][0]["id"]
@@ -617,7 +637,7 @@ class AlertWorker:
                 image_data = hdu[0].data
 
         # Survey-specific transformations to get North up and West on the right
-        if self.instrument == "ZTF":
+        if self.instrument in ["ZTF", "WNTR"]:
             image_data = np.flipud(image_data)
         elif self.instrument == "PGIR":
             image_data = np.rot90(np.fliplr(image_data), 3)

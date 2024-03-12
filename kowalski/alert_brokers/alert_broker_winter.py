@@ -58,9 +58,7 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
         :return:
         """
         candid = alert["candid"]
-        object_id = alert["objectId"]
-
-        print(f"WINTER: {topic} {object_id} {candid} in process_alert")
+        object_id = alert["objectid"]
 
         # get worker running current task
         worker = dask.distributed.get_worker()
@@ -155,6 +153,14 @@ class WNTRAlertConsumer(AlertConsumer, ABC):
                 )
 
         if config["misc"]["broker"]:
+            # winter has a different schema (fields have different names),
+            # so now that the alert packet has been ingested, we just add some aliases
+            # to avoid having to make exceptions all the time everywhere in the rest of the code
+            # not good memory-wise, but not worth adding if statements everywhere just for this...
+            alert["objectId"] = alert.get("objectid")
+            alert["cutoutScience"] = alert.get("cutout_science")
+            alert["cutoutTemplate"] = alert.get("cutout_template")
+            alert["cutoutDifference"] = alert.get("cutout_difference")
             # execute user-defined alert filters
             with timer(f"Filtering of {object_id} {candid}", alert_worker.verbose > 1):
                 passed_filters = alert_worker.alert_filter__user_defined(
@@ -197,8 +203,12 @@ class WNTRAlertWorker(AlertWorker, ABC):
             response = self.api_skyportal("GET", "/api/streams")
         if response.json()["status"] == "success" and len(response.json()["data"]) > 0:
             for stream in response.json()["data"]:
-                if "WNTR" in stream.get("name"):
-                    self.wntr_stream_id = stream["id"]
+                for name_options in ["WNTR", "WINTER"]:
+                    if (
+                        name_options.lower().strip()
+                        in str(stream.get("name")).lower().strip()
+                    ):
+                        self.wntr_stream_id = stream["id"]
         if self.wntr_stream_id is None:
             log("Failed to get WNTR alert stream ids from SkyPortal")
             raise ValueError("Failed to get WNTR alert stream ids from SkyPortal")
@@ -438,14 +448,14 @@ class WNTRAlertWorker(AlertWorker, ABC):
         :return:
         """
         with timer(
-            f"Making alert photometry of {alert['objectId']} {alert['candid']}",
+            f"Making alert photometry of {alert['objectid']} {alert['candid']}",
             self.verbose > 1,
         ):
             df_photometry = self.make_photometry(alert)
 
         # post photometry
         photometry = {
-            "obj_id": alert["objectId"],
+            "obj_id": alert["objectid"],
             "stream_ids": [int(self.wntr_stream_id)],
             "instrument_id": self.instrument_id,
             "mjd": df_photometry["mjd"].tolist(),
@@ -462,18 +472,18 @@ class WNTRAlertWorker(AlertWorker, ABC):
             len(photometry.get("fluxerr", ())) > 0
         ):
             with timer(
-                f"Posting photometry of {alert['objectId']} {alert['candid']}, "
+                f"Posting photometry of {alert['objectid']} {alert['candid']}, "
                 f"stream_id={self.wntr_stream_id} to SkyPortal",
                 self.verbose > 1,
             ):
                 response = self.api_skyportal("PUT", "/api/photometry", photometry)
             if response.json()["status"] == "success":
                 log(
-                    f"Posted {alert['objectId']} photometry stream_id={self.wntr_stream_id} to SkyPortal"
+                    f"Posted {alert['objectid']} photometry stream_id={self.wntr_stream_id} to SkyPortal"
                 )
             else:
                 log(
-                    f"Failed to post {alert['objectId']} photometry stream_id={self.wntr_stream_id} to SkyPortal"
+                    f"Failed to post {alert['objectid']} photometry stream_id={self.wntr_stream_id} to SkyPortal"
                 )
             log(response.json())
 
@@ -508,7 +518,11 @@ def topic_listener(
     )
     # init each worker with AlertWorker instance
     worker_initializer = WorkerInitializer()
-    dask_client.register_worker_plugin(worker_initializer, name="worker-init")
+    try:
+        dask_client.register_worker_plugin(worker_initializer, name="worker-init")
+    except Exception as e:
+        log(f"Failed to register worker plugin: {e}")
+        log(f"Traceback: {traceback.format_exc()}")
     # Configure consumer connection to Kafka broker
     conf = {
         "bootstrap.servers": bootstrap_servers,

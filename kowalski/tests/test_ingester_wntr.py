@@ -103,14 +103,14 @@ class TestIngester:
                 filter_id=program3.filter_id,
                 update_annotations=True,
                 pipeline=[
-                    {"$match": {"objectId": "WIRC21aaaac"}}
-                ],  # there are 2 alerts in the test set for this oid
+                    {"$match": {"objectId": "WNTR24auhaa"}}
+                ],  # there is 1 alerts in the test set for this oid
             )
 
         # create a test WNTR topic for the current UTC date
         date = datetime.datetime.utcnow().strftime("%Y%m%d")
         topic_name = f"winter_{date}_test"
-        path_alerts = "wntr_alerts/20220815"
+        path_alerts = "wntr_alerts/20240311"
 
         with KafkaStream(
             topic_name,
@@ -134,8 +134,8 @@ class TestIngester:
             n_alerts_aux = mongo.db[collection_alerts_aux].count_documents({})
 
             try:
-                assert n_alerts == 5
-                assert n_alerts_aux == 4
+                assert n_alerts == 11
+                assert n_alerts_aux == 11
                 print("----Passed WNTR ingester tests----")
                 break
             except AssertionError:

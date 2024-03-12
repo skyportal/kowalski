@@ -484,16 +484,16 @@ kowalski:
         - {
             "$project":
               {
-                "cutoutScience": 0,
-                "cutoutTemplate": 0,
-                "cutoutDifference": 0,
+                "cutout_science": 0,
+                "cutout_template": 0,
+                "cutout_difference": 0,
               },
           }
         - {
             "$lookup":
               {
                 "from": "WNTR_alerts_aux",
-                "localField": "objectId",
+                "localField": "objectid",
                 "foreignField": "_id",
                 "as": "aux",
               },
@@ -523,7 +523,7 @@ kowalski:
                   },
                 "schemavsn": 1,
                 "publisher": 1,
-                "objectId": 1,
+                "objectid": 1,
                 "candid": 1,
                 "candidate": 1,
                 "classifications": 1,
@@ -1233,7 +1233,6 @@ kowalski:
     lifetime_restart: true
 
   dask_wntr:
-    # TODO verify! can't used PGIR's
     host: 127.0.0.1
     scheduler_port: 8784
     dashboard_address: :8785
