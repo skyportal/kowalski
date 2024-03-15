@@ -226,10 +226,10 @@ kowalski:
             - ["coordinates.radec_geojson", "2dsphere"]
             - ["candid", -1]
           unique: false
-        - name: radec_objectId
+        - name: radec_objectid
           fields:
             - ["coordinates.radec_geojson", "2dsphere"]
-            - ["objectId", -1]
+            - ["objectid", -1]
           unique: false
         - name: jd_radec_candid
           fields:
@@ -237,41 +237,20 @@ kowalski:
             - ["coordinates.radec_geojson", "2dsphere"]
             - ["candid", -1]
           unique: false
-        - name: jd_radec_objectId
+        - name: jd_radec_objectid
           fields:
             - ["candidate.jd", 1]
             - ["coordinates.radec_geojson", "2dsphere"]
-            - ["objectId", -1]
+            - ["objectid", -1]
           unique: false
-        - name: objectId
+        - name: objectid
           fields:
-            - ["objectId", -1]
+            - ["objectid", -1]
           unique: false
         - name: candid
           fields:
             - ["candid", -1]
           unique: true
-        - name: jd_drb_candid
-          fields:
-            - ["candidate.jd", -1]
-            - ["candidate.drb", -1]
-            - ["candid", -1]
-          unique: false
-        - name: jd_drb_ndethist_dmag2mass_isstar_distnearbrstar
-          fields:
-            - ["candidate.jd", -1]
-            - ["candidate.drb", -1]
-            - ["candidate.ndethist", 1]
-            - ["candidate.dmag2mass", -1]
-            - ["candidate.isstar", -1]
-            - ["candidate.distnearbrstar", 1]
-          unique: false
-        - name: jd_scorr_dmag2mass
-          fields:
-            - ["candidate.jd", -1]
-            - ["candidate.scorr", -1]
-            - ["candidate.dmag2mass", -1]
-          unique: false
 
       TURBO_alerts:
         - name: radec_candid
