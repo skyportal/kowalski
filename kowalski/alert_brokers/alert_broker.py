@@ -758,12 +758,12 @@ class AlertWorker:
             #        cspjs seems to be close/good enough as an approximation
             df_light_curve["filter"] = "cspjs"
         elif self.instrument == "WNTR":
-            # 20220818: added WNTR
-            # 20220929: nir bandpasses have been added to sncosmo
-            nir_filters = {0: "ps1::y", 1: "2massj", 2: "2massh", 3: "2massks"}
+            nir_filters = {1: "ps1::y", 2: "2massj", 3: "2massh", 4: "dark"}
             df_light_curve["filter"] = df_light_curve["fid"].apply(
                 lambda x: nir_filters[x]
             )
+            # remove dark frames
+            df_light_curve = df_light_curve[df_light_curve["filter"] != "dark"]
         elif self.instrument == "TURBO":
             # the filters are just the fid values
             # TODO: add the actual filter names
