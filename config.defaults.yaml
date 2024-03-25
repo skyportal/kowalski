@@ -368,6 +368,7 @@ kowalski:
                           {
                             "$and":
                               [
+                                { "$eq": ["$$item.procstatus", "0"] },
                                 { "$in": ["$$item.programid", null] },
                                 {
                                   "$lt":
