@@ -368,7 +368,6 @@ kowalski:
                           {
                             "$and":
                               [
-                                { "$eq": ["$$item.procstatus", "0"] },
                                 { "$in": ["$$item.programid", null] },
                                 {
                                   "$lt":
@@ -380,6 +379,7 @@ kowalski:
                                       365,
                                     ],
                                 },
+                                { "$eq": ["$$item.procstatus", "0"] },
                               ],
                           },
                       },
