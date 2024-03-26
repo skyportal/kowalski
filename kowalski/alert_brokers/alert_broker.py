@@ -834,74 +834,87 @@ class AlertWorker:
             # fp_hists is already in flux space, so we process it separately
             df_fp_hists = pd.DataFrame(alert.get("fp_hists", []))
 
-            # filter out bad data:
+            # filter out bad data, where procstatus is not 0 or "0"
+            mask_good_fp_hists = df_fp_hists["procstatus"].apply(
+                lambda x: x in [0, "0"]
+            )
+            df_fp_hists = df_fp_hists.loc[mask_good_fp_hists]
+
+            # filter out bad data using diffmaglim
             mask_good_diffmaglim = df_fp_hists["diffmaglim"] > 0
             df_fp_hists = df_fp_hists.loc[mask_good_diffmaglim]
 
-            # add filter column
-            if self.instrument == "ZTF":
-                df_fp_hists["filter"] = df_fp_hists["fid"].apply(
-                    lambda x: ztf_filters[x]
-                )
-            else:
-                raise NotImplementedError(
-                    f"Processing of forced photometry for {self.instrument} not implemented"
-                )
+            if len(df_fp_hists) > 0:
+                # filter out bad data using diffmaglim
+                mask_good_diffmaglim = df_fp_hists["diffmaglim"] > 0
+                df_fp_hists = df_fp_hists.loc[mask_good_diffmaglim]
 
-            # add the zeropoint now (used in missing upper limit calculation)
-            df_fp_hists["zp"] = df_fp_hists["magzpsci"]
-
-            # add mjd and convert columns to float
-            df_fp_hists["mjd"] = df_fp_hists["jd"] - 2400000.5
-            df_fp_hists["mjd"] = df_fp_hists["mjd"].apply(lambda x: np.float64(x))
-            df_fp_hists["flux"] = (
-                df_fp_hists["forcediffimflux"].apply(lambda x: np.float64(x))
-                if "forcediffimflux" in df_fp_hists
-                else np.nan
-            )
-            df_fp_hists["fluxerr"] = (
-                df_fp_hists["forcediffimfluxunc"].apply(lambda x: np.float64(x))
-                if "forcediffimfluxunc" in df_fp_hists
-                else np.nan
-            )
-
-            # where the flux is np.nan, we consider it a non-detection
-            # for these, we compute the upper limits from the diffmaglim
-            missing_flux = df_fp_hists["flux"].isna()
-            df_fp_hists.loc[missing_flux, "fluxerr"] = (
-                10
-                ** (
-                    -0.4
-                    * (
-                        df_fp_hists.loc[mask_good_diffmaglim, "diffmaglim"]
-                        - df_fp_hists.loc[mask_good_diffmaglim, "zp"]
+                # add filter column
+                if self.instrument == "ZTF":
+                    df_fp_hists["filter"] = df_fp_hists["fid"].apply(
+                        lambda x: ztf_filters[x]
                     )
+                else:
+                    raise NotImplementedError(
+                        f"Processing of forced photometry for {self.instrument} not implemented"
+                    )
+
+                # add the zeropoint now (used in missing upper limit calculation)
+                df_fp_hists["zp"] = df_fp_hists["magzpsci"]
+
+                # add mjd and convert columns to float
+                df_fp_hists["mjd"] = df_fp_hists["jd"] - 2400000.5
+                df_fp_hists["mjd"] = df_fp_hists["mjd"].apply(lambda x: np.float64(x))
+                df_fp_hists["flux"] = (
+                    df_fp_hists["forcediffimflux"].apply(lambda x: np.float64(x))
+                    if "forcediffimflux" in df_fp_hists
+                    else np.nan
                 )
-                / 5.0
-            )  # as diffmaglim is the 5-sigma depth
+                df_fp_hists["fluxerr"] = (
+                    df_fp_hists["forcediffimfluxunc"].apply(lambda x: np.float64(x))
+                    if "forcediffimfluxunc" in df_fp_hists
+                    else np.nan
+                )
 
-            # calculate the snr (as absolute value of the flux divided by the fluxerr)
-            df_fp_hists["snr"] = np.abs(df_fp_hists["flux"] / df_fp_hists["fluxerr"])
+                # where the flux is np.nan, we consider it a non-detection
+                # for these, we compute the upper limits from the diffmaglim
+                missing_flux = df_fp_hists["flux"].isna()
+                df_fp_hists.loc[missing_flux, "fluxerr"] = (
+                    10
+                    ** (
+                        -0.4
+                        * (
+                            df_fp_hists.loc[mask_good_diffmaglim, "diffmaglim"]
+                            - df_fp_hists.loc[mask_good_diffmaglim, "zp"]
+                        )
+                    )
+                    / 5.0
+                )  # as diffmaglim is the 5-sigma depth
 
-            # we only consider datapoints as detections if they have an snr > 3
-            # (for reference, alert detections are considered if they have an snr > 5)
-            # otherwise, we set flux to np.nan
-            df_fp_hists["flux"] = df_fp_hists["flux"].where(
-                df_fp_hists["snr"] > 3, other=np.nan
-            )
+                # calculate the snr (as absolute value of the flux divided by the fluxerr)
+                df_fp_hists["snr"] = np.abs(
+                    df_fp_hists["flux"] / df_fp_hists["fluxerr"]
+                )
 
-            # deduplicate by mjd, filter, and flux
-            df_fp_hists = (
-                df_fp_hists.drop_duplicates(subset=["mjd", "filter", "flux"])
-                .reset_index(drop=True)
-                .sort_values(by=["mjd"])
-            )
+                # we only consider datapoints as detections if they have an snr > 3
+                # (for reference, alert detections are considered if they have an snr > 5)
+                # otherwise, we set flux to np.nan
+                df_fp_hists["flux"] = df_fp_hists["flux"].where(
+                    df_fp_hists["snr"] > 3, other=np.nan
+                )
 
-            # add an origin field with the value "alert_fp" so SkyPortal knows it's forced photometry
-            df_fp_hists["origin"] = "alert_fp"
+                # deduplicate by mjd, filter, and flux
+                df_fp_hists = (
+                    df_fp_hists.drop_duplicates(subset=["mjd", "filter", "flux"])
+                    .reset_index(drop=True)
+                    .sort_values(by=["mjd"])
+                )
 
-            # step 6: merge the fp_hists section with the light curve
-            df_light_curve = pd.concat([df_light_curve, df_fp_hists], sort=False)
+                # add an origin field with the value "alert_fp" so SkyPortal knows it's forced photometry
+                df_fp_hists["origin"] = "alert_fp"
+
+                # step 6: merge the fp_hists section with the light curve
+                df_light_curve = pd.concat([df_light_curve, df_fp_hists], sort=False)
 
         # step 6: set the magnitude system
         df_light_curve["zpsys"] = "ab"
