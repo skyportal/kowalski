@@ -584,7 +584,11 @@ def watchdog(obs_date: str = None, test: bool = False):
         try:
 
             if obs_date is None:
-                datestr = datetime.datetime.utcnow().strftime("%Y%m%d")
+                # for WNTR, the date that the data is sent to is the date of observation in local time
+                # not UTC, which is essentially UTC - 1 day
+                datestr = (
+                    datetime.datetime.utcnow() - datetime.timedelta(days=1)
+                ).strftime("%Y%m%d")
             else:
                 datestr = obs_date
 
@@ -592,7 +596,7 @@ def watchdog(obs_date: str = None, test: bool = False):
             if not test:
                 # Production Kafka stream at IPAC
 
-                # as of 20220801, the naming convention is winter_%Y%m%
+                # as of 20220801, the naming convention is winter_%Y%m%d
                 topics_tonight = [f"winter_{datestr}"]
             else:
                 # Local test stream
