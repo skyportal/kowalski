@@ -148,6 +148,9 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                 < 30
             ):
                 alert_aux["fp_hists"] = fp_hists
+            else:
+                # if we don't save it, empty the fp_hists array to not send to SkyPortal what is not saved here.
+                fp_hists = []
 
             with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
                 retry(alert_worker.mongo.insert_one)(
@@ -184,6 +187,10 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
                     == 1
                 ):
                     fp_hists = alert_worker.update_fp_hists(alert, fp_hists)
+                else:
+                    # if there is no fp_hists for this object, we don't update anything
+                    # and we empty the fp_hists array to not send to SkyPortal what is not saved here.
+                    fp_hists = []
 
         if config["misc"]["broker"]:
             # execute user-defined alert filters
