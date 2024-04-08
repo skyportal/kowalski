@@ -2073,7 +2073,7 @@ class AlertWorker:
                 ]
                 # filter out the failed requests that failed more than 12 hours. This is for to avoid
                 # re-triggering  on objects where existing requests failed LESS than 12 hours ago.
-                # 
+                #
                 # We keep these recently failed ones so that the code underneath finds an existing request and
                 # does not retrigger a new one. Usually, failed requests are reprocessed during the day and marked
                 # as complete, which is why we can afford to wait 12 hours before re-triggering
