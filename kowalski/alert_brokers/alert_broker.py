@@ -2078,21 +2078,30 @@ class AlertWorker:
                 # does not retrigger a new one. Usually, failed requests are reprocessed during the day and marked
                 # as complete, which is why we can afford to wait 12 hours before re-triggering
                 # (basically until the next night)
-                now_utc = datetime.datetime.utcnow()
-                existing_requests = [
-                    r
-                    for r in existing_requests
-                    if not (
-                        "failed" in str(r["status"]).lower()
-                        and (
-                            now_utc
-                            - datetime.datetime.strptime(
-                                r["modified"], "%Y-%m-%dT%H:%M:%S.%f"
-                            )
-                        ).total_seconds()
-                        > 12 * 3600
+                try:
+                    now_utc = datetime.datetime.utcnow()
+                    existing_requests = [
+                        r
+                        for r in existing_requests
+                        if not (
+                            "failed" in str(r["status"]).lower()
+                            and (
+                                now_utc
+                                - datetime.datetime.strptime(
+                                    r["modified"], "%Y-%m-%dT%H:%M:%S.%f"
+                                )
+                            ).total_seconds()
+                            > 12 * 3600
+                        )
+                    ]
+                except Exception as e:
+                    # to avoid not triggering at all if the above fails, we log that failure
+                    # and keep all failed requests in the list. That way if there are any failed requests
+                    # we won't trigger, but we will trigger as usual if they're isn't any failed requests
+                    # it's just a fail-safe
+                    log(
+                        f"Failed to filter out failed followup requests for {alert['objectId']}: {e}"
                     )
-                ]
 
                 # sort by priority (highest first)
                 existing_requests = sorted(
