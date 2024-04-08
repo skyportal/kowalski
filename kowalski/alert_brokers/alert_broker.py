@@ -2071,7 +2071,7 @@ class AlertWorker:
                         ]
                     )
                 ]
-                # filter out the failed requests that failed more than 12 hours. This is for to avoid
+                # filter out the failed requests that failed more than 12 hours. This is to avoid
                 # re-triggering  on objects where existing requests failed LESS than 12 hours ago.
                 #
                 # We keep these recently failed ones so that the code underneath finds an existing request and
@@ -2235,7 +2235,7 @@ class AlertWorker:
                     # if there is an existing request, but the priority is lower than the one we want to post,
                     # update the existing request with the new priority
                     request_to_update = existing_requests_filtered[0][1]
-                    # if the status is completed, deleted, or failed, do not update
+                    # if the status is completed, deleted, or failed do not update
                     if any(
                         [
                             status in str(request_to_update["status"]).lower()
