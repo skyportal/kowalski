@@ -2067,10 +2067,42 @@ class AlertWorker:
                     if any(
                         [
                             status in str(r["status"]).lower()
-                            for status in ["complete", "submitted", "deleted"]
+                            for status in ["complete", "submitted", "deleted", "failed"]
                         ]
                     )
                 ]
+                # filter out the failed requests that failed more than 12 hours. This is to avoid
+                # re-triggering  on objects where existing requests failed LESS than 12 hours ago.
+                #
+                # We keep these recently failed ones so that the code underneath finds an existing request and
+                # does not retrigger a new one. Usually, failed requests are reprocessed during the day and marked
+                # as complete, which is why we can afford to wait 12 hours before re-triggering
+                # (basically until the next night)
+                try:
+                    now_utc = datetime.datetime.utcnow()
+                    existing_requests = [
+                        r
+                        for r in existing_requests
+                        if not (
+                            "failed" in str(r["status"]).lower()
+                            and (
+                                now_utc
+                                - datetime.datetime.strptime(
+                                    r["modified"], "%Y-%m-%dT%H:%M:%S.%f"
+                                )
+                            ).total_seconds()
+                            > 12 * 3600
+                        )
+                    ]
+                except Exception as e:
+                    # to avoid not triggering at all if the above fails, we log that failure
+                    # and keep all failed requests in the list. That way if there are any failed requests
+                    # we won't trigger, but we will trigger as usual if they're isn't any failed requests
+                    # it's just a fail-safe
+                    log(
+                        f"Failed to filter out failed followup requests for {alert['objectId']}: {e}"
+                    )
+
                 # sort by priority (highest first)
                 existing_requests = sorted(
                     existing_requests,
@@ -2212,15 +2244,15 @@ class AlertWorker:
                     # if there is an existing request, but the priority is lower than the one we want to post,
                     # update the existing request with the new priority
                     request_to_update = existing_requests_filtered[0][1]
-                    # if the status is completed or deleted, do not update
+                    # if the status is completed, deleted, or failed do not update
                     if any(
                         [
                             status in str(request_to_update["status"]).lower()
-                            for status in ["complete", "deleted"]
+                            for status in ["complete", "deleted", "failed"]
                         ]
                     ):
                         log(
-                            f"Followup request for {alert['objectId']} and allocation_id {passed_filter['auto_followup']['allocation_id']} already exists on SkyPortal, but is completed or deleted, no need for update"
+                            f"Followup request for {alert['objectId']} and allocation_id {passed_filter['auto_followup']['allocation_id']} already exists on SkyPortal, but is completed, deleted or failed (recently), no need for update"
                         )
                     # if the status is submitted, and the  new priority is higher, update
                     if "submitted" in str(
