@@ -3317,14 +3317,22 @@ class SkymapHandler(Handler):
                 {
                     "$or": [
                         {"dateobs": dateobs},
-                        {"triggerid": triggerid},
                     ],
                 },
                 {"localization_name": skymap["localization_name"]},
             ]
         }
+        if triggerid not in [None, ""]:
+            query["$and"][0]["$or"].append({"triggerid": triggerid})
         if len(aliases) > 0:
-            query["$and"][0]["$or"].append({"aliases": {"$all": aliases}})
+            query["$and"][0]["$or"].append(
+                {
+                    "$and": [
+                        {"aliases": {"$all": aliases}},
+                        {"aliases": {"$size": len(aliases)}},
+                    ]
+                }
+            )
 
         existing_skymap = await request.app["mongo"][
             config["database"]["collections"]["skymaps"]
@@ -3373,18 +3381,7 @@ class SkymapHandler(Handler):
                 await request.app["mongo"][
                     config["database"]["collections"]["skymaps"]
                 ].update_one(
-                    {
-                        "$and": [
-                            {
-                                "$or": [
-                                    {"dateobs": dateobs},
-                                    {"triggerid": triggerid},
-                                    {"aliases": {"$all": aliases}},
-                                ]
-                            },
-                            {"localization_name": skymap["localization_name"]},
-                        ]
-                    },
+                    {"_id": existing_skymap["_id"]},
                     {"$set": {"contours": contours}},
                 )
                 return web.json_response(
