@@ -1,3 +1,4 @@
+import uuid
 from copy import deepcopy
 from datetime import datetime
 
@@ -434,8 +435,17 @@ class TestAlertBrokerZTF:
             "active": True,
             "comment": "Saved to BTS by BTSbot.",
         }
-        passed_filters_complex_autosave = self.worker.alert_filter__user_defined(
-            [filter], self.alert
+        passed_filters_complex_autosave_comment = (
+            self.worker.alert_filter__user_defined([filter], self.alert)
+        )
+
+        # try with a complex autosave key (with saver_id)
+        filter["autosave"] = {
+            "active": True,
+            "saver_id": 1,
+        }
+        passed_filters_complex_autosave_saver_id = (
+            self.worker.alert_filter__user_defined([filter], self.alert)
         )
 
         # try without specifying an autosave key
@@ -461,14 +471,80 @@ class TestAlertBrokerZTF:
         assert "autosave" in passed_filters_no_autosave_key[0]
         assert passed_filters_no_autosave_key[0]["autosave"] is False
 
-        assert passed_filters_complex_autosave is not None
-        assert len(passed_filters_complex_autosave) == 1
-        assert "autosave" in passed_filters_complex_autosave[0]
-        assert "comment" in passed_filters_complex_autosave[0]["autosave"]
+        assert passed_filters_complex_autosave_comment is not None
+        assert len(passed_filters_complex_autosave_comment) == 1
+        assert "autosave" in passed_filters_complex_autosave_comment[0]
+        assert "comment" in passed_filters_complex_autosave_comment[0]["autosave"]
         assert (
-            passed_filters_complex_autosave[0]["autosave"]["comment"]
+            passed_filters_complex_autosave_comment[0]["autosave"]["comment"]
             == "Saved to BTS by BTSbot."
         )
+
+        assert passed_filters_complex_autosave_saver_id is not None
+        assert len(passed_filters_complex_autosave_saver_id) == 1
+        assert "autosave" in passed_filters_complex_autosave_saver_id[0]
+        assert "saver_id" in passed_filters_complex_autosave_saver_id[0]["autosave"]
+        assert passed_filters_complex_autosave_saver_id[0]["autosave"]["saver_id"] == 1
+
+    def test_alert_filter__user_defined_autosave_with_broker(self):
+        """Test pushing an alert through a filter with autosave activated, and broker mode activated"""
+        if not config["misc"].get("broker", False):
+            pytest.skip("Broker mode not activated, skipping")
+
+        # first get the groups
+        response = self.worker.api_skyportal("GET", "/api/groups", None)
+        # find the group called 'Program A'
+        groups = response.json()["data"]["user_accessible_groups"]
+        saved_group_id = [g for g in groups if g["name"] == "Program A"][0]["id"]
+
+        # then get the user ids
+        response = self.worker.api_skyportal("GET", "/api/user", None)
+        assert "data" in response.json()
+        assert "users" in response.json()["data"]
+        users = response.json()["data"]["users"]
+        user_id = [u for u in users if u["username"] == "testadmin"][0]["id"]
+
+        assert saved_group_id is not None
+
+        alert = self.alert
+        # we replace the objectId with a random one
+        alert["objectId"] = str(uuid.uuid4())
+
+        post_alert(self.worker, alert)
+
+        filter = filter_template(self.worker.collection_alerts)
+        filter["group_id"] = saved_group_id
+        filter["autosave"] = {
+            "active": True,
+            "comment": "Saved to BTS by BTSbot.",
+            "saver_id": user_id,
+        }
+        passed_filters = self.worker.alert_filter__user_defined([filter], alert)
+
+        assert passed_filters is not None
+        assert len(passed_filters) == 1
+        assert "autosave" in passed_filters[0]
+        assert passed_filters[0]["autosave"] is not False
+        assert "comment" in passed_filters[0]["autosave"]
+        assert passed_filters[0]["autosave"]["comment"] == "Saved to BTS by BTSbot."
+        assert "saver_id" in passed_filters[0]["autosave"]
+        assert passed_filters[0]["autosave"]["saver_id"] == user_id
+
+        alert, prv_candidates, _ = self.worker.alert_mongify(alert)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
+
+        # grab the source from SkyPortal
+        response = self.worker.api_skyportal(
+            "GET", f"/api/sources/{alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        source = response.json()["data"]
+        # verify that it's in the target group
+        target_group = [g for g in source["groups"] if g["id"] == saved_group_id]
+        assert len(target_group) == 1
+        assert target_group[0]["saved_by"]["id"] == user_id
 
     def test_alert_filter__user_defined_followup(self):
         """Test pushing an alert through a filter that also has auto follow-up activated"""

@@ -73,6 +73,7 @@ AUTOSAVE_KEYS = {
     "comment": str,
     "ignore_group_ids": list,
     "pipeline": list,
+    "saver_id": int,
 }
 
 # dict with the keys allowed in an filter's auto_followup section, and their data types
@@ -1921,6 +1922,8 @@ class FilterHandler(Handler):
                     "permissions": [1, 2, 3]
                     "autosave": {
                       "active": true,
+                      "comment": "saved by BTSbot",
+                      "saver_id": 1,
                       "pipeline": [
                         {
                           "$match": {
