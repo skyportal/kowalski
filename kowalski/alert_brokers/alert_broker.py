@@ -3,7 +3,6 @@ __all__ = ["AlertConsumer", "AlertWorker", "EopError"]
 import base64
 import datetime
 import gzip
-import inspect
 import io
 import os
 import pathlib
@@ -1270,7 +1269,6 @@ class AlertWorker:
         self,
         filter_templates: Sequence,
         alert: Mapping,
-        alert_history: list = [],
         max_time_ms: int = 1000,
     ) -> list:
         """Evaluate user-defined filters
@@ -1357,6 +1355,7 @@ class AlertWorker:
                         "active", False
                     ):
                         auto_followup_filter = deepcopy(_filter["auto_followup"])
+                        priority = 5
 
                         # validate non-optional keys
                         if (
@@ -1379,58 +1378,13 @@ class AlertWorker:
                             continue
 
                         # there is also a priority key that is optional. If not present or if not a function, it defaults to 5 (lowest priority)
-                        if auto_followup_filter.get("priority", None) is not None:
-                            if isinstance(auto_followup_filter["priority"], str):
-                                try:
-                                    auto_followup_filter["priority"] = eval(
-                                        auto_followup_filter["priority"]
-                                    )
-                                except Exception:
-                                    log(
-                                        f'Filter {_filter["fid"]} has an invalid auto-followup priority (could not eval str), using default of 5'
-                                    )
-                                    continue
-                            if isinstance(
-                                auto_followup_filter["priority"], int
-                            ) or isinstance(auto_followup_filter["priority"], float):
-                                auto_followup_filter[
-                                    "priority"
-                                ] = lambda alert, alert_history, data: auto_followup_filter[
-                                    "priority"
-                                ]
-                            elif callable(auto_followup_filter["priority"]):
-                                # verify that the function takes 3 arguments: alert, alert_history, data
-                                if (
-                                    len(
-                                        inspect.signature(
-                                            auto_followup_filter["priority"]
-                                        ).parameters
-                                    )
-                                    != 3
-                                ):
-                                    log(
-                                        f'Filter {_filter["fid"]} has an invalid auto-followup priority (needs 3 arguments), using default of 5'
-                                    )
-                                    auto_followup_filter[
-                                        "priority"
-                                    ] = lambda alert, alert_history, data: 5
-                        elif (
+                        if isinstance(
                             auto_followup_filter.get("payload", {}).get(
                                 "priority", None
-                            )
-                            is not None
+                            ),
+                            (int, float),
                         ):
-                            auto_followup_filter[
-                                "priority"
-                            ] = lambda alert, alert_history, data: auto_followup_filter[
-                                "payload"
-                            ][
-                                "priority"
-                            ]
-                        else:
-                            auto_followup_filter[
-                                "priority"
-                            ] = lambda alert, alert_history, data: 5
+                            priority = auto_followup_filter["payload"]["priority"]
 
                         # validate the optional radius key, and set to 0.5 arcsec if not present
                         if auto_followup_filter.get("radius", None) is None:
@@ -1474,12 +1428,53 @@ class AlertWorker:
                         )
 
                         if len(auto_followup_filtered_data) == 1:
-                            priority = auto_followup_filter["priority"](
-                                alert, alert_history, auto_followup_filtered_data[0]
-                            )
                             comment = auto_followup_filter.get("comment", None)
+                            if "comment" in auto_followup_filtered_data[
+                                0
+                            ] and isinstance(
+                                auto_followup_filtered_data[0]["comment"], str
+                            ):
+                                comment = auto_followup_filtered_data[0]["comment"]
+
+                            payload = _filter["auto_followup"].get("payload", {})
+                            payload["priority"] = priority
+                            # if the auto_followup_filtered_data contains a payload key, merge it with the existing payload
+                            # updating the existing keys with the new values, ignoring the rest
+                            #
+                            # we ignore the rest because the keys from the _filter["auto_followup"] payload
+                            # have been validated by SkyPortal and contain the necessary keys, so we ignore
+                            # those generated in the mongodb pipeline that are not present in the _filter["auto_followup"] payload
+                            #
+                            # PS: we added the priority from _filter["auto_followup"] before overwriting the payload
+                            # so that we can replace the fixed priority with the dynamic one from the pipeline
+                            if "payload" in auto_followup_filtered_data[
+                                0
+                            ] and isinstance(
+                                auto_followup_filtered_data[0]["payload"], dict
+                            ):
+                                for key in auto_followup_filtered_data[0]["payload"]:
+                                    if key in payload:
+                                        payload[key] = auto_followup_filtered_data[0][
+                                            "payload"
+                                        ][key]
+                            payload["start_date"] = datetime.datetime.utcnow().strftime(
+                                "%Y-%m-%dT%H:%M:%S.%f"
+                            )
+                            payload["end_date"] = (
+                                datetime.datetime.utcnow()
+                                + datetime.timedelta(
+                                    days=_filter["auto_followup"].get(
+                                        "validity_days", 7
+                                    )
+                                )
+                            ).strftime("%Y-%m-%dT%H:%M:%S.%f")
+
                             if comment is not None:
-                                comment += f" (priority: {str(priority)})"
+                                comment = (
+                                    str(comment.strip())
+                                    + f" (priority: {str(payload['priority'])})"
+                                )
+
                             passed_filter["auto_followup"] = {
                                 "allocation_id": _filter["auto_followup"][
                                     "allocation_id"
@@ -1498,22 +1493,7 @@ class AlertWorker:
                                             )
                                         )
                                     ),
-                                    "payload": {
-                                        **_filter["auto_followup"].get("payload", {}),
-                                        "priority": priority,
-                                        "start_date": datetime.datetime.utcnow().strftime(
-                                            "%Y-%m-%dT%H:%M:%S.%f"
-                                        ),
-                                        "end_date": (
-                                            datetime.datetime.utcnow()
-                                            + datetime.timedelta(
-                                                days=_filter["auto_followup"].get(
-                                                    "validity_days", 7
-                                                )
-                                            )
-                                        ).strftime("%Y-%m-%dT%H:%M:%S.%f"),
-                                        # one week validity window
-                                    },
+                                    "payload": payload,
                                     # constraints
                                     "source_group_ids": [_filter["group_id"]],
                                     "not_if_classified": True,

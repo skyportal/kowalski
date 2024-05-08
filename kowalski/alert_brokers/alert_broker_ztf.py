@@ -189,7 +189,7 @@ class ZTFAlertConsumer(AlertConsumer, ABC):
             # execute user-defined alert filters
             with timer(f"Filtering of {object_id} {candid}", alert_worker.verbose > 1):
                 passed_filters = alert_worker.alert_filter__user_defined(
-                    alert_worker.filter_templates, alert, all_prv_candidates
+                    alert_worker.filter_templates, alert
                 )
             if alert_worker.verbose > 1:
                 log(
