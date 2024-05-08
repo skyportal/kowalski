@@ -1922,7 +1922,7 @@ class FilterHandler(Handler):
                     "permissions": [1, 2, 3]
                     "autosave": {
                       "active": true,
-                      "comment": "saved by BTSbot",
+                      "comment": "saved by blablabla",
                       "saver_id": 1,
                       "pipeline": [
                         {
