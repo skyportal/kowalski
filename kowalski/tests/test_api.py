@@ -348,6 +348,7 @@ async def test_filters(aiohttp_client):
         "active": True,
         "allocation_id": 1,
         "comment": "test auto_followup",
+        "priority_order": "desc",
         "payload": {  # example payload for SEDM
             "observation_type": "IFU",
         },
@@ -371,11 +372,45 @@ async def test_filters(aiohttp_client):
     assert result["status"] == "success"
     assert "data" in result
     assert "auto_followup" in result["data"]
+    assert "priority_order" in result["data"]["auto_followup"]
+    assert result["data"]["auto_followup"]["priority_order"] == "desc"
     # pipeline has been saved as a string, so we need to do the same before comparing
     auto_followup[
         "pipeline"
     ] = '[{"$match": {"candidate.drb": {"$gt": 0.9999}, "cross_matches.CLU_20190625.0": {"$exists": false}}}]'
     assert result["data"]["auto_followup"] == auto_followup
+
+    # verify that we can't post another filter with the same allocation_id but a different priority_order "asc"
+    asc_filter = make_filter(filter_id=filter_id)
+    asc_filter["autosave"] = autosave
+    asc_filter["auto_followup"] = {
+        "active": True,
+        "allocation_id": 1,
+        "comment": "test auto_followup asc",
+        "priority_order": "asc",
+        "payload": {  # example payload for SEDM
+            "observation_type": "IFU",
+        },
+        "pipeline": [
+            {
+                "$match": {
+                    "candidate.drb": {"$gt": 0.9999},
+                    "cross_matches.CLU_20190625.0": {"$exists": False},
+                }
+            },
+        ],
+    }
+    resp = await client.post(
+        "/api/filters", json=asc_filter, headers=headers, timeout=5
+    )
+    assert resp.status == 400
+    result = await resp.json()
+    assert result["status"] == "error"
+    assert "message" in result
+    assert (
+        "filters with the same allocation have priority_order set to a different value, which is unexpected"
+        in result["message"]
+    )
 
     # turn update_annotations on
     resp = await client.patch(

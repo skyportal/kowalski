@@ -46,6 +46,7 @@ from kowalski.utils import (
     time_stamp,
     timer,
     compare_dicts,
+    priority_should_update,
 )
 from warnings import simplefilter
 
@@ -1480,6 +1481,9 @@ class AlertWorker:
                                     "allocation_id"
                                 ],
                                 "comment": comment,
+                                "priority_order": _filter["auto_followup"].get(
+                                    "priority_order", "asc"
+                                ),
                                 "data": {
                                     "obj_id": alert["objectId"],
                                     "allocation_id": _filter["auto_followup"][
@@ -2189,8 +2193,11 @@ class AlertWorker:
                                 f"Failed to post followup request for {alert['objectId']} to SkyPortal: {e}"
                             )
                 else:
-                    # if there is an existing request, but the priority is lower than the one we want to post,
+                    # if there is an existing request, but the priority is lower (or higher, depends of
+                    # the priority system for that instrument/allocation) than the one we want to post,
                     # update the existing request with the new priority
+                    # first we pick the operator to use, > or <, based on the priority system
+
                     request_to_update = existing_requests_filtered[0][1]
                     # if the status is completed or deleted, do not update
                     if any(
@@ -2205,10 +2212,14 @@ class AlertWorker:
                     # if the status is submitted, and the  new priority is higher, update
                     if "submitted" in str(
                         request_to_update["status"]
-                    ).lower() and float(
-                        passed_filter["auto_followup"]["data"]["payload"]["priority"]
-                    ) > float(
-                        request_to_update["payload"]["priority"]
+                    ).lower() and priority_should_update(
+                        request_to_update["payload"]["priority"],  # existing
+                        passed_filter["auto_followup"]["data"]["payload"][
+                            "priority"
+                        ],  # new
+                        passed_filter["auto_followup"].get(
+                            "priority_order", "asc"
+                        ),  # which order warrants an update (higher or lower)
                     ):
                         with timer(
                             f"Updating priority of auto followup request for {alert['objectId']} to SkyPortal",
