@@ -494,7 +494,6 @@ class TestAlertBrokerZTF:
             "validity_days": 3,
         }
         passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
-        delete_alert(self.worker, self.alert)
 
         assert passed_filters is not None
         assert len(passed_filters) == 1
@@ -514,6 +513,33 @@ class TestAlertBrokerZTF:
             "%Y-%m-%dT%H:%M:%S.%f",
         )
         assert (end_date - start_date).days == 3
+
+        # try the same but with a pipeline that overwrites the payload dynamically
+        filter["auto_followup"]["pipeline"].append(
+            {
+                "$addFields": {
+                    "payload.observation_type": "imaging",
+                    "payload.priority": 0,
+                    "comment": "Overwritten by pipeline",
+                }
+            }
+        )
+
+        passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
+        delete_alert(self.worker, self.alert)
+
+        assert passed_filters is not None
+        assert len(passed_filters) == 1
+        assert "auto_followup" in passed_filters[0]
+        assert (
+            passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "imaging"
+        )
+        assert passed_filters[0]["auto_followup"]["data"]["payload"]["priority"] == 0
+        assert (
+            passed_filters[0]["auto_followup"]["comment"]
+            == "Overwritten by pipeline (priority: 0)"
+        )
 
     def test_alert_filter__user_defined_followup_with_broker(self):
         """Test pushing an alert through a filter that also has auto follow-up activated, and broker mode activated"""
@@ -681,6 +707,80 @@ class TestAlertBrokerZTF:
             followup_requests_updated[0]["id"] == followup_requests[0]["id"]
         )  # the id should be the same
 
+        # now try using a lower priority, and verify that it was not updated (still using priority 4)
+        filter2["auto_followup"]["payload"]["priority"] = 3
+        passed_filters = self.worker.alert_filter__user_defined(
+            [filter, filter2], self.alert
+        )
+
+        assert passed_filters is not None
+        assert len(passed_filters) == 2
+        assert "auto_followup" in passed_filters[0]
+
+        alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
+
+        # now fetch the follow-up request from SP
+        # it should still be at priority 4
+        response = self.worker.api_skyportal(
+            "GET", f"/api/followup_request?sourceID={alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        followup_requests_updated = response.json()["data"].get("followup_requests", [])
+        followup_requests_updated = [
+            f
+            for f in followup_requests_updated
+            if (f["allocation_id"] == allocation_id and f["status"] == "submitted")
+        ]
+        assert len(followup_requests_updated) == 1
+        assert followup_requests_updated[0]["payload"]["observation_type"] == "IFU"
+        assert followup_requests_updated[0]["payload"]["priority"] == 4
+        assert followup_requests_updated[0]["id"] == followup_requests[0]["id"]
+
+        # now we use a lower priority, but we specify for the auto_followup that lower is better for this specific allocation
+        # should be the same for a given allocation across filters, and that is set by SkyPortal when creating
+        # or editing the filter there.
+        # TODO: in the future, have kowalski fetch all of the allocations and have a mapper from allocation_id to priority_order
+        # enforced there, for all filters with the same allocation/instrument they need to trigger on.
+        filter["auto_followup"]["priority_order"] = "desc"
+        filter2["auto_followup"]["priority_order"] = "desc"
+        filter2["auto_followup"]["payload"]["priority"] = 1
+        passed_filters = self.worker.alert_filter__user_defined(
+            [filter, filter2], self.alert
+        )
+
+        assert passed_filters is not None
+        assert len(passed_filters) == 2
+        assert "auto_followup" in passed_filters[0]
+
+        alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
+
+        # now fetch the follow-up request from SP
+        # it should now be at priority 1
+        response = self.worker.api_skyportal(
+            "GET", f"/api/followup_request?sourceID={alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        followup_requests_updated = response.json()["data"].get("followup_requests", [])
+        followup_requests_updated = [
+            f
+            for f in followup_requests_updated
+            if (f["allocation_id"] == allocation_id and f["status"] == "submitted")
+        ]
+        assert len(followup_requests_updated) == 1
+        assert followup_requests_updated[0]["payload"]["observation_type"] == "IFU"
+        assert followup_requests_updated[0]["payload"]["priority"] == 1
+        assert followup_requests_updated[0]["id"] == followup_requests[0]["id"]
+
+        # set the priority_order back to normal (missing or asc, as asc should be the default)
+        filter["auto_followup"].pop("priority_order")
+        filter2["auto_followup"]["priority_order"] = "asc"
+
         # now, we'll test the target_group_ids functionality for deduplication
         # that is, if a filter has a target_group_ids, then it should only trigger a follow-up request
         # if none of the existing requests' target groups have an overlap with the target_group_ids
@@ -712,7 +812,7 @@ class TestAlertBrokerZTF:
         )
 
         # now fetch the follow-up request from SP
-        # we should still have just one follow-up request, the exact same as before
+        # we should still have just one follow-up request, same as before but back to priority 2
         response = self.worker.api_skyportal(
             "GET", f"/api/followup_request?sourceID={alert['objectId']}", None
         )
@@ -725,7 +825,7 @@ class TestAlertBrokerZTF:
         ]
         assert len(followup_requests_updated) == 1
         assert followup_requests_updated[0]["payload"]["observation_type"] == "IFU"
-        assert followup_requests_updated[0]["payload"]["priority"] == 4
+        assert followup_requests_updated[0]["payload"]["priority"] == 2
         assert followup_requests_updated[0]["id"] == followup_requests[0]["id"]
 
         # delete the follow-up request
@@ -746,6 +846,9 @@ class TestAlertBrokerZTF:
             **filter["auto_followup"],
             "comment": "SEDM triggered by BTSbot2",
         }
+        filter["auto_followup"]["payload"][
+            "priority"
+        ] = 2  # just like the filter_multiple_groups
 
         passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
         assert passed_filters is not None
