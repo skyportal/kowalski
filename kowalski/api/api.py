@@ -3305,7 +3305,8 @@ class SkymapHandler(Handler):
                     _data["voevent"] = _data["voevent"].encode("ascii")
                 except AttributeError:
                     pass
-                root = lxml.etree.fromstring(_data["voevent"])
+                parser = lxml.etree.XMLParser(resolve_entities=False)
+                root = lxml.etree.fromstring(_data["voevent"], parser)
             else:
                 raise ValueError("xml file is not valid VOEvent")
 
