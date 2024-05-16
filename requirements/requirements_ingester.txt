@@ -17,7 +17,7 @@ matplotlib==3.7.0
 motor==3.1.1
 numba==0.56.4
 numpy==1.23.5
-pandas==1.5.3
+pandas==2.2.2
 protobuf==4.22.1
 pyarrow==14.0.1
 PyJWT==2.6.0
