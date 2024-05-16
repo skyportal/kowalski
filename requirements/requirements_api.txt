@@ -28,5 +28,5 @@ mocpy==0.12.3
 healpy==1.16.2
 scipy==1.10.1
 pygcn==1.1.2
-xmlschema==2.3.0
+xmlschema==3.3.1
 lxml==4.9.2
