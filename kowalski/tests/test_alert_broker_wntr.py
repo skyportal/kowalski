@@ -86,7 +86,7 @@ class TestAlertBrokerWNTR:
         assert len(df_photometry) == 1
         assert df_photometry["isdiffpos"][0] == 1.0
         assert df_photometry["diffmaglim"][0] == 17.6939640045166
-        assert df_photometry["filter"][0] == "2massh"
+        assert df_photometry["filter"][0] == "2massj"
 
     def test_make_thumbnails(self):
         alert, _, _ = self.worker.alert_mongify(self.alert)

@@ -85,6 +85,7 @@ AUTO_FOLLOWUP_KEYS = {
     "target_group_ids": list,
     "radius": float,
     "validity_days": int,
+    "priority_order": str,
 }
 
 
@@ -2165,6 +2166,33 @@ class FilterHandler(Handler):
                 return self.error(
                     message=f"Cannot test {attribute} pipeline: no pipeline specified"
                 )
+            elif attribute == "auto_followup" and "priority_order" in getattr(
+                filter_new, attribute
+            ):
+                if getattr(filter_new, attribute)["priority_order"] not in [
+                    "asc",
+                    "desc",
+                ]:
+                    return self.error(
+                        message=f"Invalid priority_order specified for auto_followup: {getattr(filter_new, attribute)['priority_order']}"
+                    )
+                new_priority_order = getattr(filter_new, attribute)["priority_order"]
+                new_allocation_id = getattr(filter_new, attribute)["allocation_id"]
+                # fetch all existing filters in the DB with auto_followup with the same allocation_id
+                filters_same_alloc = [
+                    f
+                    async for f in request.app["mongo"]["filters"].find(
+                        {"auto_followup.allocation_id": int(new_allocation_id)}
+                    )
+                ]
+                for f in filters_same_alloc:
+                    if (
+                        "priority_order" in f["auto_followup"]
+                        and f["auto_followup"]["priority_order"] != new_priority_order
+                    ):
+                        return self.error(
+                            message="Cannot add new filter with auto_followup: existing filters with the same allocation have priority_order set to a different value, which is unexpected"
+                        )
             pipeline = getattr(filter_new, attribute).get("pipeline")
             if not isinstance(pipeline, str):
                 pipeline = dumps(pipeline)
@@ -2439,7 +2467,34 @@ class FilterHandler(Handler):
                         return self.error(
                             message=f"Cannot update filter id {filter_id}: {modifiable_field} contains invalid keys"
                         )
-
+                    elif (
+                        modifiable_field == "auto_followup"
+                        and isinstance(value, dict)
+                        and "priority_order" in value
+                    ):
+                        # fetch all existing filters in the DB with auto_followup with the same allocation_id
+                        filters_same_alloc = [
+                            f
+                            async for f in request.app["mongo"]["filters"].find(
+                                {
+                                    "auto_followup.allocation_id": int(
+                                        value["allocation_id"]
+                                    )
+                                }
+                            )
+                        ]
+                        # if there is any filter with the same allocation_id, and a non null priority_order that is differet
+                        # throw an error. This is to avoid having multiple filters with the same allocation_id and different
+                        # priority_order, which should be fixed by a sys admin, as it should not happen
+                        for f in filters_same_alloc:
+                            if (
+                                "priority_order" in f["auto_followup"]
+                                and f["auto_followup"]["priority_order"]
+                                != value["priority_order"]
+                            ):
+                                return self.error(
+                                    message=f"Cannot update filter id {filter_id}: {modifiable_field}, filters with the same allocation have priority_order set to a different value, which is unexpected"
+                                )
                     if modifiable_field == "autosave" and isinstance(value, bool):
                         pass
                     elif isinstance(value, dict) and "pipeline" not in value:
@@ -3317,14 +3372,22 @@ class SkymapHandler(Handler):
                 {
                     "$or": [
                         {"dateobs": dateobs},
-                        {"triggerid": triggerid},
                     ],
                 },
                 {"localization_name": skymap["localization_name"]},
             ]
         }
+        if triggerid not in [None, ""]:
+            query["$and"][0]["$or"].append({"triggerid": triggerid})
         if len(aliases) > 0:
-            query["$and"][0]["$or"].append({"aliases": {"$all": aliases}})
+            query["$and"][0]["$or"].append(
+                {
+                    "$and": [
+                        {"aliases": {"$all": aliases}},
+                        {"aliases": {"$size": len(aliases)}},
+                    ]
+                }
+            )
 
         existing_skymap = await request.app["mongo"][
             config["database"]["collections"]["skymaps"]
@@ -3373,18 +3436,7 @@ class SkymapHandler(Handler):
                 await request.app["mongo"][
                     config["database"]["collections"]["skymaps"]
                 ].update_one(
-                    {
-                        "$and": [
-                            {
-                                "$or": [
-                                    {"dateobs": dateobs},
-                                    {"triggerid": triggerid},
-                                    {"aliases": {"$all": aliases}},
-                                ]
-                            },
-                            {"localization_name": skymap["localization_name"]},
-                        ]
-                    },
+                    {"_id": existing_skymap["_id"]},
                     {"$set": {"contours": contours}},
                 )
                 return web.json_response(
