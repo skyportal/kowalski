@@ -418,6 +418,8 @@ def process_csv_file(
         # ingest batch
         mongo.insert_many(collection=collection, documents=batch)
 
+        return total_good_documents, total_bad_documents
+
 
 def process_parquet_file(
     file,
@@ -683,6 +685,8 @@ def process_parquet_file(
             mongo.close()
             mongo = get_mongo_client()
 
+    return total_good_documents, total_bad_documents
+
 
 def process_file(argument_list: Sequence):
     (
@@ -721,53 +725,65 @@ def process_file(argument_list: Sequence):
     total_bad_documents = 0
 
     if format == "fits":
-        total_good_documents, total_bad_documents = process_fits_file(
-            file,
-            collection,
-            ra_col,
-            dec_col,
-            id_col,
-            position_from_catalog,
-            position_from_catalog_name,
-            position_from_catalog_ra_col,
-            position_from_catalog_dec_col,
-            position_from_catalog_id_col,
-            batch_size,
-            max_docs,
-            mongo,
-        )
+        try:
+            total_good_documents, total_bad_documents = process_fits_file(
+                file,
+                collection,
+                ra_col,
+                dec_col,
+                id_col,
+                position_from_catalog,
+                position_from_catalog_name,
+                position_from_catalog_ra_col,
+                position_from_catalog_dec_col,
+                position_from_catalog_id_col,
+                batch_size,
+                max_docs,
+                mongo,
+            )
+        except Exception as e:
+            traceback.print_exc()
+            log(f"Failed to process fits: {e}")
     elif format == "csv":
-        total_good_documents, total_bad_documents = process_csv_file(
-            file,
-            collection,
-            ra_col,
-            dec_col,
-            id_col,
-            position_from_catalog,
-            position_from_catalog_name,
-            position_from_catalog_ra_col,
-            position_from_catalog_dec_col,
-            position_from_catalog_id_col,
-            batch_size,
-            max_docs,
-            mongo,
-        )
+        try:
+            total_good_documents, total_bad_documents = process_csv_file(
+                file,
+                collection,
+                ra_col,
+                dec_col,
+                id_col,
+                position_from_catalog,
+                position_from_catalog_name,
+                position_from_catalog_ra_col,
+                position_from_catalog_dec_col,
+                position_from_catalog_id_col,
+                batch_size,
+                max_docs,
+                mongo,
+            )
+        except Exception as e:
+            traceback.print_exc()
+            log(f"Failed to process csv: {e}")
     elif format == "parquet":
-        total_good_documents, total_bad_documents = process_parquet_file(
-            file,
-            collection,
-            ra_col,
-            dec_col,
-            id_col,
-            position_from_catalog,
-            position_from_catalog_name,
-            position_from_catalog_ra_col,
-            position_from_catalog_dec_col,
-            position_from_catalog_id_col,
-            batch_size,
-            max_docs,
-            mongo,
-        )
+        try:
+            total_good_documents, total_bad_documents = process_parquet_file(
+                file,
+                collection,
+                ra_col,
+                dec_col,
+                id_col,
+                position_from_catalog,
+                position_from_catalog_name,
+                position_from_catalog_ra_col,
+                position_from_catalog_dec_col,
+                position_from_catalog_id_col,
+                batch_size,
+                max_docs,
+                mongo,
+            )
+        except Exception as e:
+            traceback.print_exc()
+            log(f"Failed to process parquet: {e}")
     else:
         log("Unknown format. Supported formats: fits, csv, parquet")
         return 0, 0
