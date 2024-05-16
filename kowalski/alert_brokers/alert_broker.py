@@ -3,7 +3,6 @@ __all__ = ["AlertConsumer", "AlertWorker", "EopError"]
 import base64
 import datetime
 import gzip
-import inspect
 import io
 import os
 import pathlib
@@ -47,6 +46,7 @@ from kowalski.utils import (
     time_stamp,
     timer,
     compare_dicts,
+    priority_should_update,
 )
 from warnings import simplefilter
 
@@ -1270,7 +1270,6 @@ class AlertWorker:
         self,
         filter_templates: Sequence,
         alert: Mapping,
-        alert_history: list = [],
         max_time_ms: int = 1000,
     ) -> list:
         """Evaluate user-defined filters
@@ -1372,6 +1371,7 @@ class AlertWorker:
                         "active", False
                     ):
                         auto_followup_filter = deepcopy(_filter["auto_followup"])
+                        priority = 5
 
                         # validate non-optional keys
                         if (
@@ -1394,58 +1394,13 @@ class AlertWorker:
                             continue
 
                         # there is also a priority key that is optional. If not present or if not a function, it defaults to 5 (lowest priority)
-                        if auto_followup_filter.get("priority", None) is not None:
-                            if isinstance(auto_followup_filter["priority"], str):
-                                try:
-                                    auto_followup_filter["priority"] = eval(
-                                        auto_followup_filter["priority"]
-                                    )
-                                except Exception:
-                                    log(
-                                        f'Filter {_filter["fid"]} has an invalid auto-followup priority (could not eval str), using default of 5'
-                                    )
-                                    continue
-                            if isinstance(
-                                auto_followup_filter["priority"], int
-                            ) or isinstance(auto_followup_filter["priority"], float):
-                                auto_followup_filter[
-                                    "priority"
-                                ] = lambda alert, alert_history, data: auto_followup_filter[
-                                    "priority"
-                                ]
-                            elif callable(auto_followup_filter["priority"]):
-                                # verify that the function takes 3 arguments: alert, alert_history, data
-                                if (
-                                    len(
-                                        inspect.signature(
-                                            auto_followup_filter["priority"]
-                                        ).parameters
-                                    )
-                                    != 3
-                                ):
-                                    log(
-                                        f'Filter {_filter["fid"]} has an invalid auto-followup priority (needs 3 arguments), using default of 5'
-                                    )
-                                    auto_followup_filter[
-                                        "priority"
-                                    ] = lambda alert, alert_history, data: 5
-                        elif (
+                        if isinstance(
                             auto_followup_filter.get("payload", {}).get(
                                 "priority", None
-                            )
-                            is not None
+                            ),
+                            (int, float),
                         ):
-                            auto_followup_filter[
-                                "priority"
-                            ] = lambda alert, alert_history, data: auto_followup_filter[
-                                "payload"
-                            ][
-                                "priority"
-                            ]
-                        else:
-                            auto_followup_filter[
-                                "priority"
-                            ] = lambda alert, alert_history, data: 5
+                            priority = auto_followup_filter["payload"]["priority"]
 
                         # validate the optional radius key, and set to 0.5 arcsec if not present
                         if auto_followup_filter.get("radius", None) is None:
@@ -1489,17 +1444,61 @@ class AlertWorker:
                         )
 
                         if len(auto_followup_filtered_data) == 1:
-                            priority = auto_followup_filter["priority"](
-                                alert, alert_history, auto_followup_filtered_data[0]
-                            )
                             comment = auto_followup_filter.get("comment", None)
+                            if "comment" in auto_followup_filtered_data[
+                                0
+                            ] and isinstance(
+                                auto_followup_filtered_data[0]["comment"], str
+                            ):
+                                comment = auto_followup_filtered_data[0]["comment"]
+
+                            payload = _filter["auto_followup"].get("payload", {})
+                            payload["priority"] = priority
+                            # if the auto_followup_filtered_data contains a payload key, merge it with the existing payload
+                            # updating the existing keys with the new values, ignoring the rest
+                            #
+                            # we ignore the rest because the keys from the _filter["auto_followup"] payload
+                            # have been validated by SkyPortal and contain the necessary keys, so we ignore
+                            # those generated in the mongodb pipeline that are not present in the _filter["auto_followup"] payload
+                            #
+                            # PS: we added the priority from _filter["auto_followup"] before overwriting the payload
+                            # so that we can replace the fixed priority with the dynamic one from the pipeline
+                            if "payload" in auto_followup_filtered_data[
+                                0
+                            ] and isinstance(
+                                auto_followup_filtered_data[0]["payload"], dict
+                            ):
+                                for key in auto_followup_filtered_data[0]["payload"]:
+                                    if key in payload:
+                                        payload[key] = auto_followup_filtered_data[0][
+                                            "payload"
+                                        ][key]
+                            payload["start_date"] = datetime.datetime.utcnow().strftime(
+                                "%Y-%m-%dT%H:%M:%S.%f"
+                            )
+                            payload["end_date"] = (
+                                datetime.datetime.utcnow()
+                                + datetime.timedelta(
+                                    days=_filter["auto_followup"].get(
+                                        "validity_days", 7
+                                    )
+                                )
+                            ).strftime("%Y-%m-%dT%H:%M:%S.%f")
+
                             if comment is not None:
-                                comment += f" (priority: {str(priority)})"
+                                comment = (
+                                    str(comment.strip())
+                                    + f" (priority: {str(payload['priority'])})"
+                                )
+
                             passed_filter["auto_followup"] = {
                                 "allocation_id": _filter["auto_followup"][
                                     "allocation_id"
                                 ],
                                 "comment": comment,
+                                "priority_order": _filter["auto_followup"].get(
+                                    "priority_order", "asc"
+                                ),
                                 "data": {
                                     "obj_id": alert["objectId"],
                                     "allocation_id": _filter["auto_followup"][
@@ -1513,22 +1512,7 @@ class AlertWorker:
                                             )
                                         )
                                     ),
-                                    "payload": {
-                                        **_filter["auto_followup"].get("payload", {}),
-                                        "priority": priority,
-                                        "start_date": datetime.datetime.utcnow().strftime(
-                                            "%Y-%m-%dT%H:%M:%S.%f"
-                                        ),
-                                        "end_date": (
-                                            datetime.datetime.utcnow()
-                                            + datetime.timedelta(
-                                                days=_filter["auto_followup"].get(
-                                                    "validity_days", 7
-                                                )
-                                            )
-                                        ).strftime("%Y-%m-%dT%H:%M:%S.%f"),
-                                        # one week validity window
-                                    },
+                                    "payload": payload,
                                     # constraints
                                     "source_group_ids": [_filter["group_id"]],
                                     "not_if_classified": True,
@@ -2136,10 +2120,42 @@ class AlertWorker:
                     if any(
                         [
                             status in str(r["status"]).lower()
-                            for status in ["complete", "submitted", "deleted"]
+                            for status in ["complete", "submitted", "deleted", "failed"]
                         ]
                     )
                 ]
+                # filter out the failed requests that failed more than 12 hours. This is to avoid
+                # re-triggering  on objects where existing requests failed LESS than 12 hours ago.
+                #
+                # We keep these recently failed ones so that the code underneath finds an existing request and
+                # does not retrigger a new one. Usually, failed requests are reprocessed during the day and marked
+                # as complete, which is why we can afford to wait 12 hours before re-triggering
+                # (basically until the next night)
+                try:
+                    now_utc = datetime.datetime.utcnow()
+                    existing_requests = [
+                        r
+                        for r in existing_requests
+                        if not (
+                            "failed" in str(r["status"]).lower()
+                            and (
+                                now_utc
+                                - datetime.datetime.strptime(
+                                    r["modified"], "%Y-%m-%dT%H:%M:%S.%f"
+                                )
+                            ).total_seconds()
+                            > 12 * 3600
+                        )
+                    ]
+                except Exception as e:
+                    # to avoid not triggering at all if the above fails, we log that failure
+                    # and keep all failed requests in the list. That way if there are any failed requests
+                    # we won't trigger, but we will trigger as usual if they're isn't any failed requests
+                    # it's just a fail-safe
+                    log(
+                        f"Failed to filter out failed followup requests for {alert['objectId']}: {e}"
+                    )
+
                 # sort by priority (highest first)
                 existing_requests = sorted(
                     existing_requests,
@@ -2278,26 +2294,33 @@ class AlertWorker:
                                 f"Failed to post followup request for {alert['objectId']} to SkyPortal: {e}"
                             )
                 else:
-                    # if there is an existing request, but the priority is lower than the one we want to post,
+                    # if there is an existing request, but the priority is lower (or higher, depends of
+                    # the priority system for that instrument/allocation) than the one we want to post,
                     # update the existing request with the new priority
+                    # first we pick the operator to use, > or <, based on the priority system
+
                     request_to_update = existing_requests_filtered[0][1]
-                    # if the status is completed or deleted, do not update
+                    # if the status is completed, deleted, or failed do not update
                     if any(
                         [
                             status in str(request_to_update["status"]).lower()
-                            for status in ["complete", "deleted"]
+                            for status in ["complete", "deleted", "failed"]
                         ]
                     ):
                         log(
-                            f"Followup request for {alert['objectId']} and allocation_id {passed_filter['auto_followup']['allocation_id']} already exists on SkyPortal, but is completed or deleted, no need for update"
+                            f"Followup request for {alert['objectId']} and allocation_id {passed_filter['auto_followup']['allocation_id']} already exists on SkyPortal, but is completed, deleted or failed (recently), no need for update"
                         )
                     # if the status is submitted, and the  new priority is higher, update
                     if "submitted" in str(
                         request_to_update["status"]
-                    ).lower() and float(
-                        passed_filter["auto_followup"]["data"]["payload"]["priority"]
-                    ) > float(
-                        request_to_update["payload"]["priority"]
+                    ).lower() and priority_should_update(
+                        request_to_update["payload"]["priority"],  # existing
+                        passed_filter["auto_followup"]["data"]["payload"][
+                            "priority"
+                        ],  # new
+                        passed_filter["auto_followup"].get(
+                            "priority_order", "asc"
+                        ),  # which order warrants an update (higher or lower)
                     ):
                         with timer(
                             f"Updating priority of auto followup request for {alert['objectId']} to SkyPortal",

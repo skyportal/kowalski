@@ -40,7 +40,7 @@ kowalski:
     zookeeper.test: "localhost:2181"
     path: "kafka_2.13-3.4.1"
     processes_per_topic:
-      ZTF: 2
+      ZTF: 1
 
   database:
     max_pool_size: 200
@@ -304,6 +304,13 @@ kowalski:
             - ["candidate.scorr", -1]
             - ["candidate.dmag2mass", -1]
           unique: false
+
+      skymaps:
+        - name: dateobs_-1_localization_name_1
+          fields:
+            - ["dateobs", -1]
+            - ["localization_name", 1]
+          unique: true
 
     filters:
       ZTF_alerts:

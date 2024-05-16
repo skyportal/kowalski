@@ -33,6 +33,7 @@ __all__ = [
     "uid",
     "ZTFAlert",
     "retry",
+    "priority_should_update",
 ]
 
 import base64
@@ -1382,3 +1383,11 @@ class ZTFAlert:
                 dmdt[:, :, i] = np.zeros((26, 26))
 
         return dmdt
+
+
+def priority_should_update(existing_priority, new_priority, priority_order="asc"):
+    # default to ascending
+    if priority_order == "desc":
+        return float(new_priority) < float(existing_priority)
+
+    return float(new_priority) > float(existing_priority)
