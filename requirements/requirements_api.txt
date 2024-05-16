@@ -1,6 +1,6 @@
 aiohttp==3.9.4
 aiohttp-swagger3==0.8.0
-astropy==5.2.1
+astropy==5.3.3
 bcrypt==4.0.1
 cryptography==42.0.4
 deepdiff==6.2.3

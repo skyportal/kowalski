@@ -1,4 +1,4 @@
-astropy==5.2.1
+astropy==5.3.3
 bcrypt==4.0.1
 beautifulsoup4==4.11.2
 bokeh==2.4.3
