@@ -25,7 +25,7 @@ supervisor==4.2.5
 uvloop==0.17.0
 ligo.skymap==2.0.0
 mocpy==0.12.3
-healpy==1.16.2
+healpy==1.16.6
 scipy==1.13.0
 pygcn==1.1.2
 xmlschema==3.3.1
