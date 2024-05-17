@@ -1,5 +1,5 @@
 deepdiff==7.0.1
-fire==0.5.0
+fire==0.6.0
 gsutil==5.20
 jinja2>=2.11.2
 PyYAML==6.0
