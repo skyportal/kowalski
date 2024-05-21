@@ -1345,6 +1345,21 @@ class AlertWorker:
                                     "ignore_group_ids", []
                                 ),
                             }
+
+                        # if we are autosaving and the filter has a "saver_id" key in its autosave,
+                        # then this is a user_id to use when saving the source to SkyPortal for this group
+                        # PS: In theory, we could have multiple filters for one group that specify a different saver_id
+                        # we will try to prevent that upstream when patching a filter (checking if other filters for the group have a saver_id defined)
+                        # but even if that doesn't happen, since we build a dict per group_id later on, the saver_id from the most recent filter
+                        # will overwrite the previous ones
+                        if (
+                            passed_filter.get("autosave", None) not in [False, None]
+                            and autosave_filter.get("saver_id", None) is not None
+                            and isinstance(autosave_filter.get("saver_id", None), int)
+                        ):
+                            passed_filter["autosave"]["saver_id"] = autosave_filter[
+                                "saver_id"
+                            ]
                     else:
                         passed_filter["autosave"] = False
 
@@ -1563,7 +1578,11 @@ class AlertWorker:
             log(response.json())
 
     def alert_post_source(
-        self, alert: Mapping, group_ids: Sequence, ignore_group_ids: Mapping
+        self,
+        alert: Mapping,
+        group_ids: Sequence,
+        ignore_group_ids: Mapping,
+        saver_per_group_id: Mapping,
     ):
         """Save an alert as a source to groups on SkyPortal
 
@@ -1579,6 +1598,12 @@ class AlertWorker:
         }
         if ignore_group_ids not in [None, {}]:
             alert_thin["ignore_if_in_group_ids"] = ignore_group_ids
+        if (
+            saver_per_group_id not in [None, {}]
+            and isinstance(saver_per_group_id, dict)
+            and len(saver_per_group_id) > 0
+        ):
+            alert_thin["saver_per_group_id"] = saver_per_group_id
         if self.verbose > 1:
             log(alert_thin)
 
@@ -1831,6 +1856,7 @@ class AlertWorker:
 
         autosave_group_ids = []
         autosave_ignore_group_ids = {}
+        autosave_saver_per_group_id = {}
         not_saved_group_ids = []
         # obj does not exit in SP:
         if (not is_candidate) and (not is_source):
@@ -1902,7 +1928,11 @@ class AlertWorker:
                 self.alert_post_thumbnails(alert)
 
                 # post source if autosave=True or if autosave is a dict
-                autosave_group_ids, autosave_ignore_group_ids = [], {}
+                autosave_group_ids, autosave_ignore_group_ids, saver_per_group_id = (
+                    [],
+                    {},
+                    {},
+                )
                 for f in passed_filters:
                     if not f.get("autosave", False) is False:
                         autosave_group_ids.append(f.get("group_id"))
@@ -1913,9 +1943,19 @@ class AlertWorker:
                             autosave_ignore_group_ids[f.get("group_id")] = f[
                                 "autosave"
                             ].get("ignore_group_ids", [])
+                        if (
+                            isinstance(f.get("autosave", False), dict)
+                            and f.get("autosave", {}).get("saver_id", None) is not None
+                        ):
+                            saver_per_group_id[f.get("group_id")] = f.get(
+                                "autosave", {}
+                            ).get("saver_id", None)
                 if len(autosave_group_ids) > 0:
                     not_saved_group_ids = self.alert_post_source(
-                        alert, autosave_group_ids, autosave_ignore_group_ids
+                        alert,
+                        autosave_group_ids,
+                        autosave_ignore_group_ids,
+                        saver_per_group_id,
                     )
 
         # obj exists in SP:
@@ -1944,7 +1984,11 @@ class AlertWorker:
                     existing_group_ids = [g["id"] for g in existing_groups]
 
                     # post source if autosave is not False and not already saved
-                    autosave_group_ids, autosave_ignore_group_ids = [], {}
+                    (
+                        autosave_group_ids,
+                        autosave_ignore_group_ids,
+                        autosave_saver_per_group_id,
+                    ) = ([], {}, {})
                     for f in passed_filters:
                         if not f.get("autosave", False) is False and (
                             f.get("group_id") not in existing_group_ids
@@ -1957,16 +2001,31 @@ class AlertWorker:
                                 autosave_ignore_group_ids[f.get("group_id")] = f[
                                     "autosave"
                                 ].get("ignore_group_ids", [])
+                            if (
+                                isinstance(f.get("autosave", False), dict)
+                                and f.get("autosave", {}).get("saver_id", None)
+                                is not None
+                            ):
+                                autosave_saver_per_group_id[f.get("group_id")] = f.get(
+                                    "autosave", {}
+                                ).get("saver_id", None)
                     if len(autosave_group_ids) > 0:
                         not_saved_group_ids = self.alert_post_source(
-                            alert, autosave_group_ids, autosave_ignore_group_ids
+                            alert,
+                            autosave_group_ids,
+                            autosave_ignore_group_ids,
+                            autosave_saver_per_group_id,
                         )
 
                 else:
                     log(f"Failed to get source groups info on {alert['objectId']}")
             else:
                 # post source if autosave is not False and not is_source
-                autosave_group_ids, autosave_ignore_group_ids = [], {}
+                (
+                    autosave_group_ids,
+                    autosave_ignore_group_ids,
+                    autosave_saver_per_group_id,
+                ) = ([], {}, {})
                 for f in passed_filters:
                     if not f.get("autosave", False) is False:
                         autosave_group_ids.append(f.get("group_id"))
@@ -1977,9 +2036,19 @@ class AlertWorker:
                             autosave_ignore_group_ids[f.get("group_id")] = f[
                                 "autosave"
                             ].get("ignore_group_ids", [])
+                        if (
+                            isinstance(f.get("autosave", False), dict)
+                            and f.get("autosave", {}).get("saver_id", None) is not None
+                        ):
+                            autosave_saver_per_group_id[f.get("group_id")] = f.get(
+                                "autosave", {}
+                            ).get("saver_id", None)
                 if len(autosave_group_ids) > 0:
                     not_saved_group_ids = self.alert_post_source(
-                        alert, autosave_group_ids, autosave_ignore_group_ids
+                        alert,
+                        autosave_group_ids,
+                        autosave_ignore_group_ids,
+                        autosave_saver_per_group_id,
                     )
             # post alert photometry in single call to /api/photometry
             alert["prv_candidates"] = prv_candidates
