@@ -1,1 +1,1 @@
-penquins==2.2.0
+penquins==2.4.1
