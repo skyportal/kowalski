@@ -87,6 +87,7 @@ AUTO_FOLLOWUP_KEYS = {
     "radius": float,
     "validity_days": int,
     "priority_order": str,
+    "implements_update": bool,
 }
 
 

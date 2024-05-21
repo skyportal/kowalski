@@ -506,7 +506,7 @@ class TestAlertBrokerZTF:
 
         assert saved_group_id is not None
 
-        alert = self.alert
+        alert = deepcopy(self.alert)
         # we replace the objectId with a random one
         alert["objectId"] = str(uuid.uuid4())
 
@@ -736,8 +736,59 @@ class TestAlertBrokerZTF:
             followup_requests[0]["payload"]["priority"] == 3
         )  # it should have deduplicated and used the highest priority
 
+        # we run it once more with a higher priority but "implements_update" set to False
+        # to verify that it was not updated
+
         # now run it once more, but with a higher priority to see if the update works
+        filter2["auto_followup"]["implements_update"] = False
         filter2["auto_followup"]["payload"]["priority"] = 4
+        passed_filters = self.worker.alert_filter__user_defined(
+            [filter, filter2], self.alert
+        )
+
+        assert passed_filters is not None
+        assert len(passed_filters) == 2
+        assert "auto_followup" in passed_filters[0]
+        assert (
+            passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "IFU"
+        )
+        assert passed_filters[0]["auto_followup"]["data"]["payload"]["priority"] == 2
+        assert "auto_followup" in passed_filters[1]
+        assert (
+            passed_filters[1]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "IFU"
+        )
+        assert passed_filters[1]["auto_followup"]["data"]["payload"]["priority"] == 4
+
+        alert, prv_candidates, _ = self.worker.alert_mongify(self.alert)
+        self.worker.alert_sentinel_skyportal(
+            alert, prv_candidates, passed_filters=passed_filters
+        )
+
+        # now fetch the follow-up request from SP
+        # it should not have been updated since we did not allow an update to happen
+        response = self.worker.api_skyportal(
+            "GET", f"/api/followup_request?sourceID={alert['objectId']}", None
+        )
+        assert response.status_code == 200
+        followup_requests_updated = response.json()["data"].get("followup_requests", [])
+        followup_requests_updated = [
+            f
+            for f in followup_requests_updated
+            if (f["allocation_id"] == allocation_id and f["status"] == "submitted")
+        ]
+        assert len(followup_requests_updated) == 1
+        assert followup_requests_updated[0]["payload"]["observation_type"] == "IFU"
+        assert (
+            followup_requests_updated[0]["payload"]["priority"] == 3
+        )  # it should have deduplicated and used the highest priority
+        assert (
+            followup_requests_updated[0]["id"] == followup_requests[0]["id"]
+        )  # the id should be the same
+
+        # now same but implements_update is set to True, should update the follow-up request
+        filter2["auto_followup"]["implements_update"] = True
         passed_filters = self.worker.alert_filter__user_defined(
             [filter, filter2], self.alert
         )
