@@ -19,7 +19,7 @@ pymongo==4.7.2
 pytest==8.2.1
 pytest-aiohttp==1.0.5
 PyYAML==6.0.1
-requests==2.32.0
+requests==2.32.2
 sshtunnel==0.4.0
 supervisor==4.2.5
 uvloop==0.19.0
