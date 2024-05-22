@@ -134,6 +134,27 @@ def make_ztf_mma_trigger(
 
 
 @pytest.mark.asyncio
+async def test_ping(aiohttp_client):
+    client = await aiohttp_client(await app_factory())
+
+    # check JWT authorization
+    credentials = await get_admin_credentials(aiohttp_client)
+    access_token = credentials["token"]
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    _ping = await client.get(
+        "/",
+        headers=headers,
+    )
+    assert _ping.status == 200
+
+    ping = await _ping.json()
+    assert ping["status"] == "success"
+    assert ping["message"] == "greetings from Kowalski!"
+
+
+@pytest.mark.asyncio
 async def test_auth(aiohttp_client):
     """
         Test authorization: /api/auth
