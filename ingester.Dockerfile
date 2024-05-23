@@ -98,17 +98,9 @@ COPY ["kowalski/ingesters/__init__.py", \
     "kowalski/ingesters/"]
 
 
-COPY ["kowalski/tests/test_alert_broker_ztf.py", \
-    "kowalski/tests/test_alert_broker_pgir.py", \
-    "kowalski/tests/test_alert_broker_wntr.py", \
-    "kowalski/tests/test_alert_broker_turbo.py", \
-    "kowalski/tests/test_ingester_ztf.py", \
-    "kowalski/tests/test_ingester_pgir.py", \
-    "kowalski/tests/test_ingester_wntr.py", \
-    "kowalski/tests/test_ingester_turbo.py", \
-    "kowalski/tests/test_tns_watcher.py", \
-    "kowalski/tests/test_tools.py", \
-    "kowalski/tests/"]
+COPY kowalski/tests/brokers kowalski/tests/brokers
+
+COPY kowalski/tests/misc kowalski/tests/misc
 
 COPY conf/supervisord_ingester.conf.template conf/
 
