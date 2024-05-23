@@ -393,7 +393,7 @@ class UserTokenHandler(BaseHandler):
         Authentication
 
         ---
-        summary: Get access token
+        summary: Get an access token for a user
         tags:
         - auth
 

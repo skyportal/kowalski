@@ -370,3 +370,65 @@ components:
           sort:
             type: array
             description: "sorting order"
+
+    skymap:
+      type: object
+      required:
+        - skymap
+        - catalog
+        - filter
+      properties:
+        skymap:
+          type: object
+          required:
+            - dateobs
+            - localization_name
+          properties:
+            dateobs:
+              type: string
+              description: "date of observation"
+            localization_name:
+              type: string
+              description: "name of the localization"
+            trigger_id:
+              type: integer
+              description: "trigger ID for the skymap (optional)"
+            aliases:
+              type: array
+              items:
+                type: string
+              description: "aliases of the event/skymap (optional)"
+        catalog:
+          type: string
+          description: "catalog name. use info query_type to get available catalogs."
+        filter:
+          type: object
+          description: "filter expression in MQL"
+        projection:
+          type: object
+          description: "projection expression (document fields to return/ditch) in MQL"
+
+    skymap_kwargs:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          max_time_ms:
+            type: integer
+            default: 300000
+            description: "maximum query execution time in ms. defaults to 5 minutes"
+            minimum: 1
+          skip:
+            type: integer
+            description: "number of matched documents to skip"
+            minimum: 0
+          hint:
+            type: string
+            description: "index name to use"
+          limit:
+            type: integer
+            description: "maximum number of matched documents to return"
+            minimum: 1
+          sort:
+            type: array
+            description: "sorting order"

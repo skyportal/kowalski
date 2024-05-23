@@ -3,7 +3,13 @@ import os
 
 import uvloop
 from aiohttp import web
-from aiohttp_swagger3 import ReDocUiSettings, SwaggerDocs
+from aiohttp_swagger3 import (
+    ReDocUiSettings,
+    SwaggerDocs,
+    SwaggerInfo,
+    SwaggerContact,
+    SwaggerLicense,
+)
 from motor.motor_asyncio import AsyncIOMotorClient
 from odmantic import AIOEngine
 
@@ -25,7 +31,8 @@ from kowalski.api.handlers import (
     ZTFTriggerHandler,
     ZTFMMATriggerHandler,
     SkymapHandler,
-    ZTFAlertCutouts,
+    AlertCutoutHandler,
+    AlertClassificationHandler,
 )
 
 """ load config and secrets """
@@ -108,11 +115,22 @@ async def app_factory():
         app,
         redoc_ui_settings=ReDocUiSettings(path="/docs/api/"),
         # swagger_ui_settings=SwaggerUiSettings(path="/docs/api/"),
+        # rapidoc_ui_settings=RapiDocUiSettings(path="/docs/api/"),
         validate=config["misc"]["openapi_validate"],
-        title=config["server"]["name"],
-        version=config["server"]["version"],
-        description=config["server"]["description"],
-        components=os.path.join("kowalski/api/components_api.yaml"),  # TODO: verify
+        info=SwaggerInfo(
+            title=config["server"]["name"],
+            version=config["server"]["version"],
+            description=config["server"]["description"],
+            contact=SwaggerContact(
+                name=config["server"]["contact"]["name"],
+                email=config["server"]["contact"]["email"],
+            ),
+            license=SwaggerLicense(
+                name="MIT",
+                url="https://raw.githubusercontent.com/skyportal/kowalski/main/LICENSE",
+            ),
+        ),
+        components=os.path.join("kowalski/api/components_api.yaml"),
     )
 
     # instantiate handler classes:
@@ -126,7 +144,8 @@ async def app_factory():
     ztf_mma_trigger_handler = ZTFMMATriggerHandler()
     ztf_mma_trigger_handler_test = ZTFMMATriggerHandler(test=True)
     skymap_handler = SkymapHandler()
-    ztf_alert_cutout_handler = ZTFAlertCutouts()
+    alert_cutout_handler = AlertCutoutHandler()
+    alert_classification_handler = AlertClassificationHandler()
 
     routes = [
         web.get("/", ping_handler.get, name="root", allow_head=False),
@@ -146,27 +165,54 @@ async def app_factory():
         web.patch("/api/filters", filter_handler.patch),
         web.delete("/api/filters/{filter_id:[0-9]+}", filter_handler.delete),
         # triggers
-        web.get("/api/triggers/ztf", ztf_trigger_handler.get),
-        web.put("/api/triggers/ztf", ztf_trigger_handler.put),
-        web.delete("/api/triggers/ztf", ztf_trigger_handler.delete),
-        web.get("/api/triggers/ztf.test", ztf_trigger_handler_test.get),
+        web.get(
+            "/api/triggers/ztf",
+            ztf_trigger_handler.get,
+            allow_head=False,
+            name="ztf_triggers",
+        ),
+        web.put("/api/triggers/ztf", ztf_trigger_handler.put, name="ztf_triggers"),
+        web.delete(
+            "/api/triggers/ztf", ztf_trigger_handler.delete, name="ztf_triggers"
+        ),
+        web.get(
+            "/api/triggers/ztf.test", ztf_trigger_handler_test.get, allow_head=False
+        ),
         web.put("/api/triggers/ztf.test", ztf_trigger_handler_test.put),
         web.delete("/api/triggers/ztf.test", ztf_trigger_handler_test.delete),
         # mma triggers
-        web.get("/api/triggers/ztfmma", ztf_mma_trigger_handler.get),
+        web.get("/api/triggers/ztfmma", ztf_mma_trigger_handler.get, allow_head=False),
         web.put("/api/triggers/ztfmma", ztf_mma_trigger_handler.put),
         web.delete("/api/triggers/ztfmma", ztf_mma_trigger_handler.delete),
-        web.get("/api/triggers/ztfmma.test", ztf_mma_trigger_handler_test.get),
+        web.get(
+            "/api/triggers/ztfmma.test",
+            ztf_mma_trigger_handler_test.get,
+            allow_head=False,
+        ),
         web.put("/api/triggers/ztfmma.test", ztf_mma_trigger_handler_test.put),
         web.delete("/api/triggers/ztfmma.test", ztf_mma_trigger_handler_test.delete),
         # skymaps:
         web.put("/api/skymap", skymap_handler.put),
         web.get("/api/skymap", skymap_handler.get),
         web.delete("/api/skymap", skymap_handler.delete),
-        # lab (cutouts):
+        # cutouts:
         web.get(
-            "/lab/ztf-alerts/{candid}/cutout/{cutout}/{file_format}",
-            ztf_alert_cutout_handler.get,
+            "/api/cutouts/{survey}/{candid}/{cutout}/{file_format}",
+            alert_cutout_handler.get,
+            allow_head=False,
+        ),
+        # classifications:
+        web.put(
+            "/api/classifications/{survey}",
+            alert_classification_handler.put,
+        ),
+        web.delete(
+            "/api/classifications/{survey}",
+            alert_classification_handler.delete,
+        ),
+        web.get(
+            "/api/classifications/{survey}/{candid}",
+            alert_classification_handler.get,
             allow_head=False,
         ),
     ]

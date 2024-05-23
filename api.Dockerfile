@@ -56,7 +56,8 @@ RUN pip install --upgrade pip
 
 # install python libs and generate supervisord config file
 RUN pip install -r requirements/requirements.txt --no-cache-dir && \
-    pip install -r requirements/requirements_api.txt --no-cache-dir
+    pip install -r requirements/requirements_api.txt --no-cache-dir && \
+    pip install -r requirements/requirements_test.txt --no-cache-dir
 
 # run container
 CMD make run_api

@@ -66,7 +66,136 @@ class SkymapHandler(BaseHandler):
 
     @auth_required
     async def put(self, request: web.Request) -> web.Response:
-        """Save a skymap's contours at different levels, or add new contours to an existing skymap"""
+        """
+        Save a skymap's contours at different levels, or add new contours to an existing skymap
+
+        :param request:
+        :return:
+
+        ---
+        summary: Save a skymap's contours at different levels, or add new contours to an existing skymap
+        tags:
+            - skymap
+        requestBody:
+            required: true
+            content:
+                application/json:
+                    schema:
+                        type: object
+                        properties:
+                            dateobs:
+                                type: string
+                                format: date-time
+                            triggerid:
+                                type: string
+                            aliases:
+                                type: array
+                                items:
+                                    type: string
+                            voevent:
+                                type: string
+                            skymap:
+                                type: object
+                            contours:
+                                type: array
+                                items:
+                                    type: number
+        responses:
+            '200':
+                description: skymap contours saved successfully
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                message:
+                                    type: string
+                                data:
+                                    type: object
+                                    properties:
+                                        dateobs:
+                                            type: string
+                                            format: date-time
+                                        localization_name:
+                                            type: string
+                                        contours:
+                                            type: array
+                                            items:
+                                                type: number
+                            example:
+                                status: success
+                                message: added skymap for 2021-01-01T00:00:00 with contours [90, 95]
+                                data:
+                                    dateobs: 2021-01-01T00:00:00
+                                    localization_name: skymap_2021-01-01T00:00:00
+                                    contours: [90, 95]
+            '400':
+                description: invalid request body
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                message:
+                                    type: string
+                            example:
+                                status: error
+                                message: "Invalid request body: 1 validation error for SkymapHandlerPut"
+                                data:
+                                    dateobs
+                                    aliases
+                                    voevent
+                                    skymap
+                                    contours
+            '409':
+                description: skymap already exists with the same contours
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                message:
+                                    type: string
+                                data:
+                                    type: object
+                                    properties:
+                                        dateobs:
+                                            type: string
+                                            format: date-time
+                                        localization_name:
+                                            type: string
+                                        contours:
+                                            type: array
+                                            items:
+                                                type: number
+                            example:
+                                status: already_exists
+                                message: skymap already exists with the same contours
+                                data:
+                                    dateobs: 2021-01-01T00:00:00
+                                    localization_name: skymap_2021-01-01T00:00:00
+                                    contours: [90, 95]
+            '500':
+                description: internal server error
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                message:
+                                    type: string
+                            example:
+                                status: error
+                                message: internal server error
+        """
         _data = await request.json()
         contour_levels = _data.get("contours", [90, 95])
         if isinstance(contour_levels, int) or isinstance(contour_levels, float):
@@ -310,7 +439,114 @@ class SkymapHandler(BaseHandler):
 
     @auth_required
     async def get(self, request: web.Request) -> web.Response:
-        """Retrieve a skymap using either a dateobs, triggerid, or alias"""
+        """
+        Retrieve a skymap using either a dateobs, triggerid, or alias
+
+        :param request:
+        :return:
+
+        ---
+        summary: Retrieve a skymap using either a dateobs, triggerid, or alias
+        tags:
+            - skymap
+        parameters:
+            - in: query
+              name: dateobs
+              schema:
+                type: string
+                format: date-time
+              description: dateobs of the skymap
+            - in: query
+              name: triggerid
+              schema:
+                type: string
+              description: triggerid of the skymap
+            - in: query
+              name: alias
+              schema:
+                type: string
+              description: alias of the skymap
+            - in: query
+              name: localization_name
+              schema:
+                type: string
+              description: localization name of the skymap
+            - in: query
+              name: contours
+              schema:
+                type: string
+              description: contours to retrieve
+        responses:
+            '200':
+                description: skymap retrieved successfully
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                data:
+                                    type: object
+                                    properties:
+                                        dateobs:
+                                            type: string
+                                            format: date-time
+                                        localization_name:
+                                            type: string
+                                        contours:
+                                            type: object
+                            example:
+                                status: success
+                                data:
+                                    dateobs: 2021-01-01T00:00:00
+                                    localization_name: skymap_2021-01-01T00:00:00
+                                    contours:
+                                        contour90: "https://url/to/contour90"
+                                        contour95: "https://url/to/contour95"
+            '400':
+                description: invalid request query
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                message:
+                                    type: string
+                            example:
+                                status: error
+                                message: "must provide dateobs, triggerid, or alias"
+            '404':
+                description: skymap not found
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                message:
+                                    type: string
+                            example:
+                                status: error
+                                message: "no skymap found"
+            '500':
+                description: internal server error
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                message:
+                                    type: string
+                            example:
+                                status: error
+                                message: internal server error
+        """
 
         try:
             SkymapHandlerGet(**request.query)
@@ -402,7 +638,90 @@ class SkymapHandler(BaseHandler):
 
     @auth_required
     async def delete(self, request: web.Request) -> web.Response:
-        """Delete a skymap using either a dateobs, triggerid, or alias"""
+        """
+        Delete a skymap using either a dateobs, triggerid, or alias
+
+        :param request:
+        :return:
+
+        ---
+        summary: Delete a skymap and localization using either a dateobs, triggerid, or alias
+        tags:
+            - skymap
+        requestBody:
+            required: true
+            content:
+                application/json:
+                    schema:
+                        type: object
+                        properties:
+                            dateobs:
+                                type: string
+                                format: date-time
+                            triggerid:
+                                type: string
+                            alias:
+                                type: string
+                            localization_name:
+                                type: string
+        responses:
+            '200':
+                description: skymap deleted successfully
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                message:
+                                    type: string
+                            example:
+                                status: success
+                                message: deleted 1 skymap
+            '400':
+                description: invalid request body
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                message:
+                                    type: string
+                            example:
+                                status: error
+                                message: "must provide dateobs, triggerid, or alias"
+            '404':
+                description: skymap not found
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                message:
+                                    type: string
+                            example:
+                                status: error
+                                message: "no skymap found"
+            '500':
+                description: internal server error
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                message:
+                                    type: string
+                            example:
+                                status: error
+                                message: internal server error
+        """
         _data = await request.json()
         try:
             SkymapHandlerDelete(**_data)

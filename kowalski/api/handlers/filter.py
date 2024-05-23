@@ -211,13 +211,13 @@ class FilterHandler(BaseHandler):
 
     @admin_required
     async def post(self, request: web.Request) -> web.Response:
-        """Post user-defined alert filter, or a new version thereof
+        """Post user-defined alert filter, or a new version
         - store pipeline as serialized extended json string,
           to be used with literal_eval to convert to dict at execution
         - run a simple sanity check before saving
 
         ---
-        summary: Post user-defined alert filter, or a new version thereof
+        summary: Post user-defined alert filter, or a new version
         tags:
           - filters
 

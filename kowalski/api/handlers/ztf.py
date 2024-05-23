@@ -60,7 +60,7 @@ class ZTFTriggerHandler(BaseHandler):
         :param request:
         :return:
         ---
-        summary: Get ZTF queue
+        summary: Retrieve the ZTF queue's triggers
         tags:
           - triggers
 
@@ -70,6 +70,14 @@ class ZTFTriggerHandler(BaseHandler):
             application/json:
               schema:
                 type: object
+                properties:
+                  queue_name:
+                    type: string
+                  user:
+                    type: string
+              example:
+                queue_name: test
+                user: test
         responses:
           '200':
             description: queue retrieved
@@ -123,12 +131,12 @@ class ZTFTriggerHandler(BaseHandler):
 
     @admin_required
     async def put(self, request: web.Request) -> web.Response:
-        """Trigger ZTF
+        """Send a trigger to ZTF
 
         :param request:
         :return:
         ---
-        summary: Trigger ZTF
+        summary: Send a trigger to ZTF
         tags:
           - triggers
 
@@ -138,6 +146,71 @@ class ZTFTriggerHandler(BaseHandler):
             application/json:
               schema:
                 type: object
+                required:
+                  - queue_name
+                  - validity_window_mjd
+                  - targets
+                  - queue_type
+                  - user
+                properties:
+                  queue_name:
+                    type: string
+                  validity_window_mjd:
+                    type: array
+                    items:
+                      type: number
+                  targets:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - request_id
+                        - program_id
+                        - field_id
+                        - ra
+                        - dec
+                        - filter_id
+                        - exposure_time
+                        - program_pi
+                        - subprogram_name
+                      properties:
+                        request_id:
+                          type: string
+                        program_id:
+                          type: string
+                        field_id:
+                          type: string
+                        ra:
+                          type: number
+                        dec:
+                          type: number
+                        filter_id:
+                          type: integer
+                        exposure_time:
+                          type: number
+                        program_pi:
+                          type: string
+                        subprogram_name:
+                          type: string
+                  queue_type:
+                    type: string
+                  user:
+                    type: string
+              example:
+                queue_name: test
+                validity_window_mjd: [59000.0, 59001.0]
+                targets:
+                  - request_id: test
+                    program_id: test
+                    field_id: test
+                    ra: 0.0
+                    dec: 0.0
+                    filter_id: 1
+                    exposure_time: 30.0
+                    program_pi: test
+                    subprogram_name: test
+                queue_type: test
+                user: test
         responses:
           '201':
             description: queue submitted
@@ -212,6 +285,17 @@ class ZTFTriggerHandler(BaseHandler):
             application/json:
               schema:
                 type: object
+                required:
+                  - queue_name
+                  - user
+                properties:
+                  queue_name:
+                    type: string
+                  user:
+                    type: string
+              example:
+                queue_name: test
+                user: test
         responses:
           '200':
             description: queue removed
@@ -299,7 +383,7 @@ class ZTFMMATriggerHandler(BaseHandler):
         ---
         summary: Get ZTF MMA trigger(s) status
         tags:
-          - triggers
+          - mma-triggers
 
         requestBody:
           required: false
@@ -307,6 +391,14 @@ class ZTFMMATriggerHandler(BaseHandler):
             application/json:
               schema:
                 type: object
+                properties:
+                  trigger_name:
+                    type: string
+                  user:
+                    type: string
+              example:
+                trigger_name: test
+                user: test
         responses:
           '200':
             description: mma trigger(s) status retrieved
@@ -364,14 +456,14 @@ class ZTFMMATriggerHandler(BaseHandler):
 
     @admin_required
     async def put(self, request: web.Request) -> web.Response:
-        """Trigger ZTF
+        """Send an MMA trigger (observation plan) to ZTF
 
         :param request:
         :return:
         ---
-        summary: Trigger ZTF
+        summary: Send an MMA trigger (observation plan) to ZTF
         tags:
-          - triggers
+          - mma-triggers
 
         requestBody:
           required: true
@@ -379,6 +471,40 @@ class ZTFMMATriggerHandler(BaseHandler):
             application/json:
               schema:
                 type: object
+                required:
+                  - trigger_name
+                  - trigger_time
+                  - fields
+                  - user
+                properties:
+                  trigger_name:
+                    type: string
+                  trigger_time:
+                    type: number
+                  fields:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - field_id
+                        - ra
+                        - dec
+                        - exposure_time
+                        - filter_id
+                      properties:
+                        field_id:
+                          type: string
+                        probability:
+                          type: number
+                  user:
+                    type: string
+              example:
+                trigger_name: test
+                trigger_time: 59000.0
+                fields:
+                  - field_id: test
+                    probability: 0.05
+                user: test
         responses:
           '201':
             description: trigger submitted
@@ -440,14 +566,14 @@ class ZTFMMATriggerHandler(BaseHandler):
 
     @admin_required
     async def delete(self, request: web.Request) -> web.Response:
-        """Delete ZTF request
+        """Delete a ZTF MMA request
 
         :param request:
         :return:
         ---
-        summary: Delete ZTF request
+        summary: Delete ZTF MMA request
         tags:
-          - triggers
+          - mma-triggers
 
         requestBody:
           required: true
@@ -455,6 +581,17 @@ class ZTFMMATriggerHandler(BaseHandler):
             application/json:
               schema:
                 type: object
+                required:
+                  - trigger_name
+                  - user
+                properties:
+                  trigger_name:
+                    type: string
+                  user:
+                    type: string
+              example:
+                trigger_name: test
+                user: test
         responses:
           '200':
             description: queue removed

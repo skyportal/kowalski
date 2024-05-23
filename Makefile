@@ -35,6 +35,9 @@ python_dependencies_api:
 python_dependencies_ingester:
 	$(PYTHON) kowalski/tools/pip_install_requirements.py requirements/requirements_ingester.txt
 
+python_dependencies_test:
+	$(PYTHON) kowalski/tools/pip_install_requirements.py requirements/requirements_test.txt
+
 # SUPERVISORD
 generate_supervisord_conf:
 	$(PYTHON) kowalski/tools/generate_supervisord_conf.py all
@@ -79,7 +82,7 @@ monitor_api:
 monitor_ingester:
 	$(SUPERVISORCTL_INGESTER) -i
 
-test: setup_all init_models init_kafka
+test: setup_all python_dependencies_test init_models init_kafka
 	$(PYTHON) kowalski/tools/tests.py
 
 docker_setup: setup

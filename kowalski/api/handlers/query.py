@@ -475,9 +475,10 @@ class QueryHandler(BaseHandler):
                       - find_one
                       - info
                       - near
+                      - skymap
                   query:
                     type: object
-                    description: query. depends on query_type, see examples
+                    description: Depends on query_type, see examples
                     oneOf:
                       - $ref: "#/components/schemas/aggregate"
                       - $ref: "#/components/schemas/cone_search"
@@ -487,9 +488,10 @@ class QueryHandler(BaseHandler):
                       - $ref: "#/components/schemas/find_one"
                       - $ref: "#/components/schemas/info"
                       - $ref: "#/components/schemas/near"
+                      - $ref: "#/components/schemas/skymap"
                   kwargs:
                     type: object
-                    description: additional parameters. depends on query_type, see examples
+                    description: Depends on query_type, see examples
                     oneOf:
                       - $ref: "#/components/schemas/aggregate_kwargs"
                       - $ref: "#/components/schemas/cone_search_kwargs"
@@ -499,6 +501,7 @@ class QueryHandler(BaseHandler):
                       - $ref: "#/components/schemas/find_one_kwargs"
                       - $ref: "#/components/schemas/info_kwargs"
                       - $ref: "#/components/schemas/near_kwargs"
+                      - $ref: "#/components/schemas/skymap_kwargs"
               examples:
                 aggregate:
                   value:
@@ -597,6 +600,23 @@ class QueryHandler(BaseHandler):
                           "projection": {"_id": 0, "candid": 1, "objectId": 1}
                         }
                       }
+                    }
+                    "kwargs": {
+                      "limit": 1
+                    }
+
+                skymap:
+                  value:
+                    "query_type": "skymap"
+                    "query": {
+                      "skymap": {
+                        "dateobs": "2020-11-10T00:00:00.000",
+                        "localization_name": "bayestar.fits",
+                        "contour": 90
+                      },
+                      "catalog": "ZTF_alerts",
+                      "filter": {"candidate.jd": {"$gte": 2459150.0, "$lt": 2459151.0}},
+                      "projection": {"_id": 0, "candid": 1, "objectId": 1},
                     }
                     "kwargs": {
                       "limit": 1
@@ -713,6 +733,17 @@ class QueryHandler(BaseHandler):
                           ]
                         }
                       }
+
+                  skymap:
+                    value:
+                      "status": "success"
+                      "message": "Successfully executed query"
+                      "data": [
+                        {
+                          "candid": 1127561444715015009,
+                          "objectId": "ZTF20aaelulu"
+                        }
+                      ]
 
           '400':
             description: query parsing/execution error
