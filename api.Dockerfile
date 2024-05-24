@@ -30,11 +30,7 @@ COPY ["kowalski/__init__.py", \
         "kowalski/log.py", \
         "kowalski/"]
 
-COPY ["kowalski/api/__init__.py", \
-        "kowalski/api/api.py", \
-        "kowalski/api/middlewares.py", \
-        "kowalski/api/components_api.yaml", \
-        "kowalski/api/"]
+COPY kowalski/api kowalski/api
 
 COPY ["kowalski/tools/__init__.py", \
         "kowalski/tools/check_app_environment.py", \
@@ -44,7 +40,7 @@ COPY ["kowalski/tools/__init__.py", \
         "kowalski/tools/gcn_utils.py", \
         "kowalski/tools/"]
 
-COPY kowalski/tests/test_api.py kowalski/tests/
+COPY kowalski/tests/api kowalski/tests/api
 
 COPY conf/supervisord_api.conf.template conf/
 
@@ -56,7 +52,8 @@ RUN pip install --upgrade pip
 
 # install python libs and generate supervisord config file
 RUN pip install -r requirements/requirements.txt --no-cache-dir && \
-    pip install -r requirements/requirements_api.txt --no-cache-dir
+    pip install -r requirements/requirements_api.txt --no-cache-dir && \
+    pip install -r requirements/requirements_test.txt --no-cache-dir
 
 # run container
 CMD make run_api
