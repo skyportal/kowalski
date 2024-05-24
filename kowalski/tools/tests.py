@@ -13,79 +13,79 @@ def test(use_docker=False):
 
     # make sure the containers are up and running
 
-    test_setups = [
+    tests = [
         {
             "part": "TURBO alert broker components",
             "container": "kowalski_ingester_1",
-            "test_script": "test_alert_broker_turbo.py",
+            "location": "brokers/components/test_alert_broker_turbo.py",
             "flaky": False,
         },
         {
             "part": "PGIR alert broker components",
             "container": "kowalski_ingester_1",
-            "test_script": "test_alert_broker_pgir.py",
+            "location": "brokers/components/test_alert_broker_pgir.py",
             "flaky": False,
         },
         {
             "part": "WINTER alert broker components",
             "container": "kowalski_ingester_1",
-            "test_script": "test_alert_broker_wntr.py",
+            "location": "brokers/components/test_alert_broker_wntr.py",
             "flaky": False,
         },
         {
             "part": "ZTF alert broker components",
             "container": "kowalski_ingester_1",
-            "test_script": "test_alert_broker_ztf.py",
+            "location": "brokers/components/test_alert_broker_ztf.py",
             "flaky": False,
         },
         {
             "part": "TURBO alert ingestion",
             "container": "kowalski_ingester_1",
-            "test_script": "test_ingester_turbo.py",
+            "location": "brokers/ingestion/test_ingester_turbo.py",
             "flaky": False,
         },
         {
             "part": "PGIR alert ingestion",
             "container": "kowalski_ingester_1",
-            "test_script": "test_ingester_pgir.py",
+            "location": "brokers/ingestion/test_ingester_pgir.py",
             "flaky": False,
         },
         {
             "part": "WINTER alert ingestion",
             "container": "kowalski_ingester_1",
-            "test_script": "test_ingester_wntr.py",
+            "location": "brokers/ingestion/test_ingester_wntr.py",
             "flaky": False,
         },
         {
             "part": "ZTF alert ingestion",
             "container": "kowalski_ingester_1",
-            "test_script": "test_ingester_ztf.py",
+            "location": "brokers/ingestion/test_ingester_ztf.py",
             "flaky": False,
         },
         {
             "part": "API",
             "container": "kowalski_api_1",
-            "test_script": "test_api.py",
+            "location": "api",
             "flaky": False,
         },
         {
             "part": "Tools",
             "container": "kowalski_ingester_1",
-            "test_script": "test_tools.py",
+            "location": "misc/test_tools.py",
             "flaky": False,
         },
         {
             "part": "TNS monitoring",
             "container": "kowalski_ingester_1",
-            "test_script": "test_tns_watcher.py",
+            "location": "misc/test_tns_watcher.py",
             "flaky": True,
         },
     ]
 
     failed_tests = []
 
-    for setup in test_setups:
-        if setup["part"] == "API" and use_docker:
+    for t in tests:
+        if t["part"] == "API" and use_docker:
             # this is to help github actions, we do not need
             # any of the ingester related processes to run anymore
             try:
@@ -104,20 +104,20 @@ def test(use_docker=False):
             except subprocess.CalledProcessError:
                 print("Failed to stop the ingester processes")
 
-        print(f"Testing {setup['part']}")
+        print(f"Testing {t['part']}")
         command = [
             "python",
             "-m",
             "pytest",
             "-s",
-            f"kowalski/tests/{setup['test_script']}",
+            f"kowalski/tests/{t['location']}",
         ]
         if use_docker:
             command = [
                 "docker",
                 "exec",
                 "-i",
-                setup["container"],
+                t["container"],
                 "bash",
                 "-c",
                 " ".join(command),
@@ -125,10 +125,10 @@ def test(use_docker=False):
         try:
             subprocess.run(command, check=True)
         except subprocess.CalledProcessError:
-            if not setup.get("flaky", False):
-                failed_tests.append(setup["part"])
+            if not t.get("flaky", False):
+                failed_tests.append(t["part"])
             else:
-                print(f"{setup['part']} test, marked as flaky, failed.")
+                print(f"{t['part']} test, marked as flaky, failed.")
             continue
 
     if failed_tests:

@@ -1,8 +1,11 @@
 kowalski:
   server:
     name: "Kowalski"
-    version: "2.0.0"
-    description: "Kowalski: a toolkit for Time-Domain Astronomy"
+    version: "3.0.0"
+    description: "Kowalski: a toolkit for Time-Domain Astronomy, provides an API to access most of its underlying functionality.
+    To use it, you will need a user account that can be provided by the system's administrator. Once you have an account you can retrieve your token using the `/api/auth` endpoint described here.
+    We strongly suggest accessing Kowalski using its dedicated Python client: [penquins](https://github.com/dmitryduev/penquins). It comes with its own documentation and examples, and can be installed with `pip install penquins`.
+    If you have any questions or need help, please contact us."
     host: "0.0.0.0"
     port: 4000
     processes: 4
@@ -19,6 +22,9 @@ kowalski:
     # fixme: use from cryptography.fernet import Fernet; Fernet.generate_key().decode()
     fernet_key: "irjsxvfJdqSJ2fcnpPacbH972dt-RPMMLE48PQ8J5Hg="
     client_max_size: 1048576
+    contact:
+      name: "Your Name"
+      email: "your_email@your_domain.com"
 
   ztf:
     mountain_ip: null
@@ -62,9 +68,7 @@ kowalski:
       queries: "queries"
       alerts_ztf: "ZTF_alerts"
       alerts_ztf_aux: "ZTF_alerts_aux"
-      alerts_zuds: "ZUDS_alerts"
-      alerts_zuds_aux: "ZUDS_alerts_aux"
-      tns: "TNS"
+      alerts_ztf_classifications: "ZTF_alerts_classifications"
       alerts_pgir: "PGIR_alerts"
       alerts_pgir_aux: "PGIR_alerts_aux"
       alerts_wntr: "WNTR_alerts"
@@ -72,6 +76,7 @@ kowalski:
       alerts_turbo: "TURBO_alerts"
       alerts_turbo_aux: "TURBO_alerts_aux"
       skymaps: "skymaps"
+      tns: "TNS"
 
     indexes:
       ZTF_alerts:
@@ -311,6 +316,12 @@ kowalski:
             - ["dateobs", -1]
             - ["localization_name", 1]
           unique: true
+
+      ZTF_alerts_classifications:
+        - name: objectId
+          fields:
+            - ["objectId", -1]
+          unique: false
 
     filters:
       ZTF_alerts:
