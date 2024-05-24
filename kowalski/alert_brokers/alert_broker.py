@@ -1371,7 +1371,13 @@ class AlertWorker:
                         "active", False
                     ):
                         auto_followup_filter = deepcopy(_filter["auto_followup"])
-                        priority = 5
+                        # 0 is lowest if priority is ascending, 5 is lowest if priority is descending
+                        priority = (
+                            5
+                            if auto_followup_filter.get("priority_order", None)
+                            == "desc"
+                            else 0
+                        )
 
                         # validate non-optional keys
                         if (
@@ -1394,13 +1400,30 @@ class AlertWorker:
                             continue
 
                         # there is also a priority key that is optional. If not present or if not a function, it defaults to 5 (lowest priority)
+                        # the priority might come in different keys, so we check for all of them to find the right one
+                        # all the way to posting to SkyPortal
+                        # for now the only options we support are: priority, urgency, Urgency
+                        priority_alias = "priority"
+                        priority_aliases_options = ["urgency", "Urgency"]
+                        for alias in priority_aliases_options:
+                            if alias in auto_followup_filter.get("payload", {}):
+                                priority_alias = alias
+                                break
                         if isinstance(
                             auto_followup_filter.get("payload", {}).get(
-                                "priority", None
+                                priority_alias, None
                             ),
-                            (int, float),
+                            (int, float, str),
                         ):
-                            priority = auto_followup_filter["payload"]["priority"]
+                            try:
+                                priority = float(
+                                    auto_followup_filter["payload"][priority_alias]
+                                )
+                            except Exception:
+                                log(
+                                    f'Filter {_filter["fid"]} has an invalid auto-followup priority specified, skipping'
+                                )
+                                continue
 
                         # validate the optional radius key, and set to 0.5 arcsec if not present
                         if auto_followup_filter.get("radius", None) is None:
@@ -1453,7 +1476,7 @@ class AlertWorker:
                                 comment = auto_followup_filtered_data[0]["comment"]
 
                             payload = _filter["auto_followup"].get("payload", {})
-                            payload["priority"] = priority
+                            payload[priority_alias] = priority
                             # if the auto_followup_filtered_data contains a payload key, merge it with the existing payload
                             # updating the existing keys with the new values, ignoring the rest
                             #
@@ -1488,7 +1511,7 @@ class AlertWorker:
                             if comment is not None:
                                 comment = (
                                     str(comment.strip())
-                                    + f" (priority: {str(payload['priority'])})"
+                                    + f" ({priority_alias}: {str(payload[priority_alias])})"
                                 )
 
                             passed_filter["auto_followup"] = {
@@ -1523,6 +1546,9 @@ class AlertWorker:
                                         "radius", 0.5
                                     ),  # in arcsec
                                 },
+                                "implements_update": _filter["auto_followup"].get(
+                                    "implements_update", True
+                                ),  # by default we assume that update is implemented for the instrument of this allocation
                             }
 
                             if not isinstance(_filter.get("autosave", False), bool):
@@ -1531,6 +1557,10 @@ class AlertWorker:
                                 ] = _filter.get("autosave", {}).get(
                                     "ignore_group_ids", []
                                 )
+
+                            passed_filter["auto_followup"][
+                                "priority_alias"
+                            ] = priority_alias
 
                     passed_filters.append(passed_filter)
 
@@ -2095,11 +2125,36 @@ class AlertWorker:
         ]
 
         if len(passed_filters_followup) > 0:
-            # first sort all the filters by priority (highest first)
-            passed_filters_followup = sorted(
-                passed_filters_followup,
-                key=lambda f: f["auto_followup"]["data"]["payload"]["priority"],
+            # first split the passed_filters_followup into two lists: one with priority_order asc or None, and one with desc
+            passed_filters_followup_asc = [
+                f
+                for f in passed_filters_followup
+                if f["auto_followup"].get("priority_order", "asc") in [None, "asc"]
+            ]
+            passed_filters_followup_desc = [
+                f
+                for f in passed_filters_followup
+                if f["auto_followup"].get("priority_order", "asc") == "desc"
+            ]
+            # second sort each of them by priority (highest first, using the priority_order key)
+            passed_filters_followup_asc = sorted(
+                passed_filters_followup_asc,
+                key=lambda f: f["auto_followup"]["data"]["payload"][
+                    f["auto_followup"]["priority_alias"]
+                ],
                 reverse=True,
+            )
+            passed_filters_followup_desc = sorted(
+                passed_filters_followup_desc,
+                key=lambda f: f["auto_followup"]["data"]["payload"][
+                    f["auto_followup"]["priority_alias"]
+                ],
+                reverse=True,
+            )
+            # now concatenate them back, desc and then asc
+            # that way desc requests are ordered appropriately, and asc requests are ordered appropriately too
+            passed_filters_followup = (
+                passed_filters_followup_desc + passed_filters_followup_asc
             )
 
             # then, fetch the existing followup requests on SkyPortal for this alert
@@ -2155,18 +2210,14 @@ class AlertWorker:
                     log(
                         f"Failed to filter out failed followup requests for {alert['objectId']}: {e}"
                     )
-
-                # sort by priority (highest first)
-                existing_requests = sorted(
-                    existing_requests,
-                    key=lambda r: r["payload"]["priority"],
-                    reverse=True,
-                )
             else:
                 log(f"Failed to get followup requests for {alert['objectId']}")
                 existing_requests = []
 
             for passed_filter in passed_filters_followup:
+                priority_alias = passed_filter["auto_followup"].get(
+                    "priority_alias", "priority"
+                )
                 # look for existing requests with the same allocation, target groups, and payload
                 existing_requests_filtered = [
                     (i, r)
@@ -2179,16 +2230,32 @@ class AlertWorker:
                     and compare_dicts(
                         passed_filter["auto_followup"]["data"]["payload"],
                         r["payload"],
-                        ignore_keys=[
-                            "priority",
-                            "start_date",
-                            "end_date",
-                            "advanced",
-                            "observation_choices",
-                        ],
+                        ignore_keys=list(
+                            set(
+                                [
+                                    "priority",
+                                    "urgency",
+                                    "Urgency",
+                                    priority_alias,
+                                    "start_date",
+                                    "end_date",
+                                    "advanced",
+                                    "observation_choices",
+                                ]
+                            )
+                        ),
                     )
                     is True
                 ]
+                # sort by priority by taking into account the priority_order and priority_alias
+                existing_requests_filtered = sorted(
+                    existing_requests_filtered,
+                    key=lambda r: r[1]["payload"][priority_alias],
+                    reverse=True
+                    if passed_filter["auto_followup"].get("priority_order", "asc")
+                    == "desc"
+                    else False,
+                )
                 if len(existing_requests_filtered) == 0:
                     # if no existing request, post a new one
                     with timer(
@@ -2293,6 +2360,13 @@ class AlertWorker:
                             log(
                                 f"Failed to post followup request for {alert['objectId']} to SkyPortal: {e}"
                             )
+                elif (
+                    passed_filter["auto_followup"].get("implements_update", True)
+                    is False
+                ):
+                    log(
+                        f"Pending Followup request for {alert['objectId']} and allocation_id {passed_filter['auto_followup']['allocation_id']} already exists on SkyPortal, and the allocation does not implement update"
+                    )
                 else:
                     # if there is an existing request, but the priority is lower (or higher, depends of
                     # the priority system for that instrument/allocation) than the one we want to post,
@@ -2314,9 +2388,9 @@ class AlertWorker:
                     if "submitted" in str(
                         request_to_update["status"]
                     ).lower() and priority_should_update(
-                        request_to_update["payload"]["priority"],  # existing
+                        request_to_update["payload"][priority_alias],  # existing
                         passed_filter["auto_followup"]["data"]["payload"][
-                            "priority"
+                            priority_alias
                         ],  # new
                         passed_filter["auto_followup"].get(
                             "priority_order", "asc"
@@ -2332,9 +2406,9 @@ class AlertWorker:
                                 data = {
                                     "payload": {
                                         **request_to_update["payload"],
-                                        "priority": passed_filter["auto_followup"][
+                                        priority_alias: passed_filter["auto_followup"][
                                             "data"
-                                        ]["payload"]["priority"],
+                                        ]["payload"][priority_alias],
                                     },
                                     "obj_id": alert["objectId"],
                                     "allocation_id": request_to_update["allocation_id"],
@@ -2356,11 +2430,11 @@ class AlertWorker:
                                     )
                                     # update the existing_requests list
                                     existing_requests[existing_requests_filtered[0][0]][
-                                        "priority"
+                                        priority_alias
                                     ] = passed_filter["auto_followup"]["data"][
                                         "payload"
                                     ][
-                                        "priority"
+                                        priority_alias
                                     ]
 
                                     # TODO: post a comment to the source to mention the update
