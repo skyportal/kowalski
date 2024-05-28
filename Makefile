@@ -118,3 +118,5 @@ stop_ingester: setup
 stop_api: ## Stop all services in supervisord.
 stop_api: setup
 	$(SUPERVISORCTL_API) stop all
+
+dev_container: setup_all python_dependencies_test init_models init_kafka
