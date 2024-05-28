@@ -4,5 +4,6 @@
     "ghcr.io/devcontainers/features/python:1": {"version": 3.11},
     "ghcr.io/devcontainers/features/rust:1": {}
   },
-  "postCreateCommand": "make dev_container"
+  "onCreateCommand": "make dev_container",
+  "postCreateCommand": "PYTHONPATH=. python kowalski/tools/devcontainer.py"
 }
