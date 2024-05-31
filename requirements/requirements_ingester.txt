@@ -7,7 +7,7 @@ cryptography==42.0.7
 dask==2024.5.2
 deepdiff==7.0.1
 distributed==2024.5.2
-fastavro==1.6.0 #breaking changes in newer versions
+fastavro==1.9.4 #breaking changes in newer versions
 fire==0.6.0
 gsutil==5.29
 gunicorn==22.0.0
