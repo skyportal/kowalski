@@ -17,7 +17,7 @@ pydantic==1.10.13 # bump to v2 once odmantic supports it
 PyJWT==2.8.0
 pymongo==4.7.2
 PyYAML==6.0.1
-requests==2.32.2
+requests==2.32.3
 sshtunnel==0.4.0
 supervisor==4.2.5
 uvloop==0.19.0
