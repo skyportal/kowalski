@@ -16,7 +16,7 @@ jinja2>=2.11.2
 matplotlib==3.9.0
 motor==3.1.1
 numba==0.59.1
-numpy==1.23.5
+numpy==1.26.4
 pandas==2.2.2
 protobuf==4.22.1
 pyarrow==16.1.0
