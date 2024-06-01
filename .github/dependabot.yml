@@ -6,3 +6,19 @@ updates:
       interval: monthly
       time: "06:00"
     open-pull-requests-limit: 20
+    ignore:
+      - dependency-name: fastavro
+        versions:
+          - ">= 1.6.0"
+      - dependency-name: numpy
+        versions:
+          - ">= 1.23.5"
+      - dependency-name: protobuf
+        versions:
+          - ">= 4.22.1"
+      - dependency-name: pytest
+        versions:
+          - ">= 8.1.2"
+      - dependency-name: tensorflow
+        versions:
+          - ">= 2.13.0"
