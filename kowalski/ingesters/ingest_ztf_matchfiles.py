@@ -529,10 +529,6 @@ def run(
     random.shuffle(input_list)
 
     with multiprocessing.Pool(processes=num_proc) as pool:
-        for _ in tqdm(pool.imap(process_file, input_list), total=len(files)):
-            pass
-
-    with multiprocessing.Pool(processes=num_proc) as pool:
         with tqdm(total=len(files)) as pbar:
             for _ in pool.imap_unordered(process_file, input_list):
                 pbar.update(1)
