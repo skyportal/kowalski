@@ -590,12 +590,39 @@ class TestAlertBrokerZTF:
         )
         assert (end_date - start_date).days == 3
 
+        # try an auto_followup that uses urgency and not priority
+        filter["auto_followup"]["pipeline"] = [
+            {
+                "$match": {
+                    "candidate.drb": {"$gt": 0.5},
+                }
+            }
+        ]
+        filter["auto_followup"]["payload"] = {
+            "observation_type": "test",
+            "urgency": 1,
+        }
+        passed_filters = self.worker.alert_filter__user_defined([filter], self.alert)
+
+        assert passed_filters is not None
+        assert len(passed_filters) == 1
+        assert "auto_followup" in passed_filters[0]
+        assert (
+            passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
+            == "test"
+        )
+        assert passed_filters[0]["auto_followup"]["data"]["payload"]["urgency"] == 1
+        # these do not add start_date and end_date
+        assert "start_date" not in passed_filters[0]["auto_followup"]["data"]["payload"]
+        assert "end_date" not in passed_filters[0]["auto_followup"]["data"]["payload"]
+        assert "priority" not in passed_filters[0]["auto_followup"]["data"]["payload"]
+
         # try the same but with a pipeline that overwrites the payload dynamically
         filter["auto_followup"]["pipeline"].append(
             {
                 "$addFields": {
                     "payload.observation_type": "imaging",
-                    "payload.priority": 0,
+                    "payload.urgency": 5,
                     "comment": "Overwritten by pipeline",
                 }
             }
@@ -611,11 +638,14 @@ class TestAlertBrokerZTF:
             passed_filters[0]["auto_followup"]["data"]["payload"]["observation_type"]
             == "imaging"
         )
-        assert passed_filters[0]["auto_followup"]["data"]["payload"]["priority"] == 0
+        assert passed_filters[0]["auto_followup"]["data"]["payload"]["urgency"] == 5
         assert (
             passed_filters[0]["auto_followup"]["comment"]
-            == "Overwritten by pipeline (priority: 0)"
+            == "Overwritten by pipeline (urgency: 5)"
         )
+        assert "start_date" not in passed_filters[0]["auto_followup"]["data"]["payload"]
+        assert "end_date" not in passed_filters[0]["auto_followup"]["data"]["payload"]
+        assert "priority" not in passed_filters[0]["auto_followup"]["data"]["payload"]
 
     def test_alert_filter__user_defined_followup_with_broker(self):
         """Test pushing an alert through a filter that also has auto follow-up activated, and broker mode activated"""

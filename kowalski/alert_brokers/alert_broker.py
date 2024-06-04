@@ -1496,17 +1496,22 @@ class AlertWorker:
                                         payload[key] = auto_followup_filtered_data[0][
                                             "payload"
                                         ][key]
-                            payload["start_date"] = datetime.datetime.utcnow().strftime(
-                                "%Y-%m-%dT%H:%M:%S.%f"
-                            )
-                            payload["end_date"] = (
-                                datetime.datetime.utcnow()
-                                + datetime.timedelta(
-                                    days=_filter["auto_followup"].get(
-                                        "validity_days", 7
-                                    )
+
+                            if str(priority_alias).lower() != "urgency":
+                                # instruments implementing urgency do not require a start_date and end_date
+                                payload[
+                                    "start_date"
+                                ] = datetime.datetime.utcnow().strftime(
+                                    "%Y-%m-%dT%H:%M:%S.%f"
                                 )
-                            ).strftime("%Y-%m-%dT%H:%M:%S.%f")
+                                payload["end_date"] = (
+                                    datetime.datetime.utcnow()
+                                    + datetime.timedelta(
+                                        days=_filter["auto_followup"].get(
+                                            "validity_days", 7
+                                        )
+                                    )
+                                ).strftime("%Y-%m-%dT%H:%M:%S.%f")
 
                             if comment is not None:
                                 comment = (
