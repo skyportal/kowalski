@@ -519,7 +519,7 @@ def topic_listener(
     # init each worker with AlertWorker instance
     worker_initializer = WorkerInitializer()
     try:
-        dask_client.register_worker_plugin(worker_initializer, name="worker-init")
+        dask_client.register_plugin(worker_initializer, name="worker-init")
     except Exception as e:
         log(f"Failed to register worker plugin: {e}")
         log(f"Traceback: {traceback.format_exc()}")

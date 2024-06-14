@@ -484,7 +484,7 @@ def topic_listener(
 
     # init each worker with AlertWorker instance
     worker_initializer = WorkerInitializer()
-    dask_client.register_worker_plugin(worker_initializer, name="worker-init")
+    dask_client.register_plugin(worker_initializer, name="worker-init")
 
     # Configure consumer connection to Kafka broker
     conf = {
