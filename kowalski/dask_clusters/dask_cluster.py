@@ -40,8 +40,15 @@ if __name__ == "__main__":
     )
     log(cluster)
 
+    counter = 0
     while True:
         time.sleep(60)
         log("Heartbeat")
-        client = cluster.get_client()
-        client.run(trim_memory)
+        counter += 1
+
+        # trim memory every 10 minutes
+        if counter % 10 == 0:
+            client = cluster.get_client()
+            client.run(trim_memory)
+            log("Memory trimmed")
+            counter = 0
