@@ -4,7 +4,7 @@ beautifulsoup4==4.12.3
 bokeh==3.4.2
 confluent-kafka==2.5.0
 cryptography==42.0.8
-dask==2024.7.0
+dask==2024.7.1
 deepdiff==7.0.1
 distributed==2024.7.0
 fastavro==1.6.0 #breaking changes in newer versions
