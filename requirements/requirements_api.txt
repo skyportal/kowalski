@@ -1,4 +1,4 @@
-aiohttp==3.9.5
+aiohttp==3.10.1
 aiohttp-swagger3==0.8.0
 astropy==6.1.2
 bcrypt==4.1.3
