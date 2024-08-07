@@ -41,7 +41,7 @@ services:
       context: .
       dockerfile: api.Dockerfile
     #    entrypoint: python -m pytest -s test_api.py
-    image: dmitryduev/kowalski-api:latest
+    image: skyportal/kowalski-api:latest
     volumes:
       - data:/kowalski/data
       - logs:/kowalski/logs
@@ -77,7 +77,7 @@ services:
     build:
       context: .
       dockerfile: ingester.Dockerfile
-    image: dmitryduev/kowalski-ingester:latest
+    image: skyportal/kowalski-ingester:latest
     ports:
       - "8787:8787"
     volumes:

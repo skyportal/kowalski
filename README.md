@@ -306,7 +306,7 @@ a set of proposed commits (or patches).
 
 To prepare, you should:
 
-- Create your own fork the [kowalski repository](https://github.com/dmitryduev/kowalski) by clicking the "fork" button.
+- Create your own fork the [kowalski repository](https://github.com/skyportal/kowalski) by clicking the "fork" button.
 
 - [Set up SSH authentication with GitHub](https://help.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh).
 
@@ -314,7 +314,7 @@ To prepare, you should:
 
   ```sh
   git clone git@github.com:<yourname>/kowalski
-  git remote add upstream git@github.com:dmitryduev/kowalski
+  git remote add upstream git@github.com:skyportal/kowalski
   ```
 
 Then, for each feature you wish to contribute, create a pull request:
