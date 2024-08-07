@@ -35,7 +35,7 @@ dependencies = {
     ),
     "docker-compose": (
         # Command to get version
-        ["docker-compose", "--version"],
+        ["docker", "compose", "version"],
         # Extract *only* the version number
         lambda v: re.search(r"\s*([\d.]+)", v).group(0).strip(),
         # It must be >= 1.22.0
@@ -94,7 +94,7 @@ class DockerKowalski:
     ):
         """Check if containers in question are up and running
 
-        :param containers: container name sequence, e.g. ("kowalski_api_1", "kowalski_mongo_1")
+        :param containers: container name sequence, e.g. ("kowalski-api-1", "kowalski-mongo-1")
         :param num_retries:
         :param sleep_for_seconds: number of seconds to sleep for before retrying
         :return:
@@ -160,7 +160,7 @@ class DockerKowalski:
         config = "docker-compose.yaml"
         if not pathlib.Path(config).exists():
             log(
-                "Warning: docker-compose.yaml is missing. You are running on the default docker-compose configuration. To configure your system, "
+                "Warning: docker-compose.yaml is missing. You are running on the default docker compose configuration. To configure your system, "
                 "please copy `docker-compose.defaults.yaml` to `docker-compose.yaml` and modify it as you see fit."
             )
             config = "docker-compose.defaults.yaml"
@@ -209,7 +209,7 @@ class DockerKowalski:
                 command.append("--wiredTigerCacheSizeGB")
                 command.append(str(max_wired_tiger_cache))
             docker_config["services"]["mongo"]["command"] = command
-            # write the docker-compose config
+            # write the docker compose config
             with open(docker_config_file, "w") as f:
                 yaml.dump(docker_config, f)
 
@@ -230,7 +230,7 @@ class DockerKowalski:
 
         docker_config = cls.load_docker_config()
 
-        command = ["docker-compose", "-f", docker_config, "up", "-d"]
+        command = ["docker", "compose", "-f", docker_config, "up", "-d"]
 
         # start up Kowalski
         print("Starting up")
@@ -247,7 +247,7 @@ class DockerKowalski:
         """
         print("Shutting down Kowalski")
         docker_config = "docker-compose.yaml"
-        command = ["docker-compose", "-f", docker_config, "down"]
+        command = ["docker", "compose", "-f", docker_config, "down"]
 
         subprocess.run(command)
 
@@ -261,7 +261,7 @@ class DockerKowalski:
         print("Building Kowalski")
 
         docker_config = cls.load_docker_config()
-        command = ["docker-compose", "-f", docker_config, "build"]
+        command = ["docker", "compose", "-f", docker_config, "build"]
 
         # load config
         config = load_config(["config.yaml", "docker.yaml"])["kowalski"]
@@ -304,7 +304,7 @@ class DockerKowalski:
             "docker",
             "exec",
             "-i",
-            "kowalski_mongo_1",
+            "kowalski-mongo-1",
             "mongorestore",
             f"-u={config['database']['admin_username']}",
             f"-p={config['database']['admin_password']}",
