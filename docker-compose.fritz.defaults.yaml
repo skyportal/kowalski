@@ -16,7 +16,7 @@ services:
     build:
       context: .
       dockerfile: api.Dockerfile
-    image: dmitryduev/kowalski_api:latest
+    image: skyportal/kowalski-api:latest
     volumes:
       - data:/kowalski/data
       - logs:/kowalski/logs
@@ -35,7 +35,7 @@ services:
     build:
       context: .
       dockerfile: ingester.Dockerfile
-    image: dmitryduev/kowalski_ingester:latest
+    image: skyportal/kowalski-ingester:latest
     volumes:
       - data:/kowalski/data
       - logs:/kowalski/logs

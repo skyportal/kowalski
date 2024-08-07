@@ -16,7 +16,7 @@ config = load_config(config_files=["config.yaml"])["kowalski"]
 
 USING_DOCKER = os.environ.get("USING_DOCKER", False)
 if USING_DOCKER:
-    config["server"]["host"] = "kowalski_api_1"
+    config["server"]["host"] = "kowalski-api-1"
 
 
 class TestIngester:

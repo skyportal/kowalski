@@ -34,7 +34,7 @@ distributed alert packet processing, which includes data preprocessing, executio
 catalog cross-matching, and ingestion into `MongoDB`.
 It also executes user-defined filters based on the augmented alert data and posts the filtering results
 to a [`SkyPortal`](https://skyportal.io/) instance.
-- Kowalski is containerized using `Docker` software and orchestrated with `docker-compose`
+- Kowalski is containerized using `Docker` software and orchestrated with `docker compose`
 allowing for simple and efficient deployment in the cloud and/or on-premise. However, it can also run without Docker especially for development purposes.
 
 ## Interacting with a `Kowalski` instance
@@ -225,8 +225,8 @@ cp docker-compose.defaults.yaml docker-compose.yaml
 
 However, if you want to run in a production setting, be sure to modify `docker.yaml` and choose strong passwords!
 
-`docker-compose.yaml` serves as a config file for `docker-compose`, and can be used for different Kowalski deployment modes.
-Kowalski comes with several template `docker-compose` configs (see [below](#different-deployment-scenarios) for more info).
+`docker-compose.yaml` serves as a config file for `docker compose`, and can be used for different Kowalski deployment modes.
+Kowalski comes with several template `docker compose` configs (see [below](#different-deployment-scenarios) for more info).
 
 ### Building Kowalski
 
@@ -260,7 +260,7 @@ make docker_down
 
 ### Different Deployment scenarios (using Docker)
 
-`Kowalski` uses `docker-compose` under the hood and requires a `docker-compose.yaml` file.
+`Kowalski` uses `docker compose` under the hood and requires a `docker-compose.yaml` file.
 There are several available deployment scenarios:
 
 - Bare-bones
@@ -306,7 +306,7 @@ a set of proposed commits (or patches).
 
 To prepare, you should:
 
-- Create your own fork the [kowalski repository](https://github.com/dmitryduev/kowalski) by clicking the "fork" button.
+- Create your own fork the [kowalski repository](https://github.com/skyportal/kowalski) by clicking the "fork" button.
 
 - [Set up SSH authentication with GitHub](https://help.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh).
 
@@ -314,7 +314,7 @@ To prepare, you should:
 
   ```sh
   git clone git@github.com:<yourname>/kowalski
-  git remote add upstream git@github.com:dmitryduev/kowalski
+  git remote add upstream git@github.com:skyportal/kowalski
   ```
 
 Then, for each feature you wish to contribute, create a pull request:
