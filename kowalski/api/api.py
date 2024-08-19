@@ -28,6 +28,7 @@ from kowalski.api.handlers import (
     UserTokenHandler,
     QueryHandler,
     FilterHandler,
+    FilterTestHandler,
     ZTFTriggerHandler,
     ZTFMMATriggerHandler,
     SkymapHandler,
@@ -139,6 +140,7 @@ async def app_factory():
     user_token_handler = UserTokenHandler()
     query_handler = QueryHandler()
     filter_handler = FilterHandler()
+    filter_test_handler = FilterTestHandler()
     ztf_trigger_handler = ZTFTriggerHandler()
     ztf_trigger_handler_test = ZTFTriggerHandler(test=True)
     ztf_mma_trigger_handler = ZTFMMATriggerHandler()
@@ -157,6 +159,11 @@ async def app_factory():
         web.put("/api/users/{username}", user_handler.put),
         # queries:
         web.post("/api/queries", query_handler.post),
+        # test filters:
+        web.post(
+            r"/api/filters/{filter_id:[0-9]+}/test",
+            filter_test_handler.post,
+        ),
         # filters:
         web.get(
             r"/api/filters/{filter_id:[0-9]+}", filter_handler.get, allow_head=False

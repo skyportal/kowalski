@@ -1,6 +1,6 @@
 from .base import BaseHandler
 from .query import QueryHandler
-from .filter import FilterHandler
+from .filter import FilterHandler, FilterTestHandler
 from .ztf import ZTFTriggerHandler, ZTFMMATriggerHandler
 from .skymap import SkymapHandler
 from .user import UserHandler, UserTokenHandler

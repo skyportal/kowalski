@@ -455,3 +455,14 @@ ZTF:
          h_m: 1
          k_m: 1
 ```
+
+### Adding new API endpoints
+
+API handlers are divided in multiple files, found in `kowalski/api/handlers/`, and they are imported to be mapped to their respective endpoints in `kowalski/api/api.py`. Each handler is a python class that heritates from a `BaseHandler` defined in `kowalski/api/handlers/base.py`. Handlers can implement the following methods:
+- `get`: to handle GET requests
+- `post`: to handle POST requests
+- `put`: to handle PUT requests
+- `patch`: to handle PATCH requests
+- `delete`: to handle DELETE requests
+
+Each of these methods will need to have a valid docstring that will be used to generate the OpenAPI specs with `aiohttp-swagger`. These can be a little hard to write and very sensible to the indentation, so be careful when writing them. We suggest using the sandbox found [here](https://editor.swagger.io/) to help debug the docstrings.
