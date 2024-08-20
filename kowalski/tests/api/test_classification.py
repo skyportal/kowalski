@@ -61,9 +61,8 @@ async def test_alert_classification(aiohttp_client):
         timeout=5,
     )
 
-    # assert resp.status == 200
+    assert resp.status == 200
     result = await resp.json()
-    print(result)
     assert result["status"] == "success"
 
     # get classification(s)
@@ -114,7 +113,6 @@ async def test_alert_classification(aiohttp_client):
     )
     assert resp.status == 200
     result = await resp.json()
-    print(result)
     assert result["status"] == "success"
     assert "data" in result
     assert "candid" in result["data"]

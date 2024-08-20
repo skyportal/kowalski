@@ -528,8 +528,6 @@ async def test_filter_test_handler(aiohttp_client):
         headers=headers,
         timeout=5,
     )
-    print(resp)
-    print(await resp.text())
 
     assert resp.status == 200
     result = await resp.json()
