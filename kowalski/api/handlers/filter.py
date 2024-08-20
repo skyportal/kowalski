@@ -3,6 +3,7 @@ from abc import ABC
 from typing import List, Optional, Union
 
 from aiohttp import web
+from astropy.time import Time
 from bson.json_util import dumps, loads
 from odmantic import EmbeddedModel, Field, Model
 from pydantic import root_validator
@@ -1061,3 +1062,236 @@ class FilterHandler(BaseHandler):
             return self.success(message=f"Removed filter id {filter_id}")
 
         return self.error(message=f"Filter id {filter_id} not found")
+
+
+class FilterTestHandler(BaseHandler):
+    """Test user-defined filters on a set of objects and/or between 2 dates"""
+
+    @admin_required
+    async def post(self, request: web.Request) -> web.Response:
+        """Test user-defined alert filter on a list of objects and/or between 2 dates
+
+        :param request:
+        :return:
+
+        ---
+        summary: "Test user-defined alert filter on a list of objects and/or between 2 dates, limited to 1000 objects and 1 day max"
+        tags:
+          - filters
+
+        parameters:
+          - in: query
+            name: filter_id
+            description: filter id
+            required: true
+            schema:
+              type: integer
+              minimum: 1
+
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filter_version:
+                    type: string
+                    description: "filter version to test"
+                  object_ids:
+                    type: array
+                    items:
+                      type: object
+                    description: "list of objects to test filter on"
+                    maxItems: 1000
+                  start_date:
+                    type: string
+                    description: "start date for the filter test, in jd or iso format"
+                  end_date:
+                    type: string
+                    description: "end date for the filter test, in jd or iso format"
+              examples:
+                filter_1:
+                  value:
+                    "filter_id": 1
+                    "object_ids": ["object1", "object2"]
+                    "start_date": "2021-01-01T00:00:00"
+                    "end_date": "2021-01-02T00:00:00"
+                filter_2:
+                  value:
+                    "filter_id": 1
+                    "object_ids": ["object1", "object2"]
+                filter_3:
+                  value:
+                    "filter_id": 1
+                    "start_date": "2021-01-01T00:00:00"
+                    "end_date": "2021-01-02T00:00:00"
+
+
+        responses:
+          '200':
+            description: filter test successful
+            content:
+              application/json:
+                schema:
+                  type: object
+                  required:
+                    - status
+                    - message
+                    - data
+                  properties:
+                    status:
+                      type: string
+                      enum: [success]
+                    message:
+                      type: string
+                    data:
+                      type: array
+                      items:
+                        type: object
+                      description: "list of alerts that passed the filter"
+                example:
+                  status: success
+                  message: "filter test successful"
+                  data: [
+                    {
+                      "objectId": "ZTF21aaqkqzv",
+                      "candid": 1111111111111111111,
+                      "annotations": {
+                        "drb": 1.0
+                      }
+                    }
+                  ]
+        """
+
+        # allow both .json() and .post():
+        filter_id = int(request.match_info["filter_id"])
+
+        try:
+            filter_test_spec = await request.json()
+        except AttributeError:
+            filter_test_spec = await request.post()
+
+        try:
+            filter_version = filter_test_spec.get("filter_version")
+            objects = filter_test_spec.get("object_ids")
+            start_date = filter_test_spec.get("start_date")
+            end_date = filter_test_spec.get("end_date")
+            max_time_ms = filter_test_spec.get("max_time_ms", 30000)
+
+            # VALIDATION
+            if filter_id is None:
+                return self.error(message="filter_id is required")
+            if objects is None and start_date is None and end_date is None:
+                return self.error(
+                    message="At least one of object_ids, start_date, or end_date is required"
+                )
+            if objects is not None and not isinstance(objects, list):
+                return self.error(message="object_ids must be a list if provided")
+            if objects is not None and len(objects) > 1000:
+                return self.error(
+                    message="object_ids list must have 1000 or fewer elements"
+                )
+            if isinstance(objects, list) and len(objects) == 0:
+                objects = None
+
+            # we must have both start_date and end_date if either is provided
+            if (start_date is None and end_date is not None) or (
+                start_date is not None and end_date is None
+            ):
+                return self.error(
+                    message="start_date and end_date must both be provided if either is provided"
+                )
+            if start_date is not None and end_date is not None:
+                # if its a float assume its a julian date
+                if isinstance(start_date, float):
+                    start_date_jd = start_date
+                elif isinstance(start_date, str):
+                    start_date_jd = Time(start_date).jd
+                else:
+                    return self.error(message="start_date must be a float or a string")
+
+                if isinstance(end_date, float):
+                    end_date_jd = end_date
+                elif isinstance(end_date, str):
+                    end_date_jd = Time(end_date).jd
+                else:
+                    return self.error(message="end_date must be a float or a string")
+
+                if objects is None and end_date_jd - start_date_jd > 1:
+                    return self.error(
+                        message="start_date and end_date must be within 1 day of each other if object_ids is not provided"
+                    )
+            else:
+                start_date_jd = end_date_jd = None
+
+            # can't run for more than 5 minutes for now
+            if max_time_ms > 300000:
+                return self.error(
+                    message="max_time_ms must be less than 5 minutes (in ms: 300000)"
+                )
+
+            # check if a filter for these (group_id, filter_id) already exists:
+            filter_existing = await request.app["mongo_odm"].find_one(
+                Filter, Filter.filter_id == filter_id
+            )
+            if filter_existing is None:
+                return self.error(message=f"Filter id {filter_id} not found")
+
+            filter_doc = filter_existing.doc()
+
+            if len(filter_doc["fv"]) == 0:
+                return self.error(message=f"Filter id {filter_id} has no versions")
+
+            # don't care about anyhing other than the pipeline of version specific
+            filter_pipeline = None
+            if filter_version is None:
+                filter_pipeline = filter_doc["fv"][-1]["pipeline"]
+            else:
+                for fv in filter_doc["fv"]:
+                    if fv["fid"] == filter_version:
+                        filter_pipeline = fv["pipeline"]
+                        break
+                if filter_pipeline is None:
+                    return self.error(
+                        message=f"Filter version {filter_version} not found"
+                    )
+
+            filter_pipeline_upstream = config["database"]["filters"][
+                filter_existing.catalog
+            ]
+            filter_pipeline = filter_pipeline_upstream + loads(filter_pipeline)
+
+            # match permissions for ZTF
+            if filter_existing.catalog.startswith("ZTF"):
+                if "candid" in filter_pipeline[0]["$match"]:
+                    del filter_pipeline[0]["$match"]["candid"]
+                filter_pipeline[0]["$match"]["candidate.programid"][
+                    "$in"
+                ] = filter_existing.permissions
+                filter_pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"][
+                    "$and"
+                ][0]["$in"][1] = filter_existing.permissions
+                if "fp_hists" in filter_pipeline[3]["$project"]:
+                    filter_pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"][
+                        "$and"
+                    ][0]["$in"][1] = filter_existing.permissions
+
+            if objects is not None:
+                # match objects
+                filter_pipeline[0]["$match"]["objectId"] = {"$in": objects}
+            if start_date_jd is not None and end_date_jd is not None:
+                filter_pipeline[0]["$match"]["candidate.jd"] = {
+                    "$gte": start_date_jd,
+                    "$lte": end_date_jd,
+                }
+
+            cursor = request.app["mongo"][filter_existing.catalog].aggregate(
+                filter_pipeline, allowDiskUse=False, maxTimeMS=30000
+            )
+            alerts = await cursor.to_list(length=None)
+
+            return self.success(message="filter test successful", data=alerts)
+        except Exception as e:
+            print(f"failure testing filter {filter_id}: {str(e)}")
+            return self.error(message=f"failure: {str(e)}")
