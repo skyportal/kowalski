@@ -9,7 +9,7 @@ import traceback
 from abc import ABC
 from copy import deepcopy
 from datetime import datetime, timedelta
-from typing import Mapping, Sequence
+from typing import Mapping, Sequence, Union
 
 import dask.distributed
 from kowalski.alert_brokers.alert_broker import AlertConsumer, AlertWorker, EopError
@@ -566,7 +566,7 @@ def topic_listener(
             sys.exit()
 
 
-def watchdog(obs_dates: str = None, test: bool = False):
+def watchdog(obs_dates: Union[str, list, None] = None, test: bool = False):
     """
         Watchdog for topic listeners
 
@@ -593,6 +593,8 @@ def watchdog(obs_dates: str = None, test: bool = False):
                     datestrs = [str(d) for d in obs_dates.split(",")]
                 elif isinstance(obs_dates, list):
                     datestrs = [str(d) for d in obs_dates]
+                else:
+                    raise ValueError("obs_dates must be a string or a list")
 
             # get kafka topic names with kafka-topics command
             if not test:
