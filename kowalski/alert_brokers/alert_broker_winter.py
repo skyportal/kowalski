@@ -586,7 +586,7 @@ def watchdog(obs_dates: Union[str, list, None] = None, test: bool = False):
                 # not UTC, which is essentially UTC - 1 day
                 datestrs = [
                     (datetime.utcnow() - timedelta(days=timediff)).strftime("%Y%m%d")
-                    for timediff in range(1, 2)
+                    for timediff in range(1, 4)
                 ]
             else:
                 if isinstance(obs_dates, str):
