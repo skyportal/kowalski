@@ -119,7 +119,7 @@ class TestIngester:
             test=True,
         ):
             log("Starting up Ingester")
-            watchdog(obs_date=date, test=True)
+            watchdog(obs_dates=[date], test=True)
             log("Digested and ingested: all done!")
 
         log("Checking the WNTR alert collection states")

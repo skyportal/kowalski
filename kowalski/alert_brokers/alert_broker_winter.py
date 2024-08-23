@@ -1,5 +1,4 @@
 import argparse
-import datetime
 import multiprocessing
 import os
 import subprocess
@@ -9,7 +8,8 @@ import time
 import traceback
 from abc import ABC
 from copy import deepcopy
-from typing import Mapping, Sequence
+from datetime import datetime, timedelta
+from typing import Mapping, Sequence, Union
 
 import dask.distributed
 from kowalski.alert_brokers.alert_broker import AlertConsumer, AlertWorker, EopError
@@ -536,7 +536,7 @@ def topic_listener(
     # make it unique:
     conf[
         "group.id"
-    ] = f"{conf['group.id']}_{datetime.datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
+    ] = f"{conf['group.id']}_{datetime.utcnow().strftime('%Y-%m-%d_%H:%M:%S.%f')}"
 
     # Start alert stream consumer
     stream_reader = WNTRAlertConsumer(topic, dask_client, instrument="WNTR", **conf)
@@ -566,11 +566,11 @@ def topic_listener(
             sys.exit()
 
 
-def watchdog(obs_date: str = None, test: bool = False):
+def watchdog(obs_dates: Union[str, list, None] = None, test: bool = False):
     """
         Watchdog for topic listeners
 
-    :param obs_date: observing date: YYYYMMDD
+    :param obs_dates: observing date(s): YYYYMMDD, comma separated if multiple
     :param test: test mode
     :return:
     """
@@ -580,24 +580,28 @@ def watchdog(obs_date: str = None, test: bool = False):
     topics_on_watch = dict()
 
     while True:
-
         try:
-
-            if obs_date is None:
+            if obs_dates is None:
                 # for WNTR, the date that the data is sent to is the date of observation in local time
                 # not UTC, which is essentially UTC - 1 day
-                datestr = (
-                    datetime.datetime.utcnow() - datetime.timedelta(days=1)
-                ).strftime("%Y%m%d")
+                datestrs = [
+                    (datetime.utcnow() - timedelta(days=timediff)).strftime("%Y%m%d")
+                    for timediff in range(1, 4)
+                ]
             else:
-                datestr = obs_date
+                if isinstance(obs_dates, str):
+                    datestrs = [str(d) for d in obs_dates.split(",")]
+                elif isinstance(obs_dates, list):
+                    datestrs = [str(d) for d in obs_dates]
+                else:
+                    raise ValueError("obs_dates must be a string or a list")
 
             # get kafka topic names with kafka-topics command
             if not test:
                 # Production Kafka stream at IPAC
 
                 # as of 20220801, the naming convention is winter_%Y%m%d
-                topics_tonight = [f"winter_{datestr}"]
+                topics_tonight = [f"winter_{datestr}" for datestr in datestrs]
             else:
                 # Local test stream
                 kafka_cmd = [
@@ -615,7 +619,9 @@ def watchdog(obs_date: str = None, test: bool = False):
 
                 # as of 20220801, the naming convention is winter_%Y%m%
                 topics_tonight = [
-                    t for t in topics if (datestr in t) and ("winter" in t)
+                    t
+                    for t in topics
+                    if (any(datestr in t for datestr in datestrs) and ("winter" in t))
                 ]
             log(f"winter: Topics tonight: {topics_tonight}")
 
@@ -669,9 +675,13 @@ def watchdog(obs_date: str = None, test: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Kowalski's WNTR Alert Broker")
-    parser.add_argument("--obsdate", help="observing date YYYYMMDD")
+    parser.add_argument(
+        "--obsdates",
+        default=None,
+        help="observing date(s) YYYYMMDD, comma separated if multiple",
+    )
     parser.add_argument("--test", help="listen to the test stream", action="store_true")
 
     args = parser.parse_args()
 
-    watchdog(obs_date=args.obsdate, test=args.test)
+    watchdog(obs_dates=args.obsdates, test=args.test)
