@@ -1540,6 +1540,13 @@ class AlertWorker:
                                             )
                                         )
                                     ),
+                                    "ignore_allocation_ids": list(
+                                        set(
+                                            _filter["auto_followup"].get(
+                                                "ignore_allocation_ids", []
+                                            )
+                                        )
+                                    ),
                                     "payload": payload,
                                     # constraints
                                     "source_group_ids": [_filter["group_id"]],
@@ -2229,9 +2236,20 @@ class AlertWorker:
                     for (i, r) in enumerate(existing_requests)
                     if r["allocation_id"]
                     == passed_filter["auto_followup"]["data"]["allocation_id"]
-                    and not set(
-                        passed_filter["auto_followup"]["data"]["target_group_ids"]
-                    ).isdisjoint(set([g["id"] for g in r.get("target_groups", [])]))
+                    and (
+                        not set(
+                            passed_filter["auto_followup"]["data"]["target_group_ids"]
+                        ).isdisjoint(set([g["id"] for g in r.get("target_groups", [])]))
+                        or (
+                            len(
+                                passed_filter["auto_followup"]["data"][
+                                    "target_group_ids"
+                                ]
+                            )
+                            == 0
+                            and len(r.get("target_groups", [])) == 0
+                        )
+                    )
                     and compare_dicts(
                         passed_filter["auto_followup"]["data"]["payload"],
                         r["payload"],

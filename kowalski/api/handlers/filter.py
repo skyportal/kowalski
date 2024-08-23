@@ -39,6 +39,7 @@ AUTO_FOLLOWUP_KEYS = {
     "allocation_id": str,
     "payload": dict,
     "target_group_ids": list,
+    "ignore_allocation_ids": list,
     "radius": float,
     "validity_days": int,
     "priority_order": str,
