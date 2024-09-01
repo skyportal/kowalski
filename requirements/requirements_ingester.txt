@@ -1,7 +1,7 @@
 astropy==6.1.2
 bcrypt==4.2.0
 beautifulsoup4==4.12.3
-bokeh==3.4.2
+bokeh==3.5.2
 confluent-kafka==2.5.0
 cryptography==43.0.0
 dask==2024.8.0
