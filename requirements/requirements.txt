@@ -1,4 +1,4 @@
-deepdiff==7.0.1
+deepdiff==8.0.1
 fire==0.6.0
 gsutil==5.30
 jinja2>=2.11.2
