@@ -24,7 +24,7 @@ PyJWT==2.8.0
 pymongo==4.8.0
 pyopenssl==24.2.1
 pytz==2024.1
-PyYAML==6.0.1
+PyYAML==6.0.2
 requests==2.32.3
 slack_sdk==3.31.0
 supervisor==4.2.5
