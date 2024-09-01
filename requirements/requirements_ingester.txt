@@ -10,7 +10,7 @@ distributed==2024.8.0
 fastavro==1.6.0 #breaking changes in newer versions
 fire==0.6.0
 gsutil==5.30
-gunicorn==22.0.0
+gunicorn==23.0.0
 h5py==3.11.0
 jinja2>=2.11.2
 matplotlib==3.9.1
