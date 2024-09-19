@@ -1286,19 +1286,11 @@ class FilterTestHandler(BaseHandler):
                 # }
                 filter_pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"][
                     "$and"
-                ].append(
-                    {
-                        "$lt": ["$$item.jd", "$candidate.jd"]
-                    }
-                )
+                ].append({"$lt": ["$$item.jd", "$candidate.jd"]})
                 if "fp_hists" in filter_pipeline[3]["$project"]:
                     filter_pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"][
                         "$and"
-                    ].append(
-                        {
-                            "$lt": ["$$item.jd", "$candidate.jd"]
-                        }
-                    )
+                    ].append({"$lt": ["$$item.jd", "$candidate.jd"]})
 
             if objects is not None:
                 # match objects
