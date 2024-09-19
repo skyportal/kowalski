@@ -2,7 +2,7 @@
 import subprocess
 import sys
 
-from distutils.version import LooseVersion as Version
+from packaging.version import Version
 
 
 def output(cmd):
