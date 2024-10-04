@@ -20,7 +20,7 @@ numpy==1.23.5
 pandas==2.2.2
 protobuf==4.22.1
 pyarrow==17.0.0
-PyJWT==2.8.0
+PyJWT==2.9.0
 pymongo==4.8.0
 pyopenssl==24.2.1
 pytz==2024.1
