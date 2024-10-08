@@ -23,7 +23,6 @@ SUPERVISORCTL_INGESTER=$(PYTHON) -m supervisor.supervisorctl -c $(SUPERVISORD_IN
 
 # SYSTEM DEPENDENCIES
 system_dependencies:
-	$(PYTHON) -m pip install packaging
 	$(PYTHON) kowalski/tools/check_app_environment.py
 
 # DEPENDENCIES
