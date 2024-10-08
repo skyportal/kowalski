@@ -2,7 +2,7 @@ aiohttp==3.9.5
 aiohttp-swagger3==0.8.0
 astropy==6.1.2
 bcrypt==4.2.0
-cryptography==43.0.0
+cryptography==43.0.1
 deepdiff==8.0.1
 gunicorn==23.0.0
 jinja2>=2.11.2
