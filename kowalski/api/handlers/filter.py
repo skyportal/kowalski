@@ -1278,6 +1278,20 @@ class FilterTestHandler(BaseHandler):
                         "$and"
                     ][0]["$in"][1] = filter_existing.permissions
 
+                # since we are running after the fact, we need to also have a cut on jd
+                # to only keep the data points from prv_candidates and fp_hists
+                # that are older than the alert we are merging it with, like:
+                # {
+                #   $lt: ["$$item.jd", "$candidate.jd"]
+                # }
+                filter_pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"][
+                    "$and"
+                ].append({"$lt": ["$$item.jd", "$candidate.jd"]})
+                if "fp_hists" in filter_pipeline[3]["$project"]:
+                    filter_pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"][
+                        "$and"
+                    ].append({"$lt": ["$$item.jd", "$candidate.jd"]})
+
             if objects is not None:
                 # match objects
                 filter_pipeline[0]["$match"]["objectId"] = {"$in": objects}
@@ -1288,7 +1302,7 @@ class FilterTestHandler(BaseHandler):
                 }
 
             cursor = request.app["mongo"][filter_existing.catalog].aggregate(
-                filter_pipeline, allowDiskUse=False, maxTimeMS=30000
+                filter_pipeline, allowDiskUse=False, maxTimeMS=max_time_ms
             )
             alerts = await cursor.to_list(length=None)
 
