@@ -606,13 +606,14 @@ def great_circle_distance(ra1_deg, dec1_deg, ra2_deg, dec2_deg):
 
 
 @jit
-def in_ellipse(alpha, delta0, alpha1, delta01, d0, axis_ratio, PA0):
+def in_ellipse(alpha, delta0, alpha1, delta01, a0, axis_ratio, PA0):
     """
         Check if a given point (alpha, delta0)
         is within an ellipse specified by
-        center (alpha1, delta01), maj_ax (d0), axis ratio and positional angle
+        center (alpha1, delta01), semi_maj_ax/radius (a0), axis ratio and positional angle
         All angles are in decimal degrees
         Adapted from q3c: https://github.com/segasai/q3c/blob/master/q3cube.c
+        (PS: q3c claims the input is d0 and not a0, but the code definitely works when using radius and not a diameter as input)
     :param alpha:
     :param delta0:
     :param alpha1:
@@ -629,7 +630,7 @@ def in_ellipse(alpha, delta0, alpha1, delta01, d0, axis_ratio, PA0):
     delta1 = delta01 * DEGRA
     delta = delta0 * DEGRA
     PA = PA0 * DEGRA
-    d = d0 * DEGRA
+    a = a0 * DEGRA
     e = np.sqrt(1.0 - axis_ratio * axis_ratio)
 
     t1 = np.cos(d_alpha)
@@ -638,8 +639,8 @@ def in_ellipse(alpha, delta0, alpha1, delta01, d0, axis_ratio, PA0):
     t32 = np.sin(delta1)
     t6 = np.cos(delta)
     t26 = np.sin(delta)
-    t9 = np.cos(d)
-    t55 = np.sin(d)
+    t9 = np.cos(a)
+    t55 = np.sin(a)
 
     if (t3 * t6 * t1 + t32 * t26) < 0:
         return False
