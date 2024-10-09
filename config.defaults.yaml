@@ -753,8 +753,8 @@ kowalski:
             yMeanPSFMagErr: 1
 
         CLU_20190625:
-          cone_search_radius: 3
-          cone_search_unit: "deg"
+          cone_search_radius: 300
+          cone_search_unit: "arcsec"
           use_distance: True
           distance_value: "z"
           distance_method: "redshift"
@@ -776,8 +776,8 @@ kowalski:
             coordinates.radec_str: 1
 
         NED_BetaV3:
-          cone_search_radius: 3
-          cone_search_unit: "deg"
+          cone_search_radius: 300
+          cone_search_unit: "radius"
           use_distance: True
           distance_value: "DistMpc"
           distance_method: "mpc"
@@ -962,8 +962,8 @@ kowalski:
             yMeanPSFMagErr: 1
 
         CLU_20190625:
-          cone_search_radius: 3
-          cone_search_unit: "deg"
+          cone_search_radius: 300
+          cone_search_unit: "arcsec"
           use_distance: True
           distance_value: "z"
           distance_method: "redshift"
@@ -1118,8 +1118,8 @@ kowalski:
             yMeanPSFMagErr: 1
 
         CLU_20190625:
-          cone_search_radius: 3
-          cone_search_unit: "deg"
+          cone_search_radius: 300
+          cone_search_unit: "arcsec"
           use_distance: True
           distance_value: "z"
           distance_method: "redshift"
