@@ -1195,6 +1195,7 @@ class AlertWorker:
 
             for galaxy in galaxies + [M31, M33]:
                 try:
+                    galaxy_id = galaxy.get("_id")
                     alpha1, delta01 = galaxy["ra"], galaxy["dec"]
 
                     redshift, distmpc = None, None
@@ -1225,7 +1226,25 @@ class AlertWorker:
                                 np.arctan(catalog_cm_at_distance / (distmpc * 10**3))
                             )
 
-                    in_galaxy = in_ellipse(ra, dec, alpha1, delta01, cm_radius, 1, 0)
+                    # for the exceptions below:
+                    # - the major/minor axis, axis ratio are extracted from PGC
+                    # - the position angle are extracted from SIMBAD
+                    # - from the major & minor axis, we get the semi major axis we need for the ellipse
+                    # - all the angled are in degrees
+                    if galaxy_id == 596900:
+                        # M31 (PGC2557): angular size of 189.1x61.7 (optical), position angle of 35.0
+                        in_galaxy = in_ellipse(
+                            ra, dec, alpha1, delta01, 1.5758, 0.3263, 35.0
+                        )
+                    elif galaxy_id == 597543:
+                        # M33 (PGC5818): angular size of 68.7x41.6 (optical), position angle of 22.0
+                        in_galaxy = in_ellipse(
+                            ra, dec, alpha1, delta01, 0.5725, 0.6055, 22.0
+                        )
+                    else:
+                        in_galaxy = in_ellipse(
+                            ra, dec, alpha1, delta01, cm_radius, 1, 0
+                        )
 
                     if in_galaxy:
                         match = galaxy
