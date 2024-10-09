@@ -1,5 +1,5 @@
 aiohttp==3.10.9
-aiohttp-swagger3==0.8.0
+aiohttp-swagger3==0.9.0
 astropy==6.1.2
 bcrypt==4.2.0
 cryptography==43.0.1
