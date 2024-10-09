@@ -483,6 +483,11 @@ class AlertWorker:
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)
 
+        # we build another regular session with no retries for SkyPortal
+        # useful for operations where some things might be async and we could run
+        # into duplication issues if we retry
+        self.session_no_retries = requests.Session()
+
         # get instrument id
         self.instrument_id = 1
         instrument_name_on_skyportal = self.instrument
@@ -506,8 +511,13 @@ class AlertWorker:
             )
         log("AlertWorker setup complete")
 
-    def api_skyportal(
-        self, method: str, endpoint: str, data: Optional[Mapping] = None, **kwargs
+    def _api_skyportal(
+        self,
+        session: requests.Session,
+        method: str,
+        endpoint: str,
+        data: Optional[Mapping] = None,
+        **kwargs,
     ):
         """Make an API call to a SkyPortal instance
 
@@ -519,12 +529,12 @@ class AlertWorker:
         """
         method = method.lower()
         methods = {
-            "head": self.session.head,
-            "get": self.session.get,
-            "post": self.session.post,
-            "put": self.session.put,
-            "patch": self.session.patch,
-            "delete": self.session.delete,
+            "head": session.head,
+            "get": session.get,
+            "post": session.post,
+            "put": session.put,
+            "patch": session.patch,
+            "delete": session.delete,
         }
 
         if endpoint is None:
@@ -554,6 +564,18 @@ class AlertWorker:
             )
 
         return response
+
+    def api_skyportal(
+        self, method: str, endpoint: str, data: Optional[Mapping] = None, **kwargs
+    ):
+        return self._api_skyportal(self.session, method, endpoint, data, **kwargs)
+
+    def api_skyportal_no_retries(
+        self, method: str, endpoint: str, data: Optional[Mapping] = None, **kwargs
+    ):
+        return self._api_skyportal(
+            self.session_no_retries, method, endpoint, data, **kwargs
+        )
 
     @memoize
     def api_skyportal_get_group(self, group_id):
@@ -2286,10 +2308,11 @@ class AlertWorker:
                         self.verbose > 1,
                     ):
                         try:
-                            response = self.api_skyportal(
+                            response = self.api_skyportal_no_retries(
                                 "POST",
                                 "/api/followup_request",
                                 passed_filter["auto_followup"]["data"],
+                                timeout=30,
                             )
                             if (
                                 response.json()["status"] == "success"
