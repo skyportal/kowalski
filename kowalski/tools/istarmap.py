@@ -2,6 +2,10 @@
 # See https://stackoverflow.com/questions/57354700/starmap-combined-with-tqdm
 import multiprocessing.pool as mpp
 import sys
+import numpy as np
+
+# for numpy>=1.24.0, monkey patch numpy.object
+np.object = object
 
 if sys.version_info.minor > 7:
 
