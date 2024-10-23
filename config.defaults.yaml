@@ -777,7 +777,7 @@ kowalski:
 
         NED_BetaV3:
           cone_search_radius: 300
-          cone_search_unit: "radius"
+          cone_search_unit: "arcsec"
           use_distance: True
           distance_value: "DistMpc"
           distance_method: "mpc"
