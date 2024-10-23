@@ -1235,7 +1235,7 @@ class AlertWorker:
                     # - we add the uncertainty to each axis and keep 6 decimal places
                     # - we recompute the axis ratio after including these uncertainties
                     if galaxy_id == 596900:
-                        # M31 (PGC2557): 
+                        # M31 (PGC2557):
                         # - semi major axis = (11432.80" + 266.30") / 3600 / 2 = 1.624875 deg
                         # - semi minor axis = (3704.23" + 171.49") / 3600 / 2 =  0.538294 deg
                         # - axis ratio = 0.32 (if recomputed after using the uncertainties, it's 0.331283)
