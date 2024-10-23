@@ -25,6 +25,7 @@ __all__ = [
     "radec_str2rad",
     "radec_str2geojson",
     "radec2lb",
+    "radec2ecliptic",
     "sdss_url",
     "str_to_numeric",
     "time_stamp",
@@ -708,6 +709,16 @@ RGE = np.array(
     ]
 )
 
+# equatorial to ecliptic, where the obligness of the ecliptic is 23.439291 degrees (earth orbital plane)
+EARTH_OBL = 23.439291
+EQ2ECL = np.array(
+    [
+        [1, 0, 0],
+        [0, np.cos(EARTH_OBL * np.pi / 180.0), np.sin(EARTH_OBL * np.pi / 180.0)],
+        [0, -np.sin(EARTH_OBL * np.pi / 180.0), np.cos(EARTH_OBL * np.pi / 180.0)],
+    ]
+)
+
 
 def radec2lb(ra, dec):
     """
@@ -732,6 +743,31 @@ def radec2lb(ra, dec):
     galactic_l = np.arctan2(y, x)
     galactic_b = np.arctan2(z, (x * x + y * y) ** 0.5)
     return np.rad2deg(galactic_l), np.rad2deg(galactic_b)
+
+
+def radec2ecliptic(ra, dec):
+    """
+        Convert $R.A.$ and $Decl.$ into Ecliptic coordinates
+    ra [deg]
+    dec [deg]
+
+    return ecliptic_lon [deg], ecliptic_lat [deg]
+    """
+    ra_rad, dec_rad = np.deg2rad(ra), np.deg2rad(dec)
+    u = np.array(
+        [
+            np.cos(ra_rad) * np.cos(dec_rad),
+            np.sin(ra_rad) * np.cos(dec_rad),
+            np.sin(dec_rad),
+        ]
+    )
+
+    ue = np.dot(EQ2ECL, u)
+
+    x, y, z = ue
+    ecliptic_lon = np.arctan2(y, x)
+    ecliptic_lat = np.arctan2(z, (x * x + y * y) ** 0.5)
+    return np.rad2deg(ecliptic_lon) % 360, np.rad2deg(ecliptic_lat)
 
 
 def datetime_to_jd(_t: datetime.datetime) -> float:

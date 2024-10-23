@@ -42,6 +42,7 @@ from kowalski.utils import (
     in_ellipse,
     memoize,
     radec2lb,
+    radec2ecliptic,
     retry,
     time_stamp,
     timer,
@@ -622,6 +623,13 @@ class AlertWorker:
         doc["coordinates"]["l"] = l
         doc["coordinates"]["b"] = b
 
+        # Ecliptic coordinates (lambda, beta)
+        lambda_, beta = radec2ecliptic(doc["candidate"]["ra"], doc["candidate"]["dec"])
+        doc["coordinates"]["geocentricmeanecliptic"] = {
+            "lambda": lambda_,
+            "beta": beta,
+        }
+
         prv_candidates = deepcopy(doc["prv_candidates"])
         doc.pop("prv_candidates", None)
         if prv_candidates is None:
@@ -659,7 +667,7 @@ class AlertWorker:
                 image_data = hdu[0].data
 
         # Survey-specific transformations to get North up and West on the right
-        if self.instrument in ["ZTF", "WNTR"]:
+        if self.instrument in ["ZTF"]:
             image_data = np.flipud(image_data)
         elif self.instrument == "PGIR":
             image_data = np.rot90(np.fliplr(image_data), 3)

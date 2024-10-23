@@ -229,7 +229,7 @@ class AlertCutoutHandler(BaseHandler):
                     image_data = hdu[0].data
 
             # Survey-specific transformations to get North up and West on the right
-            if survey in ["ztf", "wntr"]:
+            if survey in ["ztf"]:
                 image_data = np.flipud(image_data)
             elif survey in ["pgir"]:
                 image_data = np.rot90(np.fliplr(image_data), 3)
