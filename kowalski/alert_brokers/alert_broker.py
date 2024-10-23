@@ -1225,6 +1225,7 @@ class AlertWorker:
 
             for galaxy in galaxies + [M31, M33]:
                 try:
+                    galaxy_id = galaxy.get("_id")
                     alpha1, delta01 = galaxy["ra"], galaxy["dec"]
 
                     redshift, distmpc = None, None
@@ -1255,7 +1256,36 @@ class AlertWorker:
                                 np.arctan(catalog_cm_at_distance / (distmpc * 10**3))
                             )
 
-                    in_galaxy = in_ellipse(ra, dec, alpha1, delta01, cm_radius, 1, 0)
+                    # for the exceptions below:
+                    # - the major/minor axis, axis ratio, and position angles come from NED
+                    #   (e.g. https://ned.ipac.caltech.edu/byname?objname=M31)
+                    # - NED numbers come from Vaucouleurs, Catalog of Bright Galaxies, 1991
+                    #   (https://www.google.com/books/edition/Third_Reference_Catalogue_of_Bright_Gala/11HuBwAAQBAJ)
+                    # - all the angles are in degrees
+                    # - we add the uncertainty to each axis and keep 6 decimal places
+                    # - we recompute the axis ratio after including these uncertainties
+                    if galaxy_id == 596900:
+                        # M31 (PGC2557):
+                        # - semi major axis = (11432.80" + 266.30") / 3600 / 2 = 1.624875 deg
+                        # - semi minor axis = (3704.23" + 171.49") / 3600 / 2 =  0.538294 deg
+                        # - axis ratio = 0.32 (if recomputed after using the uncertainties, it's 0.331283)
+                        # - positional angle = 35 deg
+                        in_galaxy = in_ellipse(
+                            ra, dec, alpha1, delta01, 1.624875, 0.331283, 35.0
+                        )
+                    elif galaxy_id == 597543:
+                        # M33 (PGC5818):
+                        # - semi major axis = (4247.70" + 98.90") / 3600 / 2 = 0.603694 deg
+                        # - semi minor axis = (2501.90" + 118.94") / 3600 / 2 =  0.364006 deg
+                        # - axis ratio = 0.59 (if recomputed after using the uncertainties, it's 0.602964)
+                        # - positional angle = 23 deg
+                        in_galaxy = in_ellipse(
+                            ra, dec, alpha1, delta01, 0.603694, 0.602964, 23.0
+                        )
+                    else:
+                        in_galaxy = in_ellipse(
+                            ra, dec, alpha1, delta01, cm_radius, 1, 0
+                        )
 
                     if in_galaxy:
                         match = galaxy
