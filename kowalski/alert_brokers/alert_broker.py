@@ -1624,15 +1624,13 @@ class AlertWorker:
                             }
 
                             if _filter["auto_followup"].get(
-                                "no_tns_source_older_than", None
+                                "not_if_tns_reported", None
                             ):
                                 try:
                                     passed_filter["auto_followup"]["data"][
-                                        "no_tns_source_older_than"
+                                        "not_if_tns_reported"
                                     ] = int(
-                                        _filter["auto_followup"][
-                                            "no_tns_source_older_than"
-                                        ]
+                                        _filter["auto_followup"]["not_if_tns_reported"]
                                     )
                                 except Exception:
                                     log(

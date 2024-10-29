@@ -40,7 +40,7 @@ AUTO_FOLLOWUP_KEYS = {
     "payload": dict,
     "target_group_ids": list,
     "ignore_allocation_ids": list,
-    "no_tns_source_older_than": int,  # hours
+    "not_if_tns_reported": int,  # hours
     "radius": float,
     "validity_days": int,
     "priority_order": str,
