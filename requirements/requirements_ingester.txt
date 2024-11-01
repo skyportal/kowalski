@@ -23,7 +23,7 @@ pyarrow==17.0.0
 PyJWT==2.9.0
 pymongo==4.8.0
 pyopenssl==24.2.1
-pytz==2024.1
+pytz==2024.2
 PyYAML==6.0.2
 requests==2.32.3
 slack_sdk==3.31.0
