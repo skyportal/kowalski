@@ -1623,6 +1623,20 @@ class AlertWorker:
                                 ),  # by default we assume that update is implemented for the instrument of this allocation
                             }
 
+                            if _filter["auto_followup"].get(
+                                "not_if_tns_reported", None
+                            ):
+                                try:
+                                    passed_filter["auto_followup"]["data"][
+                                        "not_if_tns_reported"
+                                    ] = int(
+                                        _filter["auto_followup"]["not_if_tns_reported"]
+                                    )
+                                except Exception:
+                                    log(
+                                        f'Filter {_filter["fid"]} has an invalid auto-followup no_tns_older_than, skipping'
+                                    )
+
                             if not isinstance(_filter.get("autosave", False), bool):
                                 passed_filter["auto_followup"]["data"][
                                     "ignore_source_group_ids"
