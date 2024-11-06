@@ -15,10 +15,6 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -27,6 +23,12 @@ jobs:
           path: |
             ~/.cache/uv
           key: ${{ runner.os }}-${{ hashFiles('**/requirements*.txt') }}
+
+      - name: Set up virtualenv
+        run: |
+          uv venv env --python=python3.10
+          source env/bin/activate
+          python --version
 
       - name: Set up configs
         env:
@@ -44,13 +46,17 @@ jobs:
           EOF
 
       - name: Build and spin up
-        run: make docker_build && make docker_up
+        run: |
+          source env/bin/activate
+          make docker_build && make docker_up
 
       - name: Cooldown to let the app start
         run: sleep 10
 
       - name: Run tests
-        run: make docker_test
+        run: |
+          source env/bin/activate
+          make docker_test
 
       - name: Collect Docker Logs
         uses: jwalton/gh-docker-logs@v2.2.2
