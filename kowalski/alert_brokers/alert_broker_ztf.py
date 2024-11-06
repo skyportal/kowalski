@@ -265,7 +265,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
             self.collection_alerts
         ]
         log("Upstream filtering pipeline:")
-        log(self.filter_pipeline_upstream)
+        # log(self.filter_pipeline_upstream)
 
         # load *active* user-defined alert filter templates and pre-populate them
         active_filters = self.get_active_filters()
@@ -277,7 +277,7 @@ class ZTFAlertWorker(AlertWorker, ABC):
         self.filter_monitor.start()
 
         log("Loaded user-defined filters:")
-        log(self.filter_templates)
+        # log(self.filter_templates)
 
     def get_active_filters(self):
         """Fetch user-defined filters from own db marked as active."""
@@ -330,126 +330,125 @@ class ZTFAlertWorker(AlertWorker, ABC):
         :return:
         """
         filter_templates = []
-        for active_filter in active_filters:
-            try:
-                # collect additional info from SkyPortal
-                with timer(
-                    f"Getting info on group id={active_filter['group_id']} from SkyPortal",
-                    self.verbose > 1,
-                ):
+        with timer(
+            "Generating filter templates",
+            self.verbose > 1,
+        ):
+            for active_filter in active_filters:
+                try:
                     response = self.api_skyportal_get_group(active_filter["group_id"])
-                if response.json()["status"] == "success":
-                    group_name = (
-                        response.json()["data"]["nickname"]
-                        if response.json()["data"]["nickname"] is not None
-                        else response.json()["data"]["name"]
-                    )
-                    filter_name = [
-                        filtr["name"]
-                        for filtr in response.json()["data"]["filters"]
-                        if filtr["id"] == active_filter["filter_id"]
-                    ][0]
-                else:
-                    log(
-                        f"Failed to get info on group id={active_filter['group_id']} from SkyPortal"
-                    )
-                    group_name, filter_name = None, None
-                    # raise ValueError(f"Failed to get info on group id={active_filter['group_id']} from SkyPortal")
-                log(f"Group name: {group_name}, filter name: {filter_name}")
+                    if response.json()["status"] == "success":
+                        group_name = (
+                            response.json()["data"]["nickname"]
+                            if response.json()["data"]["nickname"] is not None
+                            else response.json()["data"]["name"]
+                        )
+                        filter_name = [
+                            filtr["name"]
+                            for filtr in response.json()["data"]["filters"]
+                            if filtr["id"] == active_filter["filter_id"]
+                        ][0]
+                    else:
+                        log(
+                            f"Failed to get info on group id={active_filter['group_id']} from SkyPortal"
+                        )
+                        group_name, filter_name = None, None
+                        # raise ValueError(f"Failed to get info on group id={active_filter['group_id']} from SkyPortal")
+                    # log(f"Group name: {group_name}, filter name: {filter_name}")
 
-                # prepend upstream aggregation stages:
-                pipeline = deepcopy(self.filter_pipeline_upstream) + bson_loads(
-                    active_filter["fv"]["pipeline"]
-                )
-                # set permissions
-                pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter[
-                    "permissions"
-                ]
-                pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0][
-                    "$in"
-                ][1] = active_filter["permissions"]
-                if "fp_hists" in pipeline[3]["$project"]:
-                    pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"]["$and"][0][
-                        "$in"
-                    ][1] = active_filter["permissions"]
-
-                # if autosave is a dict with a pipeline key, also add the upstream pipeline to it:
-                if (
-                    isinstance(active_filter.get("autosave", None), dict)
-                    and active_filter.get("autosave", {}).get("pipeline", None)
-                    is not None
-                ):
-                    active_filter["autosave"]["pipeline"] = deepcopy(
-                        self.filter_pipeline_upstream
-                    ) + bson_loads(active_filter["autosave"]["pipeline"])
+                    # prepend upstream aggregation stages:
+                    pipeline = deepcopy(self.filter_pipeline_upstream) + bson_loads(
+                        active_filter["fv"]["pipeline"]
+                    )
                     # set permissions
-                    active_filter["autosave"]["pipeline"][0]["$match"][
-                        "candidate.programid"
-                    ]["$in"] = active_filter["permissions"]
-                    active_filter["autosave"]["pipeline"][3]["$project"][
-                        "prv_candidates"
-                    ]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter[
+                    pipeline[0]["$match"]["candidate.programid"]["$in"] = active_filter[
                         "permissions"
                     ]
+                    pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"][
+                        "$and"
+                    ][0]["$in"][1] = active_filter["permissions"]
+                    if "fp_hists" in pipeline[3]["$project"]:
+                        pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"]["$and"][
+                            0
+                        ]["$in"][1] = active_filter["permissions"]
+
+                    # if autosave is a dict with a pipeline key, also add the upstream pipeline to it:
                     if (
-                        "fp_hists"
-                        in active_filter["autosave"]["pipeline"][3]["$project"]
+                        isinstance(active_filter.get("autosave", None), dict)
+                        and active_filter.get("autosave", {}).get("pipeline", None)
+                        is not None
                     ):
+                        active_filter["autosave"]["pipeline"] = deepcopy(
+                            self.filter_pipeline_upstream
+                        ) + bson_loads(active_filter["autosave"]["pipeline"])
+                        # set permissions
+                        active_filter["autosave"]["pipeline"][0]["$match"][
+                            "candidate.programid"
+                        ]["$in"] = active_filter["permissions"]
                         active_filter["autosave"]["pipeline"][3]["$project"][
-                            "fp_hists"
+                            "prv_candidates"
                         ]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter[
                             "permissions"
                         ]
-                # same for the auto_followup pipeline:
-                if (
-                    isinstance(active_filter.get("auto_followup", None), dict)
-                    and active_filter.get("auto_followup", {}).get("pipeline", None)
-                    is not None
-                ):
-                    active_filter["auto_followup"]["pipeline"] = deepcopy(
-                        self.filter_pipeline_upstream
-                    ) + bson_loads(active_filter["auto_followup"]["pipeline"])
-                    # set permissions
-                    active_filter["auto_followup"]["pipeline"][0]["$match"][
-                        "candidate.programid"
-                    ]["$in"] = active_filter["permissions"]
-                    active_filter["auto_followup"]["pipeline"][3]["$project"][
-                        "prv_candidates"
-                    ]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter[
-                        "permissions"
-                    ]
+                        if (
+                            "fp_hists"
+                            in active_filter["autosave"]["pipeline"][3]["$project"]
+                        ):
+                            active_filter["autosave"]["pipeline"][3]["$project"][
+                                "fp_hists"
+                            ]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter[
+                                "permissions"
+                            ]
+                    # same for the auto_followup pipeline:
                     if (
-                        "fp_hists"
-                        in active_filter["auto_followup"]["pipeline"][3]["$project"]
+                        isinstance(active_filter.get("auto_followup", None), dict)
+                        and active_filter.get("auto_followup", {}).get("pipeline", None)
+                        is not None
                     ):
+                        active_filter["auto_followup"]["pipeline"] = deepcopy(
+                            self.filter_pipeline_upstream
+                        ) + bson_loads(active_filter["auto_followup"]["pipeline"])
+                        # set permissions
+                        active_filter["auto_followup"]["pipeline"][0]["$match"][
+                            "candidate.programid"
+                        ]["$in"] = active_filter["permissions"]
                         active_filter["auto_followup"]["pipeline"][3]["$project"][
-                            "fp_hists"
+                            "prv_candidates"
                         ]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter[
                             "permissions"
                         ]
+                        if (
+                            "fp_hists"
+                            in active_filter["auto_followup"]["pipeline"][3]["$project"]
+                        ):
+                            active_filter["auto_followup"]["pipeline"][3]["$project"][
+                                "fp_hists"
+                            ]["$filter"]["cond"]["$and"][0]["$in"][1] = active_filter[
+                                "permissions"
+                            ]
 
-                filter_template = {
-                    "group_id": active_filter["group_id"],
-                    "filter_id": active_filter["filter_id"],
-                    "group_name": group_name,
-                    "filter_name": filter_name,
-                    "fid": active_filter["fv"]["fid"],
-                    "permissions": active_filter["permissions"],
-                    "autosave": active_filter.get("autosave", False),
-                    "auto_followup": active_filter.get("auto_followup", {}),
-                    "update_annotations": active_filter.get(
-                        "update_annotations", False
-                    ),
-                    "pipeline": deepcopy(pipeline),
-                }
+                    filter_template = {
+                        "group_id": active_filter["group_id"],
+                        "filter_id": active_filter["filter_id"],
+                        "group_name": group_name,
+                        "filter_name": filter_name,
+                        "fid": active_filter["fv"]["fid"],
+                        "permissions": active_filter["permissions"],
+                        "autosave": active_filter.get("autosave", False),
+                        "auto_followup": active_filter.get("auto_followup", {}),
+                        "update_annotations": active_filter.get(
+                            "update_annotations", False
+                        ),
+                        "pipeline": deepcopy(pipeline),
+                    }
 
-                filter_templates.append(filter_template)
-            except Exception as e:
-                log(
-                    "Failed to generate filter template for "
-                    f"group_id={active_filter['group_id']} filter_id={active_filter['filter_id']}: {e}"
-                )
-                continue
+                    filter_templates.append(filter_template)
+                except Exception as e:
+                    log(
+                        "Failed to generate filter template for "
+                        f"group_id={active_filter['group_id']} filter_id={active_filter['filter_id']}: {e}"
+                    )
+                    continue
 
         return filter_templates
 
@@ -838,8 +837,11 @@ def topic_listener(
     )
 
     # init each worker with AlertWorker instance
+    # idempotent=True ensures that the plugin is not registered multiple times
+    # if there is a topic_listener restart (e.g., due to a Kafka error)
     worker_initializer = WorkerInitializer()
-    dask_client.register_plugin(worker_initializer, name="worker-init")
+    dask_client.register_plugin(worker_initializer, name="worker-init", idempotent=True)
+
     # Configure consumer connection to Kafka broker
     conf = {
         "bootstrap.servers": bootstrap_servers,

@@ -517,9 +517,13 @@ def topic_listener(
         address=f"{config['dask_wntr']['host']}:{config['dask_wntr']['scheduler_port']}"
     )
     # init each worker with AlertWorker instance
+    # idempotent=True ensures that the plugin is not registered multiple times
+    # if there is a topic_listener restart (e.g., due to a Kafka error)
     worker_initializer = WorkerInitializer()
     try:
-        dask_client.register_plugin(worker_initializer, name="worker-init")
+        dask_client.register_plugin(
+            worker_initializer, name="worker-init", idempotent=True
+        )
     except Exception as e:
         log(f"Failed to register worker plugin: {e}")
         log(f"Traceback: {traceback.format_exc()}")
