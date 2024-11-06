@@ -29,7 +29,7 @@ jobs:
           uv venv env --python=python3.10
           source env/bin/activate
           python --version
-          pip install setuptools
+          uv pip install packaging setuptools
 
       - name: Set up configs
         env:

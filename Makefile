@@ -25,17 +25,21 @@ SUPERVISORCTL_INGESTER=$(PYTHON) -m supervisor.supervisorctl -c $(SUPERVISORD_IN
 system_dependencies:
 	$(PYTHON) kowalski/tools/check_app_environment.py
 
+# check if pkg_resources is installed and if not then install it
+check_python_packaging:
+	uv pip freeze | grep -q 'packaging' || uv pip install packaging setuptools
+
 # DEPENDENCIES
-python_dependencies:
+python_dependencies: check_python_packaging
 	$(PYTHON) kowalski/tools/install_python_requirements.py requirements/requirements.txt
 
-python_dependencies_api:
+python_dependencies_api: check_python_packaging
 	$(PYTHON) kowalski/tools/install_python_requirements.py requirements/requirements_api.txt
 
-python_dependencies_ingester:
+python_dependencies_ingester: check_python_packaging
 	$(PYTHON) kowalski/tools/install_python_requirements.py requirements/requirements_ingester.txt
 
-python_dependencies_test:
+python_dependencies_test: check_python_packaging
 	$(PYTHON) kowalski/tools/install_python_requirements.py requirements/requirements_test.txt
 
 # SUPERVISORD
