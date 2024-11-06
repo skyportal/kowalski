@@ -8,7 +8,8 @@ RUN apt-get update && \
     apt-get install -y libssl-dev && \
     apt-get install -y libffi-dev && \
     apt-get install -y python3-dev && \
-    apt-get install -y cargo
+    apt-get install -y cargo && \
+    curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
@@ -35,7 +36,7 @@ COPY kowalski/api kowalski/api
 COPY ["kowalski/tools/__init__.py", \
         "kowalski/tools/check_app_environment.py", \
         "kowalski/tools/generate_supervisord_conf.py", \
-        "kowalski/tools/pip_install_requirements.py", \
+        "kowalski/tools/install_python_requirements.py", \
         "kowalski/tools/watch_logs.py", \
         "kowalski/tools/gcn_utils.py", \
         "kowalski/tools/"]
@@ -46,14 +47,10 @@ COPY conf/supervisord_api.conf.template conf/
 
 COPY Makefile .
 
-
-# upgrade pip
-RUN pip install --upgrade pip
-
 # install python libs and generate supervisord config file
-RUN pip install -r requirements/requirements.txt --no-cache-dir && \
-    pip install -r requirements/requirements_api.txt --no-cache-dir && \
-    pip install -r requirements/requirements_test.txt --no-cache-dir
+RUN uv pip install -r requirements/requirements.txt --no-cache-dir && \
+    uv pip install -r requirements/requirements_api.txt --no-cache-dir && \
+    uv pip install -r requirements/requirements_test.txt --no-cache-dir
 
 # run container
 CMD make run_api

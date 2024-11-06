@@ -27,16 +27,16 @@ system_dependencies:
 
 # DEPENDENCIES
 python_dependencies:
-	$(PYTHON) kowalski/tools/pip_install_requirements.py requirements/requirements.txt
+	$(PYTHON) kowalski/tools/install_python_requirements.py requirements/requirements.txt
 
 python_dependencies_api:
-	$(PYTHON) kowalski/tools/pip_install_requirements.py requirements/requirements_api.txt
+	$(PYTHON) kowalski/tools/install_python_requirements.py requirements/requirements_api.txt
 
 python_dependencies_ingester:
-	$(PYTHON) kowalski/tools/pip_install_requirements.py requirements/requirements_ingester.txt
+	$(PYTHON) kowalski/tools/install_python_requirements.py requirements/requirements_ingester.txt
 
 python_dependencies_test:
-	$(PYTHON) kowalski/tools/pip_install_requirements.py requirements/requirements_test.txt
+	$(PYTHON) kowalski/tools/install_python_requirements.py requirements/requirements_test.txt
 
 # SUPERVISORD
 generate_supervisord_conf:

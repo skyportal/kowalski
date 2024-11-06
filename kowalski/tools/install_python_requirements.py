@@ -6,7 +6,7 @@ from pkg_resources import DistributionNotFound, Requirement, VersionConflict
 
 if len(sys.argv) < 2:
     print(
-        "Usage: pip_install_requirements.py requirements.txt [requirements_other.txt]"
+        "Usage: install_python_requirements.py requirements.txt [requirements_other.txt]"
     )
     sys.exit(0)
 
@@ -17,8 +17,8 @@ for req_file in all_req_files:
         requirements.extend(f.readlines())
 
 
-def pip(req_files):
-    args = ["pip", "install"]
+def uv(req_files):
+    args = ["uv", "pip", "install"]
     for req_file in req_files:
         args.extend(["-r", req_file])
     p = subprocess.Popen(
@@ -43,4 +43,4 @@ try:
 
 except (DistributionNotFound, VersionConflict) as e:
     print(e.report())
-    pip(all_req_files)
+    uv(all_req_files)

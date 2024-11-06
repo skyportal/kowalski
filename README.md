@@ -61,27 +61,27 @@ First, you'll need to install few system dependencies:
 sudo apt install -y default-jdk wget
 ```
 
-Make sure you have a version of python that is 3.8 or above before following the next steps.
-
-Now, in the **same** terminal, run:
+Then, though you can use virtualenv or conda, we recommend using `uv` to manage your python environment and dependencies. To install `uv`, run:
 
 ```bash
-sudo pip install virtualenv
-virtualenv env
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Now, to create a virtual environment with python 3.10 (or above, up to 3.13 excluded), run:
+
+```bash
+uv venv env --python=python3.10
 source env/bin/activate
 ```
 
-to create your virtual environment. If you are told that pip is not found, try using pip3 instead. For the following steps however (in the virtualenv), pip should work.
-
-
-The python dependencies will be install automatically when you start the app. The same will happen for Kafka and the ML models.
+No need to install the dependencies now, as they will be installed automatically when you start the app. The same will happen for Kafka, and the ML models.
 
 ### Environment setup **on MacOS arm64 (M1 or M2)**
 
 First, you need to install several system dependencies using [homebrew](https://brew.sh):
 
 ```bash
-brew install java librdkafka wget
+brew install java librdkafka wget uv
 ```
 
 After installing java, run the following to make sure it is accessible by kafka later on:
@@ -89,42 +89,25 @@ After installing java, run the following to make sure it is accessible by kafka 
 sudo ln -sfn /opt/homebrew/opt/openjdk/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk.jdk
 echo 'export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"' >> ~/.zshrc
 ```
-Seperately, we install hdf5:
+
+Separately, we install hdf5:
 ```bash
 brew install hdf5
 ```
-At the end of hdf5's installation, the path where it has been installed will be displayed in your terminal. Copy that path and make sure that you save it somewhere. You will need it when installing or updating python dependencies. We suggest you save it to your `.bashrc` or `.zshrc` file, by adding the following line:
+At the end of hdf5's installation, the path where it has been installed will be displayed in your terminal. Copy that path (including the version that is at the end of it!), and save it to your save it to your `.zshrc` file (or `.bashrc` if you are using bash) by adding the following line:
 ```bash
-export HDF5_DIR=<path_to_hdf5>
+export HDF5_DIR=<path_to_hdf5>/<version>
 ```
+This is required to install `pytables` later on.
 
-*Don't forget to source your `.zshrc` file after adding the above line, or else the path will not be accessible. You can also simply restart your terminal.*
+*Don't forget to source your `.zshrc` file after adding the above line, or else the path will not be accessible. You can also simply restart your terminal and enter the virtual environment again.*
 
-Make sure you have a version of python that is 3.8 or above before following the next steps. You can consider installing a newer version with `homebrew` if needed.
-
-To install a new version with homebrew, run:
-```bash
-brew install python@3.10
-```
-and then add the following line to your `.bashrc` or `.zshrc` file:
-```bash
-alias python='python3.10'
-alias pip='pip3.10'
-```
-
-These lines will allow you to use that binary when calling python in your terminal. You can also use `python3.10` instead of `python` in the following steps.
-
-*If you added it to your `.zshrc` file, don't forget to source it.*
-
-Now, in the **same** terminal, run:
+Now, to create a virtual environment with python 3.10 (or above, up to 3.13 excluded), run:
 
 ```bash
-sudo pip install virtualenv
-virtualenv env
+uv venv env --python=python3.10
 source env/bin/activate
 ```
-
-to create your virtual environment. If you are told that pip is not found, try using pip3 instead. For the following steps however (in the virtualenv), pip should work.
 
 The python dependencies will be install automatically when you start the app. The same will happen for Kafka and the ML models.
 
