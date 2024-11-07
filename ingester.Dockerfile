@@ -18,11 +18,12 @@ RUN mkdir -p /kowalski /kowalski/data /kowalski/logs /_tmp /kowalski/models/pgir
 
 WORKDIR /kowalski
 
-# Install jdk, mkdirs, uv, fetch and install Kafka
+# Install jdk, mkdirs, uv, fetch and install Kafka, create virtualenv
 RUN apt-get update && apt-get install -y default-jdk && \
-    wget https://archive.apache.org/dist/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz -O kafka_$scala_version-$kafka_version.tgz && \
+    wget https://archive.apache.org/dist/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz --no-verbose -O kafka_$scala_version-$kafka_version.tgz && \
     tar -xzf kafka_$scala_version-$kafka_version.tgz && \
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    uv venv env --python=python3.10
 
 # Kafka test-server properties:
 COPY server.properties kafka_$scala_version-$kafka_version/config/
@@ -112,9 +113,10 @@ COPY Makefile .
 ENV USING_DOCKER=true
 
 # install python libs and generate supervisord config file
-RUN uv pip install -r requirements/requirements.txt --no-cache-dir && \
+RUN source env/bin/activate && \
+    uv pip install -r requirements/requirements.txt --no-cache-dir && \
     uv pip install -r requirements/requirements_ingester.txt --no-cache-dir && \
     uv pip install -r requirements/requirements_test.txt --no-cache-dir
 
 # run container
-CMD make run_ingester
+CMD  source env/bin/activate && make run_ingester

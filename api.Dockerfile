@@ -1,5 +1,4 @@
 FROM python:3.10
-#FROM python:3.7-slim
 
 RUN apt-get update && \
     apt-get install -y curl && \
@@ -9,7 +8,8 @@ RUN apt-get update && \
     apt-get install -y libffi-dev && \
     apt-get install -y python3-dev && \
     apt-get install -y cargo && \
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    uv venv env --python=python3.10
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
@@ -48,7 +48,8 @@ COPY conf/supervisord_api.conf.template conf/
 COPY Makefile .
 
 # install python libs and generate supervisord config file
-RUN uv pip install -r requirements/requirements.txt --no-cache-dir && \
+RUN source env/bin/activate && \
+    uv pip install -r requirements/requirements.txt --no-cache-dir && \
     uv pip install -r requirements/requirements_api.txt --no-cache-dir && \
     uv pip install -r requirements/requirements_test.txt --no-cache-dir
 
