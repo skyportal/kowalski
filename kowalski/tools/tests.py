@@ -120,7 +120,8 @@ def test(use_docker=False):
                 t["container"],
                 "bash",
                 "-c",
-                "source env/bin/activate " + " ".join(command),
+                "VIRTUAL_ENV=/usr/local && source env/bin/activate "
+                + " ".join(command),
             ]
         try:
             subprocess.run(command, check=True)
