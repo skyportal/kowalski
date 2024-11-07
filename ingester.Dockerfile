@@ -125,4 +125,4 @@ RUN source env/bin/activate && \
     uv pip install -r requirements/requirements_test.txt --no-cache-dir
 
 # run container
-CMD  source env/bin/activate && make run_ingester
+CMD ["/bin/bash", "-c", "source env/bin/activate && make run_ingester"]

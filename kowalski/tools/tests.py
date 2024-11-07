@@ -120,7 +120,7 @@ def test(use_docker=False):
                 t["container"],
                 "bash",
                 "-c",
-                " ".join(command),
+                "source env/bin/activate" + " ".join(command),
             ]
         try:
             subprocess.run(command, check=True)
