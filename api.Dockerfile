@@ -13,10 +13,10 @@ RUN apt-get update && \
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# place to keep our app and the data:
-RUN mkdir -p /kowalski /kowalski/data /kowalski/logs /_tmp
-
 WORKDIR /kowalski
+
+# place to keep our app and the data:
+RUN mkdir -p data logs /_tmp
 
 COPY requirements/ requirements/
 
