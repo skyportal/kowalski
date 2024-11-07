@@ -25,6 +25,9 @@ RUN apt-get update && apt-get install -y default-jdk && \
     curl -LsSf https://astral.sh/uv/install.sh | sh && \
     uv venv env --python=python3.10
 
+# ls the content of /root/.cargo/bin
+RUN ls /root/.cargo/bin
+
 # Kafka test-server properties:
 COPY server.properties kafka_$scala_version-$kafka_version/config/
 

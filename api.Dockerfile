@@ -13,6 +13,9 @@ RUN apt-get update && \
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
+# ls the content of /root/.cargo/bin
+RUN ls /root/.cargo/bin
+
 WORKDIR /kowalski
 
 # place to keep our app and the data:
