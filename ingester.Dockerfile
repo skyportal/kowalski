@@ -13,20 +13,23 @@ ARG acai_b_version=d1_dnn_20201130
 #RUN apt-get update && apt-get -y install apt-file && apt-file update && apt-get -y install vim && \
 #    apt-get -y install git && apt-get install -y default-jdk
 
-# place to keep our app and the data:
-RUN mkdir -p /kowalski /kowalski/data /kowalski/logs /_tmp /kowalski/models/pgir /kowalski/models/ztf /kowalski/models/wntr /kowalski/models/turbo
-
 WORKDIR /kowalski
 
 # Install jdk, mkdirs, uv, fetch and install Kafka, create virtualenv
 RUN apt-get update && apt-get install -y default-jdk && \
     wget https://archive.apache.org/dist/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz --no-verbose -O kafka_$scala_version-$kafka_version.tgz && \
-    tar -xzf kafka_$scala_version-$kafka_version.tgz && \
-    curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    uv venv env --python=python3.10
+    tar -xzf kafka_$scala_version-$kafka_version.tgz
 
-# ls the content of /root/.cargo/bin
-RUN ls /root/.cargo/bin
+ENV VIRTUAL_ENV=/usr/local
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+SHELL ["/bin/bash", "-c"]
+
+# place to keep our app and the data:
+RUN mkdir -p data logs /_tmp models/pgir models/ztf models/wntr models/turbo
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    uv venv env --python=python3.10
 
 # Kafka test-server properties:
 COPY server.properties kafka_$scala_version-$kafka_version/config/

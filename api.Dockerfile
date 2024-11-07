@@ -1,5 +1,7 @@
 FROM python:3.10
 
+WORKDIR /kowalski
+
 RUN apt-get update && \
     apt-get install -y curl && \
     curl https://sh.rustup.rs -sSf | sh -s -- -y && \
@@ -7,19 +9,18 @@ RUN apt-get update && \
     apt-get install -y libssl-dev && \
     apt-get install -y libffi-dev && \
     apt-get install -y python3-dev && \
-    apt-get install -y cargo && \
-    curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    uv venv env --python=python3.10
+    apt-get install -y cargo
 
+ENV VIRTUAL_ENV=/usr/local
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# ls the content of /root/.cargo/bin
-RUN ls /root/.cargo/bin
-
-WORKDIR /kowalski
+SHELL ["/bin/bash", "-c"]
 
 # place to keep our app and the data:
 RUN mkdir -p data logs /_tmp
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    uv venv env --python=python3.10
 
 COPY requirements/ requirements/
 
@@ -57,4 +58,4 @@ RUN source env/bin/activate && \
     uv pip install -r requirements/requirements_test.txt --no-cache-dir
 
 # run container
-CMD make run_api
+CMD ["/bin/bash", "-c", "source env/bin/activate && make run_api"]
