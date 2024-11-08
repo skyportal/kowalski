@@ -1,5 +1,7 @@
 FROM python:3.10
 
+WORKDIR /kowalski
+
 ARG scala_version=2.13
 ARG kafka_version=3.4.1
 ARG braai_version=d6_m9
@@ -13,17 +15,15 @@ ARG acai_b_version=d1_dnn_20201130
 #RUN apt-get update && apt-get -y install apt-file && apt-file update && apt-get -y install vim && \
 #    apt-get -y install git && apt-get install -y default-jdk
 
-WORKDIR /kowalski
-
-# Install jdk, mkdirs, uv, fetch and install Kafka, create virtualenv
+# Install jdk, mkdirs, uv, fetch and install Kafka
 RUN apt-get update && apt-get install -y default-jdk && \
     wget https://archive.apache.org/dist/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz --no-verbose -O kafka_$scala_version-$kafka_version.tgz && \
     tar -xzf kafka_$scala_version-$kafka_version.tgz
 
+SHELL ["/bin/bash", "-c"]
+
 ENV VIRTUAL_ENV=/usr/local
 ENV PATH="/root/.cargo/bin:${PATH}"
-
-SHELL ["/bin/bash", "-c"]
 
 # place to keep our app and the data:
 RUN mkdir -p data logs /_tmp models/pgir models/ztf models/wntr models/turbo

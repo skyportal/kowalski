@@ -11,10 +11,10 @@ RUN apt-get update && \
     apt-get install -y python3-dev && \
     apt-get install -y cargo
 
+SHELL ["/bin/bash", "-c"]
+
 ENV VIRTUAL_ENV=/usr/local
 ENV PATH="/root/.cargo/bin:${PATH}"
-
-SHELL ["/bin/bash", "-c"]
 
 # place to keep our app and the data:
 RUN mkdir -p data logs /_tmp
