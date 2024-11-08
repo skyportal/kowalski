@@ -97,7 +97,7 @@ def test(use_docker=False):
                         "kowalski-ingester-1",
                         "bash",
                         "-c",
-                        "make stop_ingester",
+                        "VIRTUAL_ENV=/usr/local && source env/bin/activate && make stop_ingester",
                     ],
                     check=True,
                 )
@@ -120,7 +120,7 @@ def test(use_docker=False):
                 t["container"],
                 "bash",
                 "-c",
-                "VIRTUAL_ENV=/usr/local && source env/bin/activate "
+                "VIRTUAL_ENV=/usr/local && source env/bin/activate && "
                 + " ".join(command),
             ]
         try:
