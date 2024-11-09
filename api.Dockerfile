@@ -1,26 +1,25 @@
-FROM python:3.10
+FROM debian:bookworm-slim
 
 WORKDIR /kowalski
-
-RUN apt-get update && \
-    apt-get install -y curl && \
-    curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-    apt-get install -y build-essential && \
-    apt-get install -y libssl-dev && \
-    apt-get install -y libffi-dev && \
-    apt-get install -y python3-dev && \
-    apt-get install -y cargo
-
-SHELL ["/bin/bash", "-c"]
-
-ENV VIRTUAL_ENV=/usr/local
-ENV PATH="/root/.cargo/bin:${PATH}"
 
 # place to keep our app and the data:
 RUN mkdir -p data logs /_tmp
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    uv venv env --python=python3.10
+SHELL ["/bin/bash", "-c"]
+
+ENV VIRTUAL_ENV=/usr/local
+
+RUN apt-get update && apt-get install -y curl wget && \
+    curl https://sh.rustup.rs -sSf | sh -s -- -y && \
+    apt-get install -y build-essential libssl-dev libffi-dev python3-dev cargo
+
+ADD https://astral.sh/uv/install.sh /uv-installer.sh
+
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+
+ENV PATH="/root/.local/bin/:$PATH"
+
+RUN uv venv env --python=python3.10
 
 COPY requirements/ requirements/
 
@@ -51,11 +50,14 @@ COPY conf/supervisord_api.conf.template conf/
 
 COPY Makefile .
 
-# install python libs and generate supervisord config file
 RUN source env/bin/activate && \
-    uv pip install -r requirements/requirements.txt --no-cache-dir && \
-    uv pip install -r requirements/requirements_api.txt --no-cache-dir && \
-    uv pip install -r requirements/requirements_test.txt --no-cache-dir
+    uv pip install packaging setuptools && \
+    uv pip install -r requirements/requirements.txt && \
+    uv pip install -r requirements/requirements_test.txt && \
+    uv pip install -r requirements/requirements_api.txt
+
+# remove cached files
+RUN rm -rf $HOME/.cache/uv
 
 # run container
 CMD ["/bin/bash", "-c", "source env/bin/activate && make run_api"]

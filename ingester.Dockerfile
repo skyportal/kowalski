@@ -1,4 +1,4 @@
-FROM python:3.10
+FROM debian:bookworm-slim
 
 WORKDIR /kowalski
 
@@ -11,25 +11,30 @@ ARG acai_o_version=d1_dnn_20201130
 ARG acai_n_version=d1_dnn_20201130
 ARG acai_b_version=d1_dnn_20201130
 
+SHELL ["/bin/bash", "-c"]
+
+# place to keep our app and the data:
+RUN mkdir -p data logs /_tmp models/pgir models/ztf models/wntr models/turbo
+
+ENV VIRTUAL_ENV=/usr/local
+
 # Install vim, git, cron, and jdk
 #RUN apt-get update && apt-get -y install apt-file && apt-file update && apt-get -y install vim && \
 #    apt-get -y install git && apt-get install -y default-jdk
 
 # Install jdk, mkdirs, uv, fetch and install Kafka
-RUN apt-get update && apt-get install -y default-jdk && \
-    wget https://archive.apache.org/dist/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz --no-verbose -O kafka_$scala_version-$kafka_version.tgz && \
+RUN apt-get update && apt-get install -y curl wget default-jdk build-essential gcc
+
+RUN wget https://archive.apache.org/dist/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz --no-verbose -O kafka_$scala_version-$kafka_version.tgz && \
     tar -xzf kafka_$scala_version-$kafka_version.tgz
 
-SHELL ["/bin/bash", "-c"]
+ADD https://astral.sh/uv/install.sh /uv-installer.sh
 
-ENV VIRTUAL_ENV=/usr/local
-ENV PATH="/root/.cargo/bin:${PATH}"
+RUN sh /uv-installer.sh && rm /uv-installer.sh
 
-# place to keep our app and the data:
-RUN mkdir -p data logs /_tmp models/pgir models/ztf models/wntr models/turbo
+ENV PATH="/root/.local/bin/:$PATH"
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    uv venv env --python=python3.10
+RUN uv venv env --python=python3.10
 
 # Kafka test-server properties:
 COPY server.properties kafka_$scala_version-$kafka_version/config/
@@ -118,11 +123,11 @@ COPY Makefile .
 
 ENV USING_DOCKER=true
 
-# install python libs and generate supervisord config file
 RUN source env/bin/activate && \
-    uv pip install -r requirements/requirements.txt --no-cache-dir && \
-    uv pip install -r requirements/requirements_ingester.txt --no-cache-dir && \
-    uv pip install -r requirements/requirements_test.txt --no-cache-dir
+    uv pip install packaging setuptools && \
+    uv pip install -r requirements/requirements.txt && \
+    uv pip install -r requirements/requirements_test.txt && \
+    uv pip install -r requirements/requirements_ingester.txt
 
 # run container
 CMD ["/bin/bash", "-c", "source env/bin/activate && make run_ingester"]
