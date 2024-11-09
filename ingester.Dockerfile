@@ -23,7 +23,7 @@ ENV VIRTUAL_ENV=/usr/local
 #    apt-get -y install git && apt-get install -y default-jdk
 
 # Install jdk, mkdirs, uv, fetch and install Kafka
-RUN apt-get update && apt-get install -y curl wget default-jdk build-essential gcc clang
+RUN apt-get update && apt-get install -y curl wget default-jdk build-essential gcc
 
 RUN wget https://archive.apache.org/dist/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz --no-verbose -O kafka_$scala_version-$kafka_version.tgz && \
     tar -xzf kafka_$scala_version-$kafka_version.tgz

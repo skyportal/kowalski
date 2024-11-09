@@ -9,7 +9,7 @@ SHELL ["/bin/bash", "-c"]
 
 ENV VIRTUAL_ENV=/usr/local
 
-RUN apt-get update && apt-get install -y curl wget && \
+RUN apt-get update && apt-get install -y curl wget clang && \
     curl https://sh.rustup.rs -sSf | sh -s -- -y && \
     apt-get install -y build-essential libssl-dev libffi-dev python3-dev cargo
 
