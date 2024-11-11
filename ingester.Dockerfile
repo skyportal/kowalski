@@ -1,4 +1,6 @@
-FROM python:3.10
+FROM debian:bookworm-slim
+
+WORKDIR /kowalski
 
 ARG scala_version=2.13
 ARG kafka_version=3.4.1
@@ -9,19 +11,30 @@ ARG acai_o_version=d1_dnn_20201130
 ARG acai_n_version=d1_dnn_20201130
 ARG acai_b_version=d1_dnn_20201130
 
+SHELL ["/bin/bash", "-c"]
+
+# place to keep our app and the data:
+RUN mkdir -p data logs /_tmp models/pgir models/ztf models/wntr models/turbo
+
+ENV VIRTUAL_ENV=/usr/local
+
 # Install vim, git, cron, and jdk
 #RUN apt-get update && apt-get -y install apt-file && apt-file update && apt-get -y install vim && \
 #    apt-get -y install git && apt-get install -y default-jdk
 
-# place to keep our app and the data:
-RUN mkdir -p /kowalski /kowalski/data /kowalski/logs /_tmp /kowalski/models/pgir /kowalski/models/ztf /kowalski/models/wntr /kowalski/models/turbo
+# Install jdk, mkdirs, uv, fetch and install Kafka
+RUN apt-get update && apt-get install -y curl wget default-jdk build-essential gcc
 
-WORKDIR /kowalski
-
-# Install jdk, mkdirs, fetch and install Kafka
-RUN apt-get update && apt-get install -y default-jdk && \
-    wget https://archive.apache.org/dist/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz -O kafka_$scala_version-$kafka_version.tgz && \
+RUN wget https://archive.apache.org/dist/kafka/$kafka_version/kafka_$scala_version-$kafka_version.tgz --no-verbose -O kafka_$scala_version-$kafka_version.tgz && \
     tar -xzf kafka_$scala_version-$kafka_version.tgz
+
+ADD https://astral.sh/uv/install.sh /uv-installer.sh
+
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+
+ENV PATH="/root/.local/bin/:$PATH"
+
+RUN uv venv env --python=python3.10
 
 # Kafka test-server properties:
 COPY server.properties kafka_$scala_version-$kafka_version/config/
@@ -60,7 +73,7 @@ COPY ["kowalski/tools/__init__.py", \
     "kowalski/tools/kafka_stream.py", \
     "kowalski/tools/ops_watcher_ztf.py", \
     "kowalski/tools/performance_reporter.py", \
-    "kowalski/tools/pip_install_requirements.py", \
+    "kowalski/tools/install_python_requirements.py", \
     "kowalski/tools/tns_watcher.py", \
     "kowalski/tools/watch_logs.py", \
     "kowalski/tools/"]
@@ -110,13 +123,14 @@ COPY Makefile .
 
 ENV USING_DOCKER=true
 
-# update pip
-RUN pip install --upgrade pip
+RUN source env/bin/activate && \
+    uv pip install packaging setuptools && \
+    uv pip install -r requirements/requirements.txt && \
+    uv pip install -r requirements/requirements_test.txt && \
+    uv pip install -r requirements/requirements_ingester.txt
 
-# install python libs and generate supervisord config file
-RUN pip install -r requirements/requirements.txt --no-cache-dir && \
-    pip install -r requirements/requirements_ingester.txt --no-cache-dir && \
-    pip install -r requirements/requirements_test.txt --no-cache-dir
+# remove cached files
+RUN rm -rf $HOME/.cache/uv
 
 # run container
-CMD make run_ingester
+CMD ["/bin/bash", "-c", "source env/bin/activate && make run_ingester"]
