@@ -6,7 +6,7 @@ confluent-kafka==2.5.3
 cryptography==43.0.3
 dask==2024.10.0
 deepdiff==8.0.1
-distributed==2024.10.0
+distributed==2024.11.2
 fastavro==1.6.0 #breaking changes in newer versions
 fire==0.6.0
 gsutil==5.30
