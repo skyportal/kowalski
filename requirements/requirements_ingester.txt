@@ -1,5 +1,5 @@
 astropy==6.1.4
-bcrypt==4.2.0
+bcrypt==4.2.1
 beautifulsoup4==4.12.3
 bokeh==3.4.2
 confluent-kafka==2.5.3
@@ -8,12 +8,12 @@ dask==2024.10.0
 deepdiff==8.0.1
 distributed==2024.10.0
 fastavro==1.6.0 #breaking changes in newer versions
-fire==0.6.0
+fire==0.7.0
 gsutil==5.30
 gunicorn==23.0.0
 h5py==3.12.1
 jinja2>=2.11.2
-matplotlib==3.9.2
+matplotlib==3.9.3
 motor==3.1.1
 numba==0.60.0
 numpy>=1.23.5, <2.0.0
@@ -22,7 +22,7 @@ protobuf==4.22.1
 pyarrow==18.0.0
 PyJWT==2.9.0
 pymongo==4.8.0
-pyopenssl==24.2.1
+pyopenssl==24.3.0
 pytz==2024.2
 PyYAML==6.0.2
 requests==2.32.3
@@ -30,5 +30,5 @@ slack_sdk==3.33.3
 supervisor==4.2.5
 tables==3.9.2
 tensorflow==2.13.0
-tqdm==4.66.6
+tqdm==4.67.1
 uvloop==0.21.0
