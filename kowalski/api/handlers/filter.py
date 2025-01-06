@@ -1272,13 +1272,13 @@ class FilterTestHandler(BaseHandler):
                 pipeline[0]["$match"]["candidate.programid"][
                     "$in"
                 ] = filter_existing.permissions
-                pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"][
-                    "$and"
-                ][0]["$in"][1] = filter_existing.permissions
+                pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0][
+                    "$in"
+                ][1] = filter_existing.permissions
                 if "fp_hists" in pipeline[3]["$project"]:
-                    pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"][
-                        "$and"
-                    ][0]["$in"][1] = filter_existing.permissions
+                    pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"]["$and"][0][
+                        "$in"
+                    ][1] = filter_existing.permissions
 
                 # since we are running after the fact, we need to also have a cut on jd
                 # to only keep the data points from prv_candidates and fp_hists
