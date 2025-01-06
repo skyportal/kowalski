@@ -1,6 +1,6 @@
 deepdiff==8.0.1
 fire==0.7.0
-gsutil==5.30
+gsutil==5.31
 jinja2>=2.11.2
 PyYAML==6.0.2
 questionary==2.0.1
