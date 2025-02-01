@@ -19,7 +19,7 @@ numba==0.60.0
 numpy>=1.23.5, <2.0.0
 pandas==2.2.3
 protobuf==4.22.1
-pyarrow==18.1.0
+pyarrow==19.0.0
 PyJWT==2.10.1
 pymongo==4.8.0
 pyopenssl==24.3.0
