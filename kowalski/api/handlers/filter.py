@@ -1,6 +1,7 @@
 import datetime
 from abc import ABC
 from typing import List, Optional, Union
+from copy import deepcopy
 
 from aiohttp import web
 from astropy.time import Time
@@ -1262,22 +1263,22 @@ class FilterTestHandler(BaseHandler):
             filter_pipeline_upstream = config["database"]["filters"][
                 filter_existing.catalog
             ]
-            filter_pipeline = filter_pipeline_upstream + loads(filter_pipeline)
+            pipeline = deepcopy(filter_pipeline_upstream + loads(filter_pipeline))
 
             # match permissions for ZTF
             if filter_existing.catalog.startswith("ZTF"):
-                if "candid" in filter_pipeline[0]["$match"]:
-                    del filter_pipeline[0]["$match"]["candid"]
-                filter_pipeline[0]["$match"]["candidate.programid"][
+                if "candid" in pipeline[0]["$match"]:
+                    del pipeline[0]["$match"]["candid"]
+                pipeline[0]["$match"]["candidate.programid"][
                     "$in"
                 ] = filter_existing.permissions
-                filter_pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"][
-                    "$and"
-                ][0]["$in"][1] = filter_existing.permissions
-                if "fp_hists" in filter_pipeline[3]["$project"]:
-                    filter_pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"][
-                        "$and"
-                    ][0]["$in"][1] = filter_existing.permissions
+                pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"]["$and"][0][
+                    "$in"
+                ][1] = filter_existing.permissions
+                if "fp_hists" in pipeline[3]["$project"]:
+                    pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"]["$and"][0][
+                        "$in"
+                    ][1] = filter_existing.permissions
 
                 # since we are running after the fact, we need to also have a cut on jd
                 # to only keep the data points from prv_candidates and fp_hists
@@ -1285,25 +1286,24 @@ class FilterTestHandler(BaseHandler):
                 # {
                 #   $lt: ["$$item.jd", "$candidate.jd"]
                 # }
-                filter_pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"][
+                pipeline[3]["$project"]["prv_candidates"]["$filter"]["cond"][
                     "$and"
                 ].append({"$lt": ["$$item.jd", "$candidate.jd"]})
-                if "fp_hists" in filter_pipeline[3]["$project"]:
-                    filter_pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"][
+                if "fp_hists" in pipeline[3]["$project"]:
+                    pipeline[3]["$project"]["fp_hists"]["$filter"]["cond"][
                         "$and"
                     ].append({"$lt": ["$$item.jd", "$candidate.jd"]})
 
             if objects is not None:
                 # match objects
-                filter_pipeline[0]["$match"]["objectId"] = {"$in": objects}
+                pipeline[0]["$match"]["objectId"] = {"$in": objects}
             if start_date_jd is not None and end_date_jd is not None:
-                filter_pipeline[0]["$match"]["candidate.jd"] = {
+                pipeline[0]["$match"]["candidate.jd"] = {
                     "$gte": start_date_jd,
                     "$lte": end_date_jd,
                 }
-
             cursor = request.app["mongo"][filter_existing.catalog].aggregate(
-                filter_pipeline, allowDiskUse=False, maxTimeMS=max_time_ms
+                pipeline, allowDiskUse=False, maxTimeMS=max_time_ms
             )
             alerts = await cursor.to_list(length=None)
 
