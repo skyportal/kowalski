@@ -1302,8 +1302,6 @@ class FilterTestHandler(BaseHandler):
                     "$gte": start_date_jd,
                     "$lte": end_date_jd,
                 }
-            print()
-            print(pipeline)
             cursor = request.app["mongo"][filter_existing.catalog].aggregate(
                 pipeline, allowDiskUse=False, maxTimeMS=max_time_ms
             )
