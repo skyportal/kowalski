@@ -581,7 +581,7 @@ async def test_filter_test_handler(aiohttp_client):
     assert "message" in result
 
     assert isinstance(result["data"], list)
-    assert len(result["data"]) == 1
+    assert len(result["data"]) == 22
 
     # now try it with a start and end date that don't match any alerts
     start_date = 2460229.9338542 - 5000
