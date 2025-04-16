@@ -5,7 +5,7 @@ bokeh==3.4.2
 confluent-kafka==2.7.0
 cryptography==44.0.1
 dask==2024.10.0
-deepdiff==8.1.1
+deepdiff==8.4.2
 distributed==2024.10.0
 fastavro==1.6.0 #breaking changes in newer versions
 fire==0.7.0
