@@ -1,7 +1,7 @@
 aiohttp==3.11.18
 aiohttp-swagger3==0.10.0
 astropy==6.1.4
-bcrypt==4.2.1
+bcrypt==4.3.0
 cryptography==44.0.1
 deepdiff==8.4.2
 gunicorn==23.0.0
