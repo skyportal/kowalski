@@ -1,5 +1,5 @@
 astropy==6.1.4
-bcrypt==4.2.1
+bcrypt==4.3.0
 beautifulsoup4==4.13.4
 bokeh==3.4.2
 confluent-kafka==2.9.0
