@@ -7,7 +7,7 @@ deepdiff==8.4.2
 gunicorn==23.0.0
 jinja2>=2.11.2
 matplotlib==3.10.0
-motor==3.1.1
+motor==3.7.1
 multidict==6.4.3
 numba==0.61.0
 numpy>=1.23.5, <2.0.0
