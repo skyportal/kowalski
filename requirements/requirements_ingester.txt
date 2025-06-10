@@ -25,7 +25,7 @@ pymongo==4.8.0
 pyopenssl==24.3.0
 pytz==2025.2
 PyYAML==6.0.2
-requests==2.32.3
+requests==2.32.4
 slack_sdk==3.35.0
 supervisor==4.2.5
 tables==3.9.2
