@@ -9,7 +9,7 @@ deepdiff==8.4.2
 distributed==2024.10.0
 fastavro==1.6.0 #breaking changes in newer versions
 fire==0.7.0
-gsutil==5.31
+gsutil==5.35
 gunicorn==23.0.0
 h5py==3.13.0
 jinja2>=2.11.2
