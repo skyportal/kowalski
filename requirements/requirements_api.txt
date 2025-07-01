@@ -12,7 +12,7 @@ multidict==6.4.3
 numba==0.61.0
 numpy>=1.23.5, <2.0.0
 odmantic==0.9.2
-pandas==2.2.3
+pandas==2.3.0
 pydantic==1.10.13 # bump to v2 once odmantic supports it
 PyJWT==2.10.1
 pymongo==4.8.0
