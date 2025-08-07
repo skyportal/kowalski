@@ -182,43 +182,6 @@ class AlertConsumer:
         log("Finished AlertConsumer setup")
 
     @staticmethod
-    def read_schema_data(bytes_io):
-        """Read data that already has an Avro schema.
-
-        :param bytes_io: `_io.BytesIO` Data to be decoded.
-        :return: `dict` Decoded data.
-        """
-        bytes_io.seek(0)
-        message = fastavro.reader(bytes_io)
-        return message
-
-    @classmethod
-    def decode_message(cls, msg):
-        """
-        Decode Avro message according to a schema.
-
-        :param msg: The Kafka message.value() from consumer.poll()
-        :return:
-        """
-        decoded_msg = msg
-
-        try:
-            bytes_io = io.BytesIO(msg)
-            decoded_msg = cls.read_schema_data(bytes_io)
-        except AssertionError:
-            decoded_msg = None
-        except IndexError:
-            literal_msg = literal_eval(
-                str(msg, encoding="utf-8")
-            )  # works to give bytes
-            bytes_io = io.BytesIO(literal_msg)  # works to give <class '_io.BytesIO'>
-            decoded_msg = cls.read_schema_data(bytes_io)  # yields reader
-        except Exception:
-            decoded_msg = msg
-        finally:
-            return decoded_msg
-
-    @staticmethod
     def process_alerts(avro_msg: bytes, topic: str):
         """Alert brokering task run by dask.distributed workers
 
@@ -487,6 +450,43 @@ class AlertWorker:
                 f"Failed to get {self.instrument} instrument_id from SkyPortal"
             )
         log("AlertWorker setup complete")
+
+    @staticmethod
+    def read_schema_data(bytes_io):
+        """Read data that already has an Avro schema.
+
+        :param bytes_io: `_io.BytesIO` Data to be decoded.
+        :return: `dict` Decoded data.
+        """
+        bytes_io.seek(0)
+        message = fastavro.reader(bytes_io)
+        return message
+
+    @classmethod
+    def decode_message(cls, msg):
+        """
+        Decode Avro message according to a schema.
+
+        :param msg: The Kafka message.value() from consumer.poll()
+        :return:
+        """
+        decoded_msg = msg
+
+        try:
+            bytes_io = io.BytesIO(msg)
+            decoded_msg = cls.read_schema_data(bytes_io)
+        except AssertionError:
+            decoded_msg = None
+        except IndexError:
+            literal_msg = literal_eval(
+                str(msg, encoding="utf-8")
+            )  # works to give bytes
+            bytes_io = io.BytesIO(literal_msg)  # works to give <class '_io.BytesIO'>
+            decoded_msg = cls.read_schema_data(bytes_io)  # yields reader
+        except Exception:
+            decoded_msg = msg
+        finally:
+            return decoded_msg
 
     def _api_skyportal(
         self,

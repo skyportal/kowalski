@@ -31,7 +31,7 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
         super().__init__(topic, dask_client, **kwargs)
 
     @staticmethod
-    def process_alerts(avro_msg: bytes, topic: str, worker):
+    def process_alerts(avro_msg: bytes, topic):
         """Alert brokering task run by dask.distributed workers
 
         :param avro_msg: avro message from Kafka stream
