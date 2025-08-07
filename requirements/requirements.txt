@@ -4,6 +4,6 @@ gsutil==5.31
 jinja2>=2.11.2
 PyYAML==6.0.2
 questionary==2.1.0
-requests==2.32.3
+requests==2.32.4
 supervisor==4.2.5
 brotli==1.1.0
