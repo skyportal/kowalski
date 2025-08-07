@@ -220,34 +220,26 @@ class AlertConsumer:
             return decoded_msg
 
     @staticmethod
-    def process_alert(alert: Mapping, topic: str):
+    def process_alerts(avro_msg: bytes, topic: str):
         """Alert brokering task run by dask.distributed workers
 
-        :param alert: decoded alert from Kafka stream
+        :param avro_msg: avro message from Kafka stream
         :param topic: Kafka stream topic name for bookkeeping
         :return:
         """
         raise NotImplementedError("Must be implemented in subclass")
 
-    def submit_alert(self, record: Mapping):
-        # we look for objectId and objectid if missing,
-        # to support both ZTF and WNTR alert schemas
-        objectId = record.get("objectId", record.get("objectid", None))
-        if objectId is None:
-            log(
-                f"Failed to get objectId from record {record}, skipping alert submission"
-            )
-            return
+    def submit_alert(self, avro_msg: bytes):
         with timer(
-            f"Submitting alert {objectId} {record['candid']} for processing",
+            "Submitting alert for processing",
             self.verbose > 1,
         ):
             future = self.dask_client.submit(
-                self.process_alert, record, self.topic, pure=True
+                self.process_alerts, avro_msg, self.topic, pure=True
             )
             dask.distributed.fire_and_forget(future)
             future.release()
-            del future, record
+            del future, avro_msg  # clean up after thyself
         return
 
     def poll(self):
@@ -264,22 +256,7 @@ class AlertConsumer:
 
         elif msg is not None:
             try:
-                # decode avro packet
-                with timer("Decoding alert", self.verbose > 1):
-                    msg_decoded = self.decode_message(msg)
-
-                for record in msg_decoded:
-                    if (
-                        retry(self.mongo.db[self.collection_alerts].count_documents)(
-                            {"candid": record["candid"]}, limit=1
-                        )
-                        == 0
-                    ):
-
-                        self.submit_alert(record)
-
-                # clean up after thyself
-                del msg_decoded
+                self.submit_alert(msg)
 
             except Exception as e:
                 print("Error in poll!")

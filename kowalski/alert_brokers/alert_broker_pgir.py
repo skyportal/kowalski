@@ -14,7 +14,7 @@ from typing import Mapping, Sequence
 import dask.distributed
 from kowalski.alert_brokers.alert_broker import AlertConsumer, AlertWorker, EopError
 from bson.json_util import loads as bson_loads
-from kowalski.utils import init_db_sync, timer
+from kowalski.utils import init_db_sync, timer, retry
 from kowalski.config import load_config
 from kowalski.log import log
 
@@ -31,155 +31,177 @@ class PGIRAlertConsumer(AlertConsumer, ABC):
         super().__init__(topic, dask_client, **kwargs)
 
     @staticmethod
-    def process_alert(alert: Mapping, topic: str):
+    def process_alerts(avro_msg: bytes, topic: str, worker):
         """Alert brokering task run by dask.distributed workers
 
-        :param alert: decoded alert from Kafka stream
+        :param avro_msg: avro message from Kafka stream
         :param topic: Kafka stream topic name for bookkeeping
         :return:
         """
-        candid = alert["candid"]
-        object_id = alert["objectId"]
 
         # get worker running current task
         worker = dask.distributed.get_worker()
         alert_worker = worker.plugins["worker-init"].alert_worker
 
-        log(f"{topic} {object_id} {candid} {worker.address}")
+        with timer("Decoding alert", alert_worker.verbose > 1):
+            msg_decoded = alert_worker.decode_message(avro_msg)
 
-        # return if this alert packet has already been processed and ingested into collection_alerts:
-        if (
-            alert_worker.mongo.db[alert_worker.collection_alerts].count_documents(
-                {"candid": candid}, limit=1
-            )
-            == 1
-        ):
-            return
-
-        # candid not in db, ingest decoded avro packet into db
-        with timer(f"Mongification of {object_id} {candid}", alert_worker.verbose > 1):
-            alert, prv_candidates, _ = alert_worker.alert_mongify(alert)
-
-        # create alert history
-        all_prv_candidates = deepcopy(prv_candidates) + [deepcopy(alert["candidate"])]
-        with timer(
-            f"Gather all previous candidates for {object_id} {candid}",
-            alert_worker.verbose > 1,
-        ):
-            # get all prv_candidates for this objectId:
-            existing_aux = alert_worker.mongo.db[
-                alert_worker.collection_alerts_aux
-            ].find_one({"_id": object_id}, {"prv_candidates": 1})
+        for alert in msg_decoded:
+            candid = alert["candid"]
+            object_id = alert["objectId"]
             if (
-                existing_aux is not None
-                and len(existing_aux.get("prv_candidates", [])) > 0
+                retry(
+                    alert_worker.mongo.db[
+                        alert_worker.collection_alerts
+                    ].count_documents
+                )({"candid": candid}, limit=1)
+                == 1
             ):
-                all_prv_candidates += existing_aux["prv_candidates"]
-            del existing_aux
+                # this alert has already been processed, skip it
+                log(f"Alert {object_id} {candid} already processed, skipping")
+                continue
 
-        # ML models:
-        with timer(f"MLing of {object_id} {candid}", alert_worker.verbose > 1):
-            scores = alert_worker.alert_filter__ml(alert, all_prv_candidates)
-            alert["classifications"] = scores
+            log(f"pgir: {topic} {object_id} {candid} {worker.address}")
 
-        with timer(f"Ingesting {object_id} {candid}", alert_worker.verbose > 1):
-            alert_worker.mongo.insert_one(
-                collection=alert_worker.collection_alerts, document=alert
-            )
-
-        # prv_candidates: pop nulls - save space
-        prv_candidates = [
-            {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
-            for prv_candidate in prv_candidates
-        ]
-
-        alert_aux, xmatches, xmatches_ztf, passed_filters = None, None, None, None
-        # cross-match with external catalogs if objectId not in collection_alerts_aux:
-        if (
-            alert_worker.mongo.db[alert_worker.collection_alerts_aux].count_documents(
-                {"_id": object_id}, limit=1
-            )
-            == 0
-        ):
+            # candid not in db, ingest decoded avro packet into db
             with timer(
-                f"Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+                f"Mongification of {object_id} {candid}", alert_worker.verbose > 1
             ):
-                xmatches = alert_worker.alert_filter__xmatch(alert)
+                alert, prv_candidates, _ = alert_worker.alert_mongify(alert)
 
-            # Crossmatch new alert with most recent ZTF_alerts and insert
+            # create alert history
+            all_prv_candidates = deepcopy(prv_candidates) + [
+                deepcopy(alert["candidate"])
+            ]
             with timer(
-                f"ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+                f"Gather all previous candidates for {object_id} {candid}",
+                alert_worker.verbose > 1,
             ):
-                xmatches = {
-                    **xmatches,
-                    **alert_worker.alert_filter__xmatch_ztf_alerts(alert),
+                # get all prv_candidates for this objectId:
+                existing_aux = alert_worker.mongo.db[
+                    alert_worker.collection_alerts_aux
+                ].find_one({"_id": object_id}, {"prv_candidates": 1})
+                if (
+                    existing_aux is not None
+                    and len(existing_aux.get("prv_candidates", [])) > 0
+                ):
+                    all_prv_candidates += existing_aux["prv_candidates"]
+                del existing_aux
+
+            # ML models:
+            with timer(f"MLing of {object_id} {candid}", alert_worker.verbose > 1):
+                scores = alert_worker.alert_filter__ml(alert, all_prv_candidates)
+                alert["classifications"] = scores
+
+            with timer(f"Ingesting {object_id} {candid}", alert_worker.verbose > 1):
+                alert_worker.mongo.insert_one(
+                    collection=alert_worker.collection_alerts, document=alert
+                )
+
+            # prv_candidates: pop nulls - save space
+            prv_candidates = [
+                {kk: vv for kk, vv in prv_candidate.items() if vv is not None}
+                for prv_candidate in prv_candidates
+            ]
+
+            alert_aux, xmatches, xmatches_ztf, passed_filters = None, None, None, None
+            # cross-match with external catalogs if objectId not in collection_alerts_aux:
+            if (
+                alert_worker.mongo.db[
+                    alert_worker.collection_alerts_aux
+                ].count_documents({"_id": object_id}, limit=1)
+                == 0
+            ):
+                with timer(
+                    f"Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+                ):
+                    xmatches = alert_worker.alert_filter__xmatch(alert)
+
+                # Crossmatch new alert with most recent ZTF_alerts and insert
+                with timer(
+                    f"ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+                ):
+                    xmatches = {
+                        **xmatches,
+                        **alert_worker.alert_filter__xmatch_ztf_alerts(alert),
+                    }
+
+                alert_aux = {
+                    "_id": object_id,
+                    "cross_matches": xmatches,
+                    "prv_candidates": prv_candidates,
                 }
 
-            alert_aux = {
-                "_id": object_id,
-                "cross_matches": xmatches,
-                "prv_candidates": prv_candidates,
-            }
+                with timer(
+                    f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1
+                ):
+                    alert_worker.mongo.insert_one(
+                        collection=alert_worker.collection_alerts_aux,
+                        document=alert_aux,
+                    )
 
-            with timer(f"Aux ingesting {object_id} {candid}", alert_worker.verbose > 1):
-                alert_worker.mongo.insert_one(
-                    collection=alert_worker.collection_alerts_aux, document=alert_aux
+            else:
+                with timer(
+                    f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1
+                ):
+                    alert_worker.mongo.db[
+                        alert_worker.collection_alerts_aux
+                    ].update_one(
+                        {"_id": object_id},
+                        {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
+                        upsert=True,
+                    )
+
+                # Crossmatch exisiting alert with most recent record in ZTF_alerts and update aux
+                with timer(
+                    f"ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
+                ):
+                    xmatches_ztf = alert_worker.alert_filter__xmatch_ztf_alerts(alert)
+
+                with timer(
+                    f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1
+                ):
+                    alert_worker.mongo.db[
+                        alert_worker.collection_alerts_aux
+                    ].update_one(
+                        {"_id": object_id},
+                        {"$set": {"ZTF_alerts": xmatches_ztf}},
+                        upsert=True,
+                    )
+
+            if config["misc"]["broker"]:
+                # execute user-defined alert filters
+                with timer(
+                    f"Filtering of {object_id} {candid}", alert_worker.verbose > 1
+                ):
+                    passed_filters = alert_worker.alert_filter__user_defined(
+                        alert_worker.filter_templates, alert
+                    )
+                if alert_worker.verbose > 1:
+                    log(
+                        f"{object_id} {candid} number of filters passed: {len(passed_filters)}"
+                    )
+
+                # post to SkyPortal
+                alert_worker.alert_sentinel_skyportal(
+                    alert, prv_candidates, passed_filters=passed_filters
                 )
 
-        else:
-            with timer(
-                f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1
-            ):
-                alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
-                    {"_id": object_id},
-                    {"$addToSet": {"prv_candidates": {"$each": prv_candidates}}},
-                    upsert=True,
-                )
-
-            # Crossmatch exisiting alert with most recent record in ZTF_alerts and update aux
-            with timer(
-                f"ZTF Cross-match of {object_id} {candid}", alert_worker.verbose > 1
-            ):
-                xmatches_ztf = alert_worker.alert_filter__xmatch_ztf_alerts(alert)
-
-            with timer(
-                f"Aux updating of {object_id} {candid}", alert_worker.verbose > 1
-            ):
-                alert_worker.mongo.db[alert_worker.collection_alerts_aux].update_one(
-                    {"_id": object_id},
-                    {"$set": {"ZTF_alerts": xmatches_ztf}},
-                    upsert=True,
-                )
-
-        if config["misc"]["broker"]:
-            # execute user-defined alert filters
-            with timer(f"Filtering of {object_id} {candid}", alert_worker.verbose > 1):
-                passed_filters = alert_worker.alert_filter__user_defined(
-                    alert_worker.filter_templates, alert
-                )
-            if alert_worker.verbose > 1:
-                log(
-                    f"{object_id} {candid} number of filters passed: {len(passed_filters)}"
-                )
-
-            # post to SkyPortal
-            alert_worker.alert_sentinel_skyportal(
-                alert, prv_candidates, passed_filters=passed_filters
+            # clean up after thyself
+            del (
+                alert,
+                prv_candidates,
+                all_prv_candidates,
+                scores,
+                xmatches,
+                xmatches_ztf,
+                alert_aux,
+                passed_filters,
+                candid,
+                object_id,
             )
 
-        # clean up after thyself
-        del (
-            alert,
-            prv_candidates,
-            all_prv_candidates,
-            scores,
-            xmatches,
-            xmatches_ztf,
-            alert_aux,
-            passed_filters,
-            candid,
-            object_id,
-        )
+        return
 
 
 class PGIRAlertWorker(AlertWorker, ABC):
