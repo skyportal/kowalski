@@ -256,7 +256,7 @@ class AlertConsumer:
 
         elif msg is not None:
             try:
-                self.submit_alert(msg)
+                self.submit_alert(msg.value())
 
             except Exception as e:
                 print("Error in poll!")
