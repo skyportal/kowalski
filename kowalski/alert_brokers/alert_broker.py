@@ -197,7 +197,7 @@ class AlertConsumer:
         """
         Decode Avro message according to a schema.
 
-        :param msg: The Kafka message result from consumer.poll()
+        :param msg: The Kafka message.value() from consumer.poll()
         :return:
         """
         decoded_msg = msg
