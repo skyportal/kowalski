@@ -200,22 +200,21 @@ class AlertConsumer:
         :param msg: The Kafka message result from consumer.poll()
         :return:
         """
-        message = msg.value()
-        decoded_msg = message
+        decoded_msg = msg
 
         try:
-            bytes_io = io.BytesIO(message)
+            bytes_io = io.BytesIO(msg)
             decoded_msg = cls.read_schema_data(bytes_io)
         except AssertionError:
             decoded_msg = None
         except IndexError:
             literal_msg = literal_eval(
-                str(message, encoding="utf-8")
+                str(msg, encoding="utf-8")
             )  # works to give bytes
             bytes_io = io.BytesIO(literal_msg)  # works to give <class '_io.BytesIO'>
             decoded_msg = cls.read_schema_data(bytes_io)  # yields reader
         except Exception:
-            decoded_msg = message
+            decoded_msg = msg
         finally:
             return decoded_msg
 
