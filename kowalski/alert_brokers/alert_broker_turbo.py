@@ -48,7 +48,7 @@ class TURBOAlertConsumer(AlertConsumer, ABC):
 
         for alert in msg_decoded:
             candid = alert["candid"]
-            object_id = alert["objectid"]
+            object_id = alert["objectId"]
             if (
                 retry(
                     alert_worker.mongo.db[
