@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 import requests
 from astropy.io import fits
+from astropy.stats import sigma_clipped_stats
 from astropy.visualization import (
     AsymmetricPercentileInterval,
     ImageNormalize,
@@ -662,22 +663,36 @@ class AlertWorker:
         xl = np.greater(np.abs(img), 1e20, where=~np.isnan(img))
         if img[xl].any():
             img[xl] = np.nan
-        if np.isnan(img).any():
-            median = float(np.nanmean(img.flatten()))
-            img = np.nan_to_num(img, nan=median)
 
-        norm = ImageNormalize(
-            img,
-            stretch=LinearStretch()
-            if alert_packet_type == "Difference"
-            else LogStretch(),
-        )
-        img_norm = norm(img)
-        normalizer = AsymmetricPercentileInterval(
-            lower_percentile=1, upper_percentile=100
-        )
-        vmin, vmax = normalizer.get_limits(img_norm)
-        ax.imshow(img_norm, cmap="bone", origin="lower", vmin=vmin, vmax=vmax)
+        if self.instrument == "WNTR":
+            # replace nans with max value
+            if np.isnan(img).any():
+                max = float(np.nanmax(img.flatten()))
+                img = np.nan_to_num(img, nan=max)
+
+            # get vmin and vmax with sigma clipping
+            _, med, std = sigma_clipped_stats(img)
+            vmin, vmax = med - 4 * std, med + 5 * std
+        else:
+            # replace nans with median
+            if np.isnan(img).any():
+                median = float(np.nanmean(img.flatten()))
+                img = np.nan_to_num(img, nan=median)
+
+            # get vmin and vmax with ImageNormalize + AsymmetricPercentileInterval
+            norm = ImageNormalize(
+                img,
+                stretch=LinearStretch()
+                if alert_packet_type == "Difference"
+                else LogStretch(),
+            )
+            img = norm(img)
+            normalizer = AsymmetricPercentileInterval(
+                lower_percentile=1, upper_percentile=100
+            )
+            vmin, vmax = normalizer.get_limits(img)
+
+        ax.imshow(img, cmap="bone", origin="lower", vmin=vmin, vmax=vmax)
         plt.savefig(buff, dpi=42)
 
         buff.seek(0)
