@@ -22,7 +22,7 @@ protobuf==4.22.1
 pyarrow==21.0.0
 PyJWT==2.10.1
 pymongo==4.8.0
-pyopenssl==24.3.0
+pyopenssl==25.1.0
 pytz==2025.2
 PyYAML==6.0.2
 requests==2.32.4
