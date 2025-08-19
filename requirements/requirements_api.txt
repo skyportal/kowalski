@@ -19,6 +19,7 @@ pymongo==4.8.0
 PyYAML==6.0.2
 requests==2.32.4
 sshtunnel==0.4.0
+paramiko==3.5.1
 supervisor==4.2.5
 uvloop==0.21.0
 ligo.skymap==2.2.0
